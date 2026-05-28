@@ -23,6 +23,18 @@ function safeJson(value) {
   }
 }
 
+function fmtKST(iso) {
+  if (!iso) return '';
+  return new Date(iso).toLocaleString('ko-KR', {
+    timeZone: 'Asia/Seoul',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  });
+}
+
 async function readJsonResponse(response) {
   const text = await response.text();
   if (!text) return {};
@@ -208,12 +220,19 @@ function ItemEditor({ item, draft, onDraft, onAction, onDebate, busy }) {
 
       <div className="mt-3 grid min-w-0 gap-3 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)]">
         <div className="min-w-0">
-          <a className="text-sm font-bold text-white underline decoration-slate-600 underline-offset-4"
-            href={item.raw_url}
-            target="_blank"
-            rel="noreferrer">
-            @{item.raw_author_handle || 'source'} / {item.raw_post_id}
-          </a>
+          <div className="flex flex-wrap items-baseline gap-x-2">
+            <a className="text-sm font-bold text-white underline decoration-slate-600 underline-offset-4"
+              href={item.raw_url}
+              target="_blank"
+              rel="noreferrer">
+              @{item.raw_author_handle || 'source'}
+            </a>
+            {item.raw_created_at && (
+              <span className="text-xs" style={{ color: '#737b91' }}>
+                {fmtKST(item.raw_created_at)} KST
+              </span>
+            )}
+          </div>
           <p className="mt-2 whitespace-pre-wrap break-words text-sm leading-6" style={{ color: '#cbd3e8', overflowWrap: 'anywhere' }}>
             {item.raw_text}
           </p>
