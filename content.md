@@ -140,11 +140,15 @@ GOOD (4 sentences, each with distinct information):
 
 OFFICIAL   → Club official announcement, player confirmation on official channels
 CONFIRMED  → T1 journalist uses definitive language ("Done deal", "HERE WE GO", "signed")
-UPDATE     → A player/club has formally communicated a stance, or there is new concrete progress on an existing story (e.g. player requests transfer, bid submitted, negotiations advanced)
-RUMOUR     → Early-stage interest, monitoring, or possibility with no formal action yet
+UPDATE     → New development on a story that was ALREADY reported before (e.g. re-request, bid update, negotiation progress, stance change)
+RUMOUR     → First report of interest, contact, request, or possibility — even if formal (a player's first transfer request is still RUMOUR)
 DENIED     → Denial, collapse, rejection
 
-IMPORTANT: Use UPDATE (not RUMOUR) when a formal action has been taken — e.g. a player has officially requested a transfer, a bid has been sent, or a club has made a formal approach.
+IMPORTANT: The key distinction between UPDATE and RUMOUR is whether this is a NEW story or a FOLLOW-UP on an existing one.
+- Player requests transfer for the first time → RUMOUR
+- Player requests transfer again after a previous report → UPDATE
+- Club makes first contact → RUMOUR
+- Negotiations advance after previous talks were reported → UPDATE
 
 ═══════════════════════════════════════
 [TAGS]
