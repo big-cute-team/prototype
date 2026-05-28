@@ -19,12 +19,13 @@ REQUIRED:
 - Korean domestic sports article tone (like 풋볼리스트, 골닷컴 KR)
 - Concise and clean
 - Focus on key facts
-- Use reporting expressions: "~한 것으로 알려졌다", "~인 것으로 전해진다"
+- Use reporting expressions: "~한 것으로 알려졌다", "~인 것으로 전해진다", "~로 전해졌다"
 - Unconfirmed info MUST use speculative endings
 
 FORBIDDEN:
 - Direct translation style ("그는 ~에 관심이 있다" → ❌)
 - Translationese ("~하는 것으로 보여진다" → ❌)
+- Dry one-word verb endings ("밝혔다", "말했다" alone without context → ❌)
 - Awkward subject repetition
 - Exaggeration ("빅딜 임박!", "대어 영입!" → ❌)
 - Exclamation marks, emojis, interjections
@@ -69,6 +70,12 @@ BAD → GOOD:
 "그 선수는 프리미어리그에서 뛰는 것을 꿈꿰왔다."
 → "해당 선수가 EPL 진출을 희망하는 것으로 전해진다."
 
+"필립 요르겐센이 이적 의사를 밝혔다."
+→ "필립 요르겐센이 이번 여름 첼시를 떠나겠다는 의사를 다시 전달한 것으로 알려졌다."
+
+"그는 경기 출전을 원한다."
+→ "요르겐센은 더 많은 출전 기회 확보를 이유로 들었으며, 이미 지난 1월에도 동일한 요청을 한 바 있다."
+
 ═══════════════════════════════════════
 [OUTPUT FORMAT]
 ═══════════════════════════════════════
@@ -88,36 +95,56 @@ No explanation, no greeting, no markdown backticks. JSON only.
 [TITLE RULES]
 ═══════════════════════════════════════
 
-- Around 15 Korean characters
-- Fact-based, key info only, no exaggeration
+- Around 15 Korean characters. Use last name only for players (e.g. "요르겐센", not "필립 요르겐센").
+- Fact-based, key info only, no exaggeration.
+- Format: [성/팀], [핵심 동사구] — lead with the subject, end with the action.
 
-GOOD: "첼시, 윌디즈 영입 추진" / "맨유, 지르크제 매각 결정"
+GOOD: "요르겐센, 첼시 이적 재요청" / "맨유, 지르크제 매각 결정" / "살라, 리버풀 잔류 서명"
+BAD:  "첼시 골키퍼 필립 요르겐센, BBC 보도대로 여름 이적 요청" (too long, too descriptive)
 BAD:  "첼시 초대형 영입 임박!!" / "충격! 맨유 핵심 방출"
 
 ═══════════════════════════════════════
 [SUMMARY_SHORT RULES]
 ═══════════════════════════════════════
 
-- 2-3 sentences in Korean
-- Tweet facts only. Nothing added.
+- Exactly 2-3 sentences. No more, no less.
+- Each sentence MUST contain at least one concrete fact from the tweet (who, what, when, why, or how much).
+- Do NOT write a sentence that only restates the title or contains no new information.
+- First mention of a player: full Korean name. Subsequent mentions: last name only.
+- If the tweet contains a direct quote or social post, use: "~라는 글을 남겼다" / "~라고 전했다"
+
+BAD (too thin, no new info in sentence 2):
+"첼시 골키퍼 필립 요르겐센이 여름 이적 의사를 재차 밝혔다. 이적을 원하는 것으로 알려졌다."
+
+GOOD (each sentence adds a distinct fact):
+"필립 요르겐센이 이번 여름 첼시를 떠나겠다는 의사를 다시 전달한 것으로 알려졌다. 요르겐센은 더 많은 출전 기회 확보를 이유로 들었으며, 지난 1월에도 같은 요청을 한 바 있다."
 
 ═══════════════════════════════════════
 [SUMMARY_DETAIL RULES]
 ═══════════════════════════════════════
 
-- 4-5 sentences in Korean
-- Slightly more detailed than summary_short
+- Exactly 4-5 sentences. Each sentence must add information not already covered in summary_short.
+- Slightly more detailed: include all specific facts from the tweet (amounts, dates, conditions, source attribution).
 - ONLY facts from the tweet. No background, no context, no interpretation.
+- Attribute the source naturally when relevant: "BBC 보도를 로마노가 확인했다" / "~로 전해진다"
+
+BAD (only 2 sentences, repeats summary_short):
+"첼시 소속 골키퍼 필립 요르겐센이 이번 여름 이적 시장에서 팀을 떠나고 싶다는 요청을 BBC가 보도했다. 그는 더 많은 경기 출전 기회를 원하며, 이미 1월에 이적을 요청한 바 있다."
+
+GOOD (4 sentences, each with distinct information):
+"필립 요르겐센이 이번 여름 첼시 이적을 재차 요청한 것으로 전해진다. BBC 보도를 파브리지오 로마노가 확인했다. 요르겐센은 출전 시간 확보를 이유로 들었으며, 동일한 요청은 지난 1월에도 있었던 것으로 알려졌다. 최종 이적료와 목적지 클럽은 아직 확정되지 않은 상태다."
 
 ═══════════════════════════════════════
 [STATUS CLASSIFICATION]
 ═══════════════════════════════════════
 
-OFFICIAL   → Club official announcement, player confirmation
-CONFIRMED  → T1 journalist uses definitive language ("Done deal", "HERE WE GO")
-UPDATE     → Progress or change on existing issue
-RUMOUR     → Interest, contact, possibility stage
+OFFICIAL   → Club official announcement, player confirmation on official channels
+CONFIRMED  → T1 journalist uses definitive language ("Done deal", "HERE WE GO", "signed")
+UPDATE     → A player/club has formally communicated a stance, or there is new concrete progress on an existing story (e.g. player requests transfer, bid submitted, negotiations advanced)
+RUMOUR     → Early-stage interest, monitoring, or possibility with no formal action yet
 DENIED     → Denial, collapse, rejection
+
+IMPORTANT: Use UPDATE (not RUMOUR) when a formal action has been taken — e.g. a player has officially requested a transfer, a bid has been sent, or a club has made a formal approach.
 
 ═══════════════════════════════════════
 [TAGS]
