@@ -145,12 +145,12 @@ function DebateSummary({ post, vote, onVote, onCollapse }) {
             <div className="flex items-center gap-3">
               <div className="flex-1 py-2.5 rounded-xl text-center text-sm font-bold"
                 style={{ background: '#0d1a2a', border: '1px solid #1e3a5f40', color: '#60a5fa' }}>
-                👍 {post.voteForLabel}
+                {post.voteForLabel}
               </div>
               <span className="text-xs font-black" style={{ color: '#2a2a4a' }}>VS</span>
               <div className="flex-1 py-2.5 rounded-xl text-center text-sm font-bold"
                 style={{ background: '#1a0a0a', border: '1px solid #3b101040', color: '#f87171' }}>
-                {post.voteAgainstLabel} 👎
+                {post.voteAgainstLabel}
               </div>
             </div>
             {/* 흐린 바 — 결과가 있지만 숨겨져 있음을 암시 */}
@@ -199,7 +199,6 @@ function DebateSummary({ post, vote, onVote, onCollapse }) {
               background: vote === 'for' ? '#1e3a5f30' : '#3b0a0a30',
               border: `1px solid ${vote === 'for' ? '#3b82f640' : '#e6394640'}`,
             }}>
-            <span className="text-base">{vote === 'for' ? '👍' : '👎'}</span>
             <span className="text-sm font-medium" style={{ color: vote === 'for' ? '#60a5fa' : '#f87171' }}>
               {vote === 'for' ? post.voteForLabel : post.voteAgainstLabel} 에 투표했습니다
             </span>
@@ -209,12 +208,12 @@ function DebateSummary({ post, vote, onVote, onCollapse }) {
             <button onClick={() => onVote('for')}
               className="flex-1 py-4 rounded-2xl font-black text-sm transition-transform active:scale-95"
               style={{ background: 'linear-gradient(135deg,#1d4ed8,#3b82f6)', color: '#fff', boxShadow: '0 0 18px #3b82f640' }}>
-              👍 {post.voteForLabel}
+              {post.voteForLabel}
             </button>
             <button onClick={() => onVote('against')}
               className="flex-1 py-4 rounded-2xl font-black text-sm transition-transform active:scale-95"
               style={{ background: 'linear-gradient(135deg,#991b1b,#e63946)', color: '#fff', boxShadow: '0 0 18px #e6394640' }}>
-              👎 {post.voteAgainstLabel}
+              {post.voteAgainstLabel}
             </button>
           </div>
         )}

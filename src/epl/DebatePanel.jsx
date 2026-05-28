@@ -130,7 +130,7 @@ export default function DebatePanel({ post, vote, onVote, onClose }) {
                       border: '1px solid #3b82f640',
                       color: '#60a5fa',
                     }}>
-                    👍 {post.voteForLabel}
+                    {post.voteForLabel}
                   </button>
                   <button
                     onClick={() => onVote('against')}
@@ -140,7 +140,7 @@ export default function DebatePanel({ post, vote, onVote, onClose }) {
                       border: '1px solid #e6394640',
                       color: '#f87171',
                     }}>
-                    👎 {post.voteAgainstLabel}
+                    {post.voteAgainstLabel}
                   </button>
                 </div>
               </div>
@@ -150,7 +150,6 @@ export default function DebatePanel({ post, vote, onVote, onClose }) {
                   background: vote === 'for' ? '#1e3a5f30' : '#3b0a0a30',
                   border: `1px solid ${vote === 'for' ? '#3b82f640' : '#e6394640'}`,
                 }}>
-                <span className="text-base">{vote === 'for' ? '👍' : '👎'}</span>
                 <span className="text-sm font-medium" style={{ color: vote === 'for' ? '#60a5fa' : '#f87171' }}>
                   {vote === 'for' ? post.voteForLabel : post.voteAgainstLabel} 에 투표했습니다
                 </span>
