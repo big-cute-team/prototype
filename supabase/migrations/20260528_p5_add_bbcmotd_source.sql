@@ -4,11 +4,11 @@
 insert into public.sources (handle, x_user_id, name, tier, active, notes)
 values (
   'BBCMOTD',
-  null,
+  '384951307',
   'Match of the Day',
   1,
   true,
-  'BBC Sport 공식 Match of the Day 계정. x_user_id 입력 필요.'
+  'BBC Sport 공식 Match of the Day 계정.'
 )
 on conflict (handle) do update set
   x_user_id  = coalesce(excluded.x_user_id, public.sources.x_user_id),
