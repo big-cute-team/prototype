@@ -16,6 +16,10 @@ insert into public.team_aliases (team_code, alias, entity_type, active, notes, l
   ('MUN', '오나나',            'player', false, '임대 신분, 맨유 방출 희망', '2026-05-27'),
   ('MUN', 'Onanna',           'player', false, '임대 신분, 맨유 방출 희망', '2026-05-27'),
 
+  ('MUN', 'Maguire',          'player', true, '맨유 센터백, 1년 재계약 체결. 커리어 부활 중', '2026-05-27'),
+  ('MUN', 'Harry Maguire',   'player', true, '맨유 센터백, 1년 재계약 체결. 커리어 부활 중', '2026-05-27'),
+  ('MUN', '해리 매과이어',    'player', true, '맨유 센터백, 1년 재계약 체결. 커리어 부활 중', '2026-05-27'),
+
   ('MUN', 'De Ligt',          'player', true, '맨유 센터백', '2026-05-27'),
   ('MUN', 'Matthijs de Ligt', 'player', true, '맨유 센터백', '2026-05-27'),
   ('MUN', 'Matthijs De Ligt', 'player', true, '맨유 센터백', '2026-05-27'),
