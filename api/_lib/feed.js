@@ -35,9 +35,11 @@ function mapItemToPost(item) {
   const team = Array.isArray(teamTags) ? teamTags[0] : null;
   const handle = item.raw_author_handle || item.source_handle || 'x';
 
+  const isDebate = Boolean(item.debate_question);
+
   return {
     id: `live-${item.id}`,
-    type: 'general',
+    type: isDebate ? 'today_debate' : 'general',
     title: briefing.title || item.raw_text?.slice(0, 80) || 'EPL 업데이트',
     summary: briefing.summary_short || item.raw_text || '',
     briefing: briefing.summary_detail || item.raw_text || '',
@@ -60,6 +62,14 @@ function mapItemToPost(item) {
     comments_data: [],
     sourceUrl: item.raw_url,
     ai: item.ai_result,
+    ...(isDebate ? {
+      debateQuestion: item.debate_question,
+      voteForLabel: item.vote_for_label,
+      voteAgainstLabel: item.vote_against_label,
+      voteFor: 50,
+      voteAgainst: 50,
+      participants: 0,
+    } : {}),
   };
 }
 

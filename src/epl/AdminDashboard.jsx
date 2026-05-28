@@ -104,11 +104,12 @@ function normalizeBriefingStatus(status, newsType) {
   return 'UPDATE';
 }
 
-function Metric({ label, value }) {
+function Metric({ label, value, warn }) {
   return (
-    <div className="min-h-[74px] min-w-0 rounded-md px-4 py-3" style={{ background: '#0f1118', border: '1px solid #1f2430' }}>
-      <div className="text-xs font-semibold uppercase" style={{ color: '#687086' }}>{label}</div>
-      <div className="mt-1 text-2xl font-black text-white">{value ?? 0}</div>
+    <div className="min-h-[74px] min-w-0 rounded-md px-4 py-3"
+      style={{ background: warn ? '#2b2108' : '#0f1118', border: `1px solid ${warn ? '#665017' : '#1f2430'}` }}>
+      <div className="text-xs font-semibold uppercase" style={{ color: warn ? '#ffd166' : '#687086' }}>{label}</div>
+      <div className="mt-1 text-2xl font-black" style={{ color: warn ? '#ffd166' : '#fff' }}>{value ?? 0}</div>
     </div>
   );
 }
@@ -182,7 +183,7 @@ function SourceSkeleton() {
   );
 }
 
-function ItemEditor({ item, draft, onDraft, onAction, busy }) {
+function ItemEditor({ item, draft, onDraft, onAction, onDebate, busy }) {
   const briefing = briefingFor(item);
   const title = draft.title_ko ?? briefing.title ?? '';
   const summaryShort = draft.summary_short_ko ?? briefing.summary_short ?? '';
@@ -199,6 +200,7 @@ function ItemEditor({ item, draft, onDraft, onAction, busy }) {
         <Badge tone={statusTone(item.status)}>{item.status}</Badge>
         <Badge tone={briefingTone(briefingStatus)}>{briefingStatus || item.news_type}</Badge>
         {teamTags.map(team => <Badge key={team}>{team}</Badge>)}
+        {item.debate_question && <Badge tone="warn">DEBATE</Badge>}
         <span className="ml-auto text-xs" style={{ color: '#737b91' }}>
           confidence {Number(item.confidence || 0).toFixed(2)}
         </span>
@@ -309,6 +311,79 @@ function ItemEditor({ item, draft, onDraft, onAction, busy }) {
               style={{ background: '#171923', color: '#cbd3e8', border: '1px solid #2a3040' }}>
               저장
             </button>
+            <button
+              disabled={busy}
+              onClick={() => onDebate(item)}
+              className="rounded-md px-4 py-2 text-sm font-bold disabled:opacity-50"
+              style={{ background: '#332400', color: '#fbbf24', border: '1px solid #665017' }}>
+              {item.debate_question ? '논쟁 편집' : '논쟁 설정'}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function DebateModal({ item, onClose, onSave, busy }) {
+  const isSet = Boolean(item.debate_question);
+  const [question, setQuestion] = useState(item.debate_question || '');
+  const [forLabel, setForLabel] = useState(item.vote_for_label || '');
+  const [againstLabel, setAgainstLabel] = useState(item.vote_against_label || '');
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      style={{ background: 'rgba(0,0,0,0.7)' }}
+      onClick={e => e.target === e.currentTarget && onClose()}>
+      <div className="w-full max-w-lg min-w-0 rounded-xl p-6" style={{ background: '#0f1118', border: '1px solid #2a3040' }}>
+        <div className="mb-4 text-lg font-black text-white">논쟁 설정</div>
+        <div className="mb-3 rounded-md px-3 py-2 text-sm" style={{ background: '#11141d', color: '#8791aa', border: '1px solid #283040' }}>
+          {item.title_ko || item.raw_text?.slice(0, 60) || '(제목 없음)'}
+        </div>
+        <label className="mb-3 block">
+          <span className="mb-1 block text-xs font-bold uppercase" style={{ color: '#687086' }}>논쟁 질문 *</span>
+          <input value={question} onChange={e => setQuestion(e.target.value)}
+            placeholder="예: 이번 시즌 EPL 최고의 미드필더는?"
+            className="w-full rounded-md px-3 py-2 text-sm outline-none"
+            style={{ background: '#11141d', color: '#fff', border: '1px solid #283040' }} />
+        </label>
+        <div className="mb-5 grid grid-cols-2 gap-3">
+          <label className="block">
+            <span className="mb-1 block text-xs font-bold uppercase" style={{ color: '#687086' }}>선택지 A *</span>
+            <input value={forLabel} onChange={e => setForLabel(e.target.value)}
+              placeholder="예: 브루노 페르난데스"
+              className="w-full rounded-md px-3 py-2 text-sm outline-none"
+              style={{ background: '#11141d', color: '#fff', border: '1px solid #283040' }} />
+          </label>
+          <label className="block">
+            <span className="mb-1 block text-xs font-bold uppercase" style={{ color: '#687086' }}>선택지 B *</span>
+            <input value={againstLabel} onChange={e => setAgainstLabel(e.target.value)}
+              placeholder="예: 데클란 라이스"
+              className="w-full rounded-md px-3 py-2 text-sm outline-none"
+              style={{ background: '#11141d', color: '#fff', border: '1px solid #283040' }} />
+          </label>
+        </div>
+        <div className="flex justify-between gap-2">
+          {isSet && (
+            <button disabled={busy}
+              onClick={() => onSave({ debate_question: null, vote_for_label: null, vote_against_label: null })}
+              className="rounded-md px-4 py-2 text-sm font-bold disabled:opacity-50"
+              style={{ background: '#351111', color: '#ffb0b0', border: '1px solid #5c2424' }}>
+              논쟁 해제
+            </button>
+          )}
+          <div className="ml-auto flex gap-2">
+            <button onClick={onClose}
+              className="rounded-md px-4 py-2 text-sm font-bold"
+              style={{ background: '#171923', color: '#a8b0c7', border: '1px solid #2a3040' }}>
+              취소
+            </button>
+            <button disabled={busy || !question.trim() || !forLabel.trim() || !againstLabel.trim()}
+              onClick={() => onSave({ debate_question: question.trim(), vote_for_label: forLabel.trim(), vote_against_label: againstLabel.trim() })}
+              className="rounded-md px-4 py-2 text-sm font-bold disabled:opacity-50"
+              style={{ background: '#fbbf24', color: '#1a0e00' }}>
+              논쟁으로 저장
+            </button>
           </div>
         </div>
       </div>
@@ -328,7 +403,14 @@ export default function AdminDashboard() {
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const [loaded, setLoaded] = useState(false);
+  const [debateModal, setDebateModal] = useState(null);
   const isInitialLoading = Boolean(adminToken && busy && !loaded && !error);
+
+  useEffect(() => {
+    const reviewCount = dashboard?.review || 0;
+    document.title = reviewCount > 0 ? `(${reviewCount}) Admin dashboard` : 'Admin dashboard';
+    return () => { document.title = 'Admin dashboard'; };
+  }, [dashboard?.review]);
 
   const headers = useMemo(() => ({
     Authorization: `Bearer ${adminToken}`,
@@ -428,6 +510,33 @@ export default function AdminDashboard() {
     }
   };
 
+  const debateAction = async (item, debateData) => {
+    setBusy(true);
+    setMessage('');
+    setError('');
+    try {
+      const response = await fetch('/api/admin/debate', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ id: item.id, actor: 'admin-ui', ...debateData }),
+      });
+      const data = await readJsonResponse(response);
+      if (!response.ok) throw new Error(data.error || 'Failed to update debate');
+      const updatedItem = data.item;
+      if (updatedItem?.id) {
+        setItems(prev => prev.map(row => row.id === updatedItem.id ? updatedItem : row));
+      }
+      setDebateModal(null);
+      setMessageTone('good');
+      setMessage(debateData.debate_question ? '논쟁으로 설정됐습니다.' : '논쟁이 해제됐습니다.');
+    } catch (error) {
+      setMessageTone('bad');
+      setMessage(error.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const runCollection = async () => {
     if (!cronSecret) {
       setMessageTone('warn');
@@ -458,6 +567,14 @@ export default function AdminDashboard() {
 
   return (
     <div className="min-h-screen overflow-x-hidden" style={{ background: '#05070d', color: '#fff' }}>
+      {debateModal && (
+        <DebateModal
+          item={debateModal}
+          busy={busy}
+          onClose={() => setDebateModal(null)}
+          onSave={data => debateAction(debateModal, data)}
+        />
+      )}
       <div className="mx-auto w-full max-w-7xl px-5 py-6" style={{ maxWidth: '100vw' }}>
         <header className="flex min-w-0 flex-col gap-4 border-b pb-5 lg:flex-row lg:items-end"
           style={{ borderColor: '#1c2230' }}>
@@ -527,7 +644,7 @@ export default function AdminDashboard() {
         <section className="mt-5 grid min-w-0 gap-3 md:grid-cols-5">
           <Metric label="Total loaded" value={dashboard?.total} />
           <Metric label="Published" value={dashboard?.published} />
-          <Metric label="Review" value={dashboard?.review} />
+          <Metric label="Review" value={dashboard?.review} warn={(dashboard?.review || 0) > 0} />
           <Metric label="Discarded" value={dashboard?.discarded} />
           <Metric label="Rejected" value={dashboard?.rejected} />
         </section>
@@ -535,18 +652,33 @@ export default function AdminDashboard() {
         <section className="mt-5 grid min-w-0 gap-5 lg:grid-cols-[minmax(0,1fr)_320px]">
           <div className="min-w-0">
             <div className="mb-3 flex flex-wrap items-center gap-2">
-              {STATUS_OPTIONS.map(option => (
-                <button key={option}
-                  onClick={() => setStatus(option)}
-                  className="rounded-md px-3 py-2 text-sm font-bold"
-                  style={{
-                    background: status === option ? '#e8edf7' : '#11141d',
-                    color: status === option ? '#05070d' : '#a8b0c7',
-                    border: '1px solid #283040',
-                  }}>
-                  {option}
-                </button>
-              ))}
+              {STATUS_OPTIONS.map(option => {
+                const countMap = { review: dashboard?.review, published: dashboard?.published, discarded: dashboard?.discarded, rejected: dashboard?.rejected, all: dashboard?.total };
+                const count = countMap[option] || 0;
+                const isActive = status === option;
+                const isWarn = option === 'review' && count > 0;
+                return (
+                  <button key={option}
+                    onClick={() => setStatus(option)}
+                    className="inline-flex items-center gap-2 rounded-md px-3 py-2 text-sm font-bold"
+                    style={{
+                      background: isActive ? '#e8edf7' : '#11141d',
+                      color: isActive ? '#05070d' : '#a8b0c7',
+                      border: isActive ? '1px solid #283040' : isWarn ? '1px solid #665017' : '1px solid #283040',
+                    }}>
+                    {STATUS_LABELS[option]}
+                    {count > 0 && (
+                      <span className="rounded px-1.5 py-0.5 text-xs font-black leading-none"
+                        style={{
+                          background: isActive ? '#05070d' : isWarn ? '#665017' : '#283040',
+                          color: isActive ? '#e8edf7' : isWarn ? '#ffd166' : '#a8b0c7',
+                        }}>
+                        {count}
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
             </div>
             <div className="space-y-3">
               {isInitialLoading ? (
@@ -567,6 +699,7 @@ export default function AdminDashboard() {
                   draft={drafts[item.id] || {}}
                   onDraft={updateDraft}
                   onAction={reviewAction}
+                  onDebate={item => setDebateModal(item)}
                   busy={busy}
                 />
               ))}

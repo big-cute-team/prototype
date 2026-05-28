@@ -374,6 +374,25 @@ function enforcePolicy(result, post, aliases = []) {
     },
   };
 
+  // 1. 이미지/영상/링크 없이 의미 불명 → 팀 특정 여부와 무관하게 review
+  if (requiresVisualContext) {
+    return {
+      ...cleanResult,
+      decision: 'review',
+      review_reason: cleanResult.review_reason || '이미지/영상 또는 링크를 봐야 의미를 파악할 수 있어 검수가 필요합니다.',
+    };
+  }
+
+  // 2. 정보성 부족 → review
+  if (!informative) {
+    return {
+      ...cleanResult,
+      decision: 'review',
+      review_reason: cleanResult.review_reason || '게시글 자체에서 전달할 정보가 부족해 검수가 필요합니다.',
+    };
+  }
+
+  // 3. 대상 팀 없음 → discard
   if (!hasPossibleTarget) {
     return {
       ...cleanResult,
@@ -385,6 +404,7 @@ function enforcePolicy(result, post, aliases = []) {
     };
   }
 
+  // 4. 팀 alias 미확정 → review
   if (!confirmedTarget || teamResolution !== 'certain') {
     return {
       ...cleanResult,
@@ -393,22 +413,7 @@ function enforcePolicy(result, post, aliases = []) {
     };
   }
 
-  if (requiresVisualContext) {
-    return {
-      ...cleanResult,
-      decision: 'review',
-      review_reason: cleanResult.review_reason || '이미지/영상 또는 링크를 봐야 의미를 파악할 수 있어 검수가 필요합니다.',
-    };
-  }
-
-  if (!informative) {
-    return {
-      ...cleanResult,
-      decision: 'review',
-      review_reason: cleanResult.review_reason || '게시글 자체에서 전달할 정보가 부족해 검수가 필요합니다.',
-    };
-  }
-
+  // 5. 기자 의견글 → review
   if (journalistOpinion) {
     return {
       ...cleanResult,
@@ -417,6 +422,7 @@ function enforcePolicy(result, post, aliases = []) {
     };
   }
 
+  // 6. AI가 discard 했지만 팀 근거 있음 → review
   if (cleanResult.decision === 'discard') {
     return {
       ...cleanResult,
@@ -425,7 +431,7 @@ function enforcePolicy(result, post, aliases = []) {
     };
   }
 
-  // 모든 review 조건 통과 → 팀이 확실하면 무조건 발행
+  // 7. 모든 review 조건 통과 → publish
   if (!cleanResult.review_reason) {
     return {
       ...cleanResult,
