@@ -1,0 +1,1503 @@
+[
+  {
+    "name": "Onana",
+    "aliases": [
+      "Andre Onana",
+      "André Onana",
+      "오나나",
+      "Onanna"
+    ],
+    "team": "MUN",
+    "type": "player",
+    "active": false,
+    "notes": "현재 임대 신분으로 타 팀 소속, 맨유는 방출 희망. 맨유 소속 아님 (검토 필요: 임대처/완전이적 여부)",
+    "last_verified_at": "2026-05-27"
+  },
+  {
+    "name": "De Ligt",
+    "aliases": [
+      "Matthijs de Ligt",
+      "Matthijs De Ligt",
+      "데 리흐트",
+      "de ligt"
+    ],
+    "team": "MUN",
+    "type": "player",
+    "active": true,
+    "notes": "맨유 센터백",
+    "last_verified_at": "2026-05-27"
+  },
+  {
+    "name": "Yoro",
+    "aliases": [
+      "Leny Yoro",
+      "요로",
+      "Yoros"
+    ],
+    "team": "MUN",
+    "type": "player",
+    "active": true,
+    "notes": "맨유 센터백",
+    "last_verified_at": "2026-05-27"
+  },
+  {
+    "name": "Mazraoui",
+    "aliases": [
+      "Noussair Mazraoui",
+      "마즈라위",
+      "Mazraui"
+    ],
+    "team": "MUN",
+    "type": "player",
+    "active": true,
+    "notes": "맨유 풀백",
+    "last_verified_at": "2026-05-27"
+  },
+  {
+    "name": "Dorgu",
+    "aliases": [
+      "Patrick Dorgu",
+      "도르구"
+    ],
+    "team": "MUN",
+    "type": "player",
+    "active": true,
+    "notes": "맨유 좌측 풀백",
+    "last_verified_at": "2026-05-27"
+  },
+  {
+    "name": "Bruno Fernandes",
+    "aliases": [
+      "Bruno",
+      "Fernandes",
+      "브루누 페르난데스",
+      "Bruno Fernandez"
+    ],
+    "team": "MUN",
+    "type": "player",
+    "active": true,
+    "notes": "맨유 주장, 미드필더",
+    "last_verified_at": "2026-05-27"
+  },
+  {
+    "name": "Mainoo",
+    "aliases": [
+      "Kobbie Mainoo",
+      "마이누",
+      "Mainou"
+    ],
+    "team": "MUN",
+    "type": "player",
+    "active": true,
+    "notes": "맨유 중앙 미드필더 (리버풀전 득점 보도 확인)",
+    "last_verified_at": "2026-05-27"
+  },
+  {
+    "name": "Cunha",
+    "aliases": [
+      "Matheus Cunha",
+      "쿠냐",
+      "Cunya"
+    ],
+    "team": "MUN",
+    "type": "player",
+    "active": true,
+    "notes": "맨유 공격수 (2025-26 리버풀전 득점 보도 확인)",
+    "last_verified_at": "2026-05-27"
+  },
+  {
+    "name": "Sesko",
+    "aliases": [
+      "Benjamin Sesko",
+      "Benjamin Šeško",
+      "세슈코",
+      "Sesco"
+    ],
+    "team": "MUN",
+    "type": "player",
+    "active": true,
+    "notes": "맨유 공격수 (2025-26 리버풀전 득점 보도 확인)",
+    "last_verified_at": "2026-05-27"
+  },
+  {
+    "name": "Amad",
+    "aliases": [
+      "Amad Diallo",
+      "Diallo",
+      "아마드 디알로",
+      "아마드"
+    ],
+    "team": "MUN",
+    "type": "player",
+    "active": true,
+    "notes": "맨유 윙어 (검토 필요: 스쿼드 내 출전 비중)",
+    "last_verified_at": "2026-05-27"
+  },
+  {
+    "name": "Michael Carrick",
+    "aliases": [
+      "Carrick",
+      "캐릭",
+      "마이클 캐릭",
+      "Carrik"
+    ],
+    "team": "MUN",
+    "type": "manager",
+    "active": true,
+    "notes": "맨유 임시 감독, 2026년 1월 아모림 경질 후 선임 (검토 필요: 시즌 후 정식 감독 선임 여부)",
+    "last_verified_at": "2026-05-27"
+  },
+  {
+    "name": "Jason Wilcox",
+    "aliases": [
+      "Wilcox",
+      "윌콕스",
+      "제이슨 윌콕스"
+    ],
+    "team": "MUN",
+    "type": "executive",
+    "active": true,
+    "notes": "맨유 테크니컬 디렉터 (검토 필요: 현 직함)",
+    "last_verified_at": "2026-05-27"
+  },
+  {
+    "name": "Donnarumma",
+    "aliases": [
+      "Gianluigi Donnarumma",
+      "돈나룸마",
+      "Donnaruma",
+      "Gigio"
+    ],
+    "team": "MCI",
+    "type": "player",
+    "active": true,
+    "notes": "맨시티 골키퍼 (에스콰이어 분석 기사서 시티 핵심으로 언급)",
+    "last_verified_at": "2026-05-27"
+  },
+  {
+    "name": "Dias",
+    "aliases": [
+      "Ruben Dias",
+      "Rúben Dias",
+      "후벵 디아스",
+      "디아스"
+    ],
+    "team": "MCI",
+    "type": "player",
+    "active": true,
+    "notes": "맨시티 센터백",
+    "last_verified_at": "2026-05-27"
+  },
+  {
+    "name": "Gvardiol",
+    "aliases": [
+      "Josko Gvardiol",
+      "Joško Gvardiol",
+      "그바르디올",
+      "Gvardiola"
+    ],
+    "team": "MCI",
+    "type": "player",
+    "active": true,
+    "notes": "맨시티 수비수",
+    "last_verified_at": "2026-05-27"
+  },
+  {
+    "name": "Rodri",
+    "aliases": [
+      "Rodrigo Hernandez",
+      "Rodri",
+      "로드리"
+    ],
+    "team": "MCI",
+    "type": "player",
+    "active": true,
+    "notes": "맨시티 수비형 미드필더",
+    "last_verified_at": "2026-05-27"
+  },
+  {
+    "name": "Reijnders",
+    "aliases": [
+      "Tijjani Reijnders",
+      "레이은더르스",
+      "라인더르스",
+      "Reinders"
+    ],
+    "team": "MCI",
+    "type": "player",
+    "active": true,
+    "notes": "맨시티 미드필더 (에스콰이어 분석 기사서 중원 핵심으로 언급)",
+    "last_verified_at": "2026-05-27"
+  },
+  {
+    "name": "Foden",
+    "aliases": [
+      "Phil Foden",
+      "포든",
+      "Phil Foben"
+    ],
+    "team": "MCI",
+    "type": "player",
+    "active": true,
+    "notes": "맨시티 공격형 미드필더 (에스콰이어 분석 기사서 핵심 언급)",
+    "last_verified_at": "2026-05-27"
+  },
+  {
+    "name": "Haaland",
+    "aliases": [
+      "Erling Haaland",
+      "홀란드",
+      "Halland",
+      "Haalan"
+    ],
+    "team": "MCI",
+    "type": "player",
+    "active": true,
+    "notes": "맨시티 주전 공격수, 리그 득점 선두권 보도",
+    "last_verified_at": "2026-05-27"
+  },
+  {
+    "name": "Doku",
+    "aliases": [
+      "Jeremy Doku",
+      "도쿠"
+    ],
+    "team": "MCI",
+    "type": "player",
+    "active": true,
+    "notes": "맨시티 윙어 (검토 필요)",
+    "last_verified_at": "2026-05-27"
+  },
+  {
+    "name": "Pep Guardiola",
+    "aliases": [
+      "Guardiola",
+      "과르디올라",
+      "펩",
+      "Pep",
+      "Guardiala"
+    ],
+    "team": "MCI",
+    "type": "manager",
+    "active": false,
+    "notes": "2025-26 시즌 종료 후 맨시티 떠남(5/25 빌라전 고별전, 구단 공식 발표). 현 시점 감독직 공석",
+    "last_verified_at": "2026-05-27"
+  },
+  {
+    "name": "Txiki Begiristain",
+    "aliases": [
+      "Begiristain",
+      "치키 베기리스타인",
+      "Txiki"
+    ],
+    "team": "MCI",
+    "type": "executive",
+    "active": true,
+    "notes": "맨시티 디렉터 오브 풋볼 (검토 필요: Hugo Viana로 교체 여부 확인 요망)",
+    "last_verified_at": "2026-05-27"
+  },
+  {
+    "name": "Alisson",
+    "aliases": [
+      "Alisson Becker",
+      "알리송",
+      "Allison"
+    ],
+    "team": "LIV",
+    "type": "player",
+    "active": true,
+    "notes": "리버풀 주전 골키퍼",
+    "last_verified_at": "2026-05-27"
+  },
+  {
+    "name": "Van Dijk",
+    "aliases": [
+      "Virgil van Dijk",
+      "반 다이크",
+      "van dijk",
+      "Van Dyk"
+    ],
+    "team": "LIV",
+    "type": "player",
+    "active": true,
+    "notes": "리버풀 주장, 센터백",
+    "last_verified_at": "2026-05-27"
+  },
+  {
+    "name": "Konate",
+    "aliases": [
+      "Ibrahima Konate",
+      "Ibrahima Konaté",
+      "코나테",
+      "Konate"
+    ],
+    "team": "LIV",
+    "type": "player",
+    "active": true,
+    "notes": "리버풀 센터백 (검토 필요: 계약/이적 상황)",
+    "last_verified_at": "2026-05-27"
+  },
+  {
+    "name": "Szoboszlai",
+    "aliases": [
+      "Dominik Szoboszlai",
+      "소보슬라이",
+      "Szoboszlai",
+      "Soboszlai"
+    ],
+    "team": "LIV",
+    "type": "player",
+    "active": true,
+    "notes": "리버풀 미드필더 (2025-26 맨유전 득점 보도 확인)",
+    "last_verified_at": "2026-05-27"
+  },
+  {
+    "name": "Mac Allister",
+    "aliases": [
+      "Alexis Mac Allister",
+      "맥 알리스터",
+      "Mac Allister",
+      "Macallister"
+    ],
+    "team": "LIV",
+    "type": "player",
+    "active": true,
+    "notes": "리버풀 미드필더 (검토 필요: 레알 영입설 보도 있었음)",
+    "last_verified_at": "2026-05-27"
+  },
+  {
+    "name": "Gravenberch",
+    "aliases": [
+      "Ryan Gravenberch",
+      "흐라벤베르흐",
+      "Gravenberg"
+    ],
+    "team": "LIV",
+    "type": "player",
+    "active": true,
+    "notes": "리버풀 중앙 미드필더",
+    "last_verified_at": "2026-05-27"
+  },
+  {
+    "name": "Salah",
+    "aliases": [
+      "Mohamed Salah",
+      "살라",
+      "Mo Salah",
+      "Salla"
+    ],
+    "team": "LIV",
+    "type": "player",
+    "active": true,
+    "notes": "리버풀 윙어/공격수",
+    "last_verified_at": "2026-05-27"
+  },
+  {
+    "name": "Gakpo",
+    "aliases": [
+      "Cody Gakpo",
+      "학포",
+      "갗포",
+      "Gapko"
+    ],
+    "team": "LIV",
+    "type": "player",
+    "active": true,
+    "notes": "리버풀 공격수 (2025-26 맨유전 득점 보도 확인)",
+    "last_verified_at": "2026-05-27"
+  },
+  {
+    "name": "Arne Slot",
+    "aliases": [
+      "Slot",
+      "슬롯",
+      "아르네 슬롯",
+      "Slott"
+    ],
+    "team": "LIV",
+    "type": "manager",
+    "active": true,
+    "notes": "리버풀 감독, 2026년 5월 기준 유임 예상 보도 확인",
+    "last_verified_at": "2026-05-27"
+  },
+  {
+    "name": "Richard Hughes",
+    "aliases": [
+      "Hughes",
+      "리처드 휴스",
+      "휴스"
+    ],
+    "team": "LIV",
+    "type": "executive",
+    "active": true,
+    "notes": "리버풀 스포팅 디렉터 (검토 필요: 현 직함 확인 요망)",
+    "last_verified_at": "2026-05-27"
+  },
+  {
+    "name": "Raya",
+    "aliases": [
+      "David Raya",
+      "라야",
+      "Raya"
+    ],
+    "team": "ARS",
+    "type": "player",
+    "active": true,
+    "notes": "아스날 주전 골키퍼",
+    "last_verified_at": "2026-05-27"
+  },
+  {
+    "name": "Saliba",
+    "aliases": [
+      "William Saliba",
+      "살리바",
+      "Saliba"
+    ],
+    "team": "ARS",
+    "type": "player",
+    "active": true,
+    "notes": "아스날 센터백",
+    "last_verified_at": "2026-05-27"
+  },
+  {
+    "name": "Gabriel",
+    "aliases": [
+      "Gabriel Magalhaes",
+      "Gabriel Magalhães",
+      "가브리엘",
+      "Gabriel"
+    ],
+    "team": "ARS",
+    "type": "player",
+    "active": true,
+    "notes": "아스날 센터백 (이름 충돌 주의: Gabriel Jesus, Gabriel Martinelli와 구분)",
+    "last_verified_at": "2026-05-27"
+  },
+  {
+    "name": "Saka",
+    "aliases": [
+      "Bukayo Saka",
+      "사카",
+      "Saca",
+      "Sako"
+    ],
+    "team": "ARS",
+    "type": "player",
+    "active": true,
+    "notes": "아스날 우측 윙어, 핵심 선수",
+    "last_verified_at": "2026-05-27"
+  },
+  {
+    "name": "Odegaard",
+    "aliases": [
+      "Martin Odegaard",
+      "Martin Ødegaard",
+      "외데고르",
+      "Odegard",
+      "Ødegaard"
+    ],
+    "team": "ARS",
+    "type": "player",
+    "active": true,
+    "notes": "아스날 주장, 공격형 미드필더",
+    "last_verified_at": "2026-05-27"
+  },
+  {
+    "name": "Rice",
+    "aliases": [
+      "Declan Rice",
+      "라이스",
+      "Rise"
+    ],
+    "team": "ARS",
+    "type": "player",
+    "active": true,
+    "notes": "아스날 미드필더",
+    "last_verified_at": "2026-05-27"
+  },
+  {
+    "name": "Martinelli",
+    "aliases": [
+      "Gabriel Martinelli",
+      "마르티넬리",
+      "Martinelli",
+      "Martineli"
+    ],
+    "team": "ARS",
+    "type": "player",
+    "active": true,
+    "notes": "아스날 좌측 윙어",
+    "last_verified_at": "2026-05-27"
+  },
+  {
+    "name": "Gyokeres",
+    "aliases": [
+      "Viktor Gyokeres",
+      "Viktor Gyökeres",
+      "예케레스",
+      "Gyokeres",
+      "Gyokers"
+    ],
+    "team": "ARS",
+    "type": "player",
+    "active": true,
+    "notes": "아스날 공격수 (검토 필요: 영입 확정 여부 - 아모림 시절 스포르팅 연결, 이적 여부 확인 요망)",
+    "last_verified_at": "2026-05-27"
+  },
+  {
+    "name": "Mikel Arteta",
+    "aliases": [
+      "Arteta",
+      "아르테타",
+      "미켈 아르테타",
+      "Arteta",
+      "Artetta"
+    ],
+    "team": "ARS",
+    "type": "manager",
+    "active": true,
+    "notes": "아스날 감독, 2025-26 EPL 우승 보도 확인",
+    "last_verified_at": "2026-05-27"
+  },
+  {
+    "name": "Andrea Berta",
+    "aliases": [
+      "Berta",
+      "베르타",
+      "안드레아 베르타"
+    ],
+    "team": "ARS",
+    "type": "executive",
+    "active": true,
+    "notes": "아스날 스포팅 디렉터, 2025년 Edu 후임으로 선임 (아틀레티코 출신)",
+    "last_verified_at": "2026-05-27"
+  },
+  {
+    "name": "Vicario",
+    "aliases": [
+      "Guglielmo Vicario",
+      "비카리오",
+      "Vicario"
+    ],
+    "team": "TOT",
+    "type": "player",
+    "active": true,
+    "notes": "토트넘 주전 골키퍼",
+    "last_verified_at": "2026-05-27"
+  },
+  {
+    "name": "Romero",
+    "aliases": [
+      "Cristian Romero",
+      "로메로",
+      "Cuti Romero",
+      "Romeo"
+    ],
+    "team": "TOT",
+    "type": "player",
+    "active": true,
+    "notes": "토트넘 센터백/주장",
+    "last_verified_at": "2026-05-27"
+  },
+  {
+    "name": "Van de Ven",
+    "aliases": [
+      "Micky van de Ven",
+      "판 더 펜",
+      "Van de Ven",
+      "Van der Ven"
+    ],
+    "team": "TOT",
+    "type": "player",
+    "active": true,
+    "notes": "토트넘 센터백",
+    "last_verified_at": "2026-05-27"
+  },
+  {
+    "name": "Bergvall",
+    "aliases": [
+      "Lucas Bergvall",
+      "베리발",
+      "Bergval"
+    ],
+    "team": "TOT",
+    "type": "player",
+    "active": true,
+    "notes": "토트넘 미드필더 (데 제르비 체제 기사서 언급)",
+    "last_verified_at": "2026-05-27"
+  },
+  {
+    "name": "Sarr",
+    "aliases": [
+      "Pape Matar Sarr",
+      "사르",
+      "Sarr"
+    ],
+    "team": "TOT",
+    "type": "player",
+    "active": true,
+    "notes": "토트넘 미드필더 (검토 필요)",
+    "last_verified_at": "2026-05-27"
+  },
+  {
+    "name": "Kudus",
+    "aliases": [
+      "Mohammed Kudus",
+      "쿠두스",
+      "Kudus"
+    ],
+    "team": "TOT",
+    "type": "player",
+    "active": true,
+    "notes": "토트넘 윙어 (데 제르비 체제 기사서 언급)",
+    "last_verified_at": "2026-05-27"
+  },
+  {
+    "name": "Richarlison",
+    "aliases": [
+      "Richarlison",
+      "히샬리송",
+      "Richarlison",
+      "Richarlisson"
+    ],
+    "team": "TOT",
+    "type": "player",
+    "active": true,
+    "notes": "토트넘 공격수 (데 제르비 체제 기사서 가용 윙 자원으로 언급)",
+    "last_verified_at": "2026-05-27"
+  },
+  {
+    "name": "Tel",
+    "aliases": [
+      "Mathys Tel",
+      "텔",
+      "Tel"
+    ],
+    "team": "TOT",
+    "type": "player",
+    "active": true,
+    "notes": "토트넘 공격수 (데 제르비 체제 기사서 언급)",
+    "last_verified_at": "2026-05-27"
+  },
+  {
+    "name": "Solanke",
+    "aliases": [
+      "Dominic Solanke",
+      "솔란케",
+      "Solanke"
+    ],
+    "team": "TOT",
+    "type": "player",
+    "active": true,
+    "notes": "토트넘 공격수 (검토 필요)",
+    "last_verified_at": "2026-05-27"
+  },
+  {
+    "name": "Palhinha",
+    "aliases": [
+      "Joao Palhinha",
+      "João Palhinha",
+      "팔리냐",
+      "Palinha"
+    ],
+    "team": "TOT",
+    "type": "player",
+    "active": true,
+    "notes": "토트넘 미드필더 (2025-26 에버튼전 결승골 보도 확인 - 검토 필요: 임대/완전영입 여부)",
+    "last_verified_at": "2026-05-27"
+  },
+  {
+    "name": "Roberto De Zerbi",
+    "aliases": [
+      "De Zerbi",
+      "데 제르비",
+      "데제르비",
+      "로베르토 데 제르비",
+      "Dezerbi"
+    ],
+    "team": "TOT",
+    "type": "manager",
+    "active": true,
+    "notes": "토트넘 감독, 2026년 3월 선임 (제51대 감독, 잔류 성공 보도 확인)",
+    "last_verified_at": "2026-05-27"
+  },
+  {
+    "name": "Daniel Levy",
+    "aliases": [
+      "Levy",
+      "레비",
+      "다니엘 레비",
+      "Daniel Levy"
+    ],
+    "team": "TOT",
+    "type": "executive",
+    "active": false,
+    "notes": "토트넘 회장 사임 (현재 직위에서 물러남)",
+    "last_verified_at": "2026-05-27"
+  },
+  {
+    "name": "Sanchez",
+    "aliases": [
+      "Robert Sanchez",
+      "Robert Sánchez",
+      "산체스",
+      "Sanchez"
+    ],
+    "team": "CHE",
+    "type": "player",
+    "active": true,
+    "notes": "첼시 주전 골키퍼 (검토 필요)",
+    "last_verified_at": "2026-05-27"
+  },
+  {
+    "name": "Cucurella",
+    "aliases": [
+      "Marc Cucurella",
+      "쿠쿠레야",
+      "Cucurella"
+    ],
+    "team": "CHE",
+    "type": "player",
+    "active": true,
+    "notes": "첼시 좌측 풀백",
+    "last_verified_at": "2026-05-27"
+  },
+  {
+    "name": "Colwill",
+    "aliases": [
+      "Levi Colwill",
+      "콜윌",
+      "Colwill"
+    ],
+    "team": "CHE",
+    "type": "player",
+    "active": true,
+    "notes": "첼시 센터백 (검토 필요: 부상/계약 상황)",
+    "last_verified_at": "2026-05-27"
+  },
+  {
+    "name": "Caicedo",
+    "aliases": [
+      "Moises Caicedo",
+      "Moisés Caicedo",
+      "카이세도",
+      "Caicedo"
+    ],
+    "team": "CHE",
+    "type": "player",
+    "active": true,
+    "notes": "첼시 수비형 미드필더",
+    "last_verified_at": "2026-05-27"
+  },
+  {
+    "name": "Fernandez",
+    "aliases": [
+      "Enzo Fernandez",
+      "Enzo Fernández",
+      "엔소 페르난데스",
+      "Enzo"
+    ],
+    "team": "CHE",
+    "type": "player",
+    "active": true,
+    "notes": "첼시 미드필더 (Bruno Fernandes와 혼동 주의)",
+    "last_verified_at": "2026-05-27"
+  },
+  {
+    "name": "Palmer",
+    "aliases": [
+      "Cole Palmer",
+      "팔머",
+      "Palmer",
+      "Palmber"
+    ],
+    "team": "CHE",
+    "type": "player",
+    "active": true,
+    "notes": "첼시 공격형 미드필더, 핵심 선수",
+    "last_verified_at": "2026-05-27"
+  },
+  {
+    "name": "Neto",
+    "aliases": [
+      "Pedro Neto",
+      "네투",
+      "Neto"
+    ],
+    "team": "CHE",
+    "type": "player",
+    "active": true,
+    "notes": "첼시 윙어 (검토 필요)",
+    "last_verified_at": "2026-05-27"
+  },
+  {
+    "name": "Joao Pedro",
+    "aliases": [
+      "Joao Pedro",
+      "João Pedro",
+      "주앙 페드루",
+      "Joao Pedro"
+    ],
+    "team": "CHE",
+    "type": "player",
+    "active": true,
+    "notes": "첼시 공격수, 2025년 영입 (데 제르비 추천 보도, 클럽월드컵 기여)",
+    "last_verified_at": "2026-05-27"
+  },
+  {
+    "name": "Liam Rosenior",
+    "aliases": [
+      "Rosenior",
+      "로세니어",
+      "리암 로세니어",
+      "Rosenier"
+    ],
+    "team": "CHE",
+    "type": "manager",
+    "active": false,
+    "notes": "첼시 감독 경질. 현 시점 감독직 공석, 사비 알론소 부임 예정",
+    "last_verified_at": "2026-05-27"
+  },
+  {
+    "name": "Xabi Alonso",
+    "aliases": [
+      "Alonso",
+      "알론소",
+      "사비 알론소",
+      "Xabi"
+    ],
+    "team": "CHE",
+    "type": "manager",
+    "active": false,
+    "notes": "첼시 차기 감독, 2026년 7월 부임 예정 (현 시점 미부임이라 active=false 처리)",
+    "last_verified_at": "2026-05-27"
+  },
+  {
+    "name": "Laurence Stewart",
+    "aliases": [
+      "Stewart",
+      "스튜어트",
+      "로렌스 스튜어트"
+    ],
+    "team": "CHE",
+    "type": "executive",
+    "active": true,
+    "notes": "첼시 공동 스포팅 디렉터 (검토 필요: Paul Winstanley와 공동 체제 여부 확인 요망)",
+    "last_verified_at": "2026-05-27"
+  },
+  {
+    "name": "Enzo Maresca",
+    "aliases": [
+      "Maresca",
+      "마레스카",
+      "엔초 마레스카",
+      "Mareska"
+    ],
+    "team": "MCI",
+    "type": "manager",
+    "active": false,
+    "notes": "맨시티 차기 감독 유력 후보 (과르디올라 후임, 과거 시티 코치 출신). 현 시점 공식 부임 전이라 active=false (검토 필요: 공식 선임 여부)",
+    "last_verified_at": "2026-05-27"
+  },
+  {
+    "name": "Lammens",
+    "aliases": [
+      "Senne Lammens",
+      "라멘스",
+      "Lammens"
+    ],
+    "team": "MUN",
+    "type": "player",
+    "active": true,
+    "notes": "맨유 현 주전 골키퍼",
+    "last_verified_at": "2026-05-27"
+  },
+  {
+    "name": "Lisandro Martinez",
+    "aliases": [
+      "Lisandro Martínez",
+      "Martinez",
+      "리산드로 마르티네스",
+      "Licha",
+      "Martinez"
+    ],
+    "team": "MUN",
+    "type": "player",
+    "active": true,
+    "notes": "맨유 센터백 (Lautaro/다른 Martinez와 구분 주의)",
+    "last_verified_at": "2026-05-27"
+  },
+  {
+    "name": "Dalot",
+    "aliases": [
+      "Diogo Dalot",
+      "달롯",
+      "디오구 달롯",
+      "Dalot"
+    ],
+    "team": "MUN",
+    "type": "player",
+    "active": true,
+    "notes": "맨유 풀백",
+    "last_verified_at": "2026-05-27"
+  },
+  {
+    "name": "Luke Shaw",
+    "aliases": [
+      "Shaw",
+      "루크 쇼",
+      "Luke Shaw"
+    ],
+    "team": "MUN",
+    "type": "player",
+    "active": true,
+    "notes": "맨유 좌측 풀백",
+    "last_verified_at": "2026-05-27"
+  },
+  {
+    "name": "Mount",
+    "aliases": [
+      "Mason Mount",
+      "마운트",
+      "메이슨 마운트",
+      "Mount"
+    ],
+    "team": "MUN",
+    "type": "player",
+    "active": true,
+    "notes": "맨유 미드필더",
+    "last_verified_at": "2026-05-27"
+  },
+  {
+    "name": "Mbeumo",
+    "aliases": [
+      "Bryan Mbeumo",
+      "음뵈모",
+      "Mbeumo",
+      "Mbuemo"
+    ],
+    "team": "MUN",
+    "type": "player",
+    "active": true,
+    "notes": "맨유 윙어 (2025 영입)",
+    "last_verified_at": "2026-05-27"
+  },
+  {
+    "name": "Heaven",
+    "aliases": [
+      "Ayden Heaven",
+      "헤븐",
+      "Heaven"
+    ],
+    "team": "MUN",
+    "type": "player",
+    "active": true,
+    "notes": "맨유 수비수 (검토 필요: 풀네임/포지션 확인)",
+    "last_verified_at": "2026-05-27"
+  },
+  {
+    "name": "Semenyo",
+    "aliases": [
+      "Antoine Semenyo",
+      "세메뇨",
+      "Semenyo"
+    ],
+    "team": "MCI",
+    "type": "player",
+    "active": true,
+    "notes": "맨시티 공격수 (검토 필요: 영입 확정 여부 - 본머스에서 이적설)",
+    "last_verified_at": "2026-05-27"
+  },
+  {
+    "name": "O'Reilly",
+    "aliases": [
+      "Nico O'Reilly",
+      "오라일리",
+      "OReilly",
+      "O'Reilly"
+    ],
+    "team": "MCI",
+    "type": "player",
+    "active": true,
+    "notes": "맨시티 수비수/미드필더",
+    "last_verified_at": "2026-05-27"
+  },
+  {
+    "name": "Marmoush",
+    "aliases": [
+      "Omar Marmoush",
+      "마르무시",
+      "Marmoush",
+      "Marmush"
+    ],
+    "team": "MCI",
+    "type": "player",
+    "active": true,
+    "notes": "맨시티 공격수 (2025년 영입)",
+    "last_verified_at": "2026-05-27"
+  },
+  {
+    "name": "Ake",
+    "aliases": [
+      "Nathan Ake",
+      "Nathan Aké",
+      "아케",
+      "Ake"
+    ],
+    "team": "MCI",
+    "type": "player",
+    "active": true,
+    "notes": "맨시티 수비수",
+    "last_verified_at": "2026-05-27"
+  },
+  {
+    "name": "Matheus Nunes",
+    "aliases": [
+      "Matheus Nunes",
+      "마테우스 누네스",
+      "Nunes",
+      "Matheus Nunez"
+    ],
+    "team": "MCI",
+    "type": "player",
+    "active": true,
+    "notes": "맨시티 미드필더/풀백",
+    "last_verified_at": "2026-05-27"
+  },
+  {
+    "name": "Savinho",
+    "aliases": [
+      "Savinho",
+      "사비뉴",
+      "Savio",
+      "Savinya"
+    ],
+    "team": "MCI",
+    "type": "player",
+    "active": true,
+    "notes": "맨시티 윙어",
+    "last_verified_at": "2026-05-27"
+  },
+  {
+    "name": "Cherki",
+    "aliases": [
+      "Rayan Cherki",
+      "셰르키",
+      "Cherki",
+      "Cherky"
+    ],
+    "team": "MCI",
+    "type": "player",
+    "active": true,
+    "notes": "맨시티 공격형 미드필더 (검토 필요: 영입 확정 여부)",
+    "last_verified_at": "2026-05-27"
+  },
+  {
+    "name": "Wirtz",
+    "aliases": [
+      "Florian Wirtz",
+      "비르츠",
+      "Wirtz",
+      "Wirts"
+    ],
+    "team": "LIV",
+    "type": "player",
+    "active": true,
+    "notes": "리버풀 영입(2025 여름, 클럽 최고이적료), 7번",
+    "last_verified_at": "2026-05-27"
+  },
+  {
+    "name": "Ekitike",
+    "aliases": [
+      "Hugo Ekitike",
+      "Hugo Ekitiké",
+      "에키티케",
+      "Ekitike"
+    ],
+    "team": "LIV",
+    "type": "player",
+    "active": true,
+    "notes": "리버풀 공격수 (2025 여름 영입, 22번)",
+    "last_verified_at": "2026-05-27"
+  },
+  {
+    "name": "Isak",
+    "aliases": [
+      "Alexander Isak",
+      "이삭",
+      "알렉산더 이삭",
+      "Isak"
+    ],
+    "team": "LIV",
+    "type": "player",
+    "active": true,
+    "notes": "리버풀 공격수 (2025 영입)",
+    "last_verified_at": "2026-05-27"
+  },
+  {
+    "name": "Frimpong",
+    "aliases": [
+      "Jeremie Frimpong",
+      "프림퐁",
+      "Frimpong",
+      "Frympong"
+    ],
+    "team": "LIV",
+    "type": "player",
+    "active": true,
+    "notes": "리버풀 우측 풀백 (2025 영입, 30번)",
+    "last_verified_at": "2026-05-27"
+  },
+  {
+    "name": "Kerkez",
+    "aliases": [
+      "Milos Kerkez",
+      "Miloš Kerkez",
+      "케르케즈",
+      "Kerkez"
+    ],
+    "team": "LIV",
+    "type": "player",
+    "active": true,
+    "notes": "리버풀 좌측 풀백 (2025 영입, 6번)",
+    "last_verified_at": "2026-05-27"
+  },
+  {
+    "name": "Joe Gomez",
+    "aliases": [
+      "Gomez",
+      "조 고메즈",
+      "Joe Gomez"
+    ],
+    "team": "LIV",
+    "type": "player",
+    "active": true,
+    "notes": "리버풀 수비수",
+    "last_verified_at": "2026-05-27"
+  },
+  {
+    "name": "Calafiori",
+    "aliases": [
+      "Riccardo Calafiori",
+      "칼라피오리",
+      "Calafiori"
+    ],
+    "team": "ARS",
+    "type": "player",
+    "active": true,
+    "notes": "아스날 수비수",
+    "last_verified_at": "2026-05-27"
+  },
+  {
+    "name": "Timber",
+    "aliases": [
+      "Jurrien Timber",
+      "Jurriën Timber",
+      "팀버",
+      "Timber"
+    ],
+    "team": "ARS",
+    "type": "player",
+    "active": true,
+    "notes": "아스날 수비수",
+    "last_verified_at": "2026-05-27"
+  },
+  {
+    "name": "Ben White",
+    "aliases": [
+      "White",
+      "벤 화이트",
+      "Ben White"
+    ],
+    "team": "ARS",
+    "type": "player",
+    "active": true,
+    "notes": "아스날 수비수",
+    "last_verified_at": "2026-05-27"
+  },
+  {
+    "name": "Mosquera",
+    "aliases": [
+      "Cristhian Mosquera",
+      "모스케라",
+      "Mosquera"
+    ],
+    "team": "ARS",
+    "type": "player",
+    "active": true,
+    "notes": "아스날 수비수 (검토 필요: 영입/스쿼드 합류 여부)",
+    "last_verified_at": "2026-05-27"
+  },
+  {
+    "name": "Hincapie",
+    "aliases": [
+      "Piero Hincapie",
+      "Piero Hincapié",
+      "인카피에",
+      "Hincapie"
+    ],
+    "team": "ARS",
+    "type": "player",
+    "active": true,
+    "notes": "아스날 수비수 (검토 필요: 영입 확정 여부)",
+    "last_verified_at": "2026-05-27"
+  },
+  {
+    "name": "Zubimendi",
+    "aliases": [
+      "Martin Zubimendi",
+      "Martín Zubimendi",
+      "수비멘디",
+      "Zubimendi"
+    ],
+    "team": "ARS",
+    "type": "player",
+    "active": true,
+    "notes": "아스날 미드필더 (2025 영입)",
+    "last_verified_at": "2026-05-27"
+  },
+  {
+    "name": "Trossard",
+    "aliases": [
+      "Leandro Trossard",
+      "트로사르",
+      "Trossard"
+    ],
+    "team": "ARS",
+    "type": "player",
+    "active": true,
+    "notes": "아스날 공격수",
+    "last_verified_at": "2026-05-27"
+  },
+  {
+    "name": "Madueke",
+    "aliases": [
+      "Noni Madueke",
+      "마두에케",
+      "Madueke"
+    ],
+    "team": "ARS",
+    "type": "player",
+    "active": true,
+    "notes": "아스날 윙어 (검토 필요: 첼시→아스날 이적 여부)",
+    "last_verified_at": "2026-05-27"
+  },
+  {
+    "name": "Havertz",
+    "aliases": [
+      "Kai Havertz",
+      "하베르츠",
+      "Havertz",
+      "Havertz"
+    ],
+    "team": "ARS",
+    "type": "player",
+    "active": true,
+    "notes": "아스날 공격수/미드필더",
+    "last_verified_at": "2026-05-27"
+  },
+  {
+    "name": "Kinsky",
+    "aliases": [
+      "Antonin Kinsky",
+      "Antonín Kinský",
+      "킨스키",
+      "Kinsky"
+    ],
+    "team": "TOT",
+    "type": "player",
+    "active": true,
+    "notes": "토트넘 골키퍼",
+    "last_verified_at": "2026-05-27"
+  },
+  {
+    "name": "Porro",
+    "aliases": [
+      "Pedro Porro",
+      "포로",
+      "페드로 포로",
+      "Porro"
+    ],
+    "team": "TOT",
+    "type": "player",
+    "active": true,
+    "notes": "토트넘 우측 풀백 (데 제르비 체제 기사서 언급)",
+    "last_verified_at": "2026-05-27"
+  },
+  {
+    "name": "Bentancur",
+    "aliases": [
+      "Rodrigo Bentancur",
+      "벤탕쿠르",
+      "Bentancur"
+    ],
+    "team": "TOT",
+    "type": "player",
+    "active": true,
+    "notes": "토트넘 미드필더",
+    "last_verified_at": "2026-05-27"
+  },
+  {
+    "name": "Gray",
+    "aliases": [
+      "Archie Gray",
+      "그레이",
+      "Gray"
+    ],
+    "team": "TOT",
+    "type": "player",
+    "active": true,
+    "notes": "토트넘 미드필더/수비수",
+    "last_verified_at": "2026-05-27"
+  },
+  {
+    "name": "Maddison",
+    "aliases": [
+      "James Maddison",
+      "메디슨",
+      "제임스 메디슨",
+      "Maddison",
+      "Madison"
+    ],
+    "team": "TOT",
+    "type": "player",
+    "active": true,
+    "notes": "토트넘 공격형 미드필더",
+    "last_verified_at": "2026-05-27"
+  },
+  {
+    "name": "Xavi Simons",
+    "aliases": [
+      "Xavi Simons",
+      "사비 시몬스",
+      "Simons",
+      "Xavi Simons"
+    ],
+    "team": "TOT",
+    "type": "player",
+    "active": true,
+    "notes": "토트넘 공격형 미드필더 (데 제르비 체제 기사서 언급. Xabi Alonso와 표기 혼동 주의)",
+    "last_verified_at": "2026-05-27"
+  },
+  {
+    "name": "Conor Gallagher",
+    "aliases": [
+      "Gallagher",
+      "코너 갤러거",
+      "Conor Gallagher",
+      "Gallaher"
+    ],
+    "team": "TOT",
+    "type": "player",
+    "active": true,
+    "notes": "토트넘 미드필더 (데 제르비 체제 기사서 언급)",
+    "last_verified_at": "2026-05-27"
+  },
+  {
+    "name": "Reece James",
+    "aliases": [
+      "James",
+      "리스 제임스",
+      "Reece James"
+    ],
+    "team": "CHE",
+    "type": "player",
+    "active": true,
+    "notes": "첼시 주장, 우측 풀백 (James Maddison과 성 충돌 주의)",
+    "last_verified_at": "2026-05-27"
+  },
+  {
+    "name": "Chalobah",
+    "aliases": [
+      "Trevoh Chalobah",
+      "찰로바",
+      "Chalobah"
+    ],
+    "team": "CHE",
+    "type": "player",
+    "active": true,
+    "notes": "첼시 수비수",
+    "last_verified_at": "2026-05-27"
+  },
+  {
+    "name": "Fofana",
+    "aliases": [
+      "Wesley Fofana",
+      "포파나",
+      "Fofana"
+    ],
+    "team": "CHE",
+    "type": "player",
+    "active": true,
+    "notes": "첼시 수비수 (검토 필요: 동명 Fofana 다수 - Youssouf 등과 구분)",
+    "last_verified_at": "2026-05-27"
+  },
+  {
+    "name": "Hato",
+    "aliases": [
+      "Jorrel Hato",
+      "하토",
+      "Hato"
+    ],
+    "team": "CHE",
+    "type": "player",
+    "active": true,
+    "notes": "첼시 수비수 (검토 필요: 영입 확정 여부)",
+    "last_verified_at": "2026-05-27"
+  },
+  {
+    "name": "Garnacho",
+    "aliases": [
+      "Alejandro Garnacho",
+      "가르나초",
+      "Garnacho"
+    ],
+    "team": "CHE",
+    "type": "player",
+    "active": true,
+    "notes": "첼시 윙어 (맨유→첼시 이적, 검토 필요)",
+    "last_verified_at": "2026-05-27"
+  },
+  {
+    "name": "Delap",
+    "aliases": [
+      "Liam Delap",
+      "델랍",
+      "Delap"
+    ],
+    "team": "CHE",
+    "type": "player",
+    "active": true,
+    "notes": "첼시 공격수 (2025 영입)",
+    "last_verified_at": "2026-05-27"
+  },
+  {
+    "name": "Estevao",
+    "aliases": [
+      "Estevao",
+      "Estêvão",
+      "Estevao Willian",
+      "에스테방",
+      "Estevao"
+    ],
+    "team": "CHE",
+    "type": "player",
+    "active": true,
+    "notes": "첼시 공격수 (브라질 영건, 2025 합류)",
+    "last_verified_at": "2026-05-27"
+  },
+  {
+    "name": "Rashford",
+    "aliases": [
+      "Marcus Rashford",
+      "래시포드",
+      "Rashford",
+      "Rashfold"
+    ],
+    "team": "MUN",
+    "type": "player",
+    "active": false,
+    "notes": "맨유 소속이나 현재 바르셀로나로 임대 중. 맨유에서 뛰지 않음",
+    "last_verified_at": "2026-05-27"
+  }
+]
