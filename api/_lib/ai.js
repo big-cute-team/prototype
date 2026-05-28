@@ -1,9 +1,11 @@
+const fs = require('fs');
+const path = require('path');
 const { OFFICIAL_KEYWORDS, RUMOUR_KEYWORDS, TARGET_TEAMS, hasAny, matchTeams } = require('./constants');
 
 const TARGET_TEAM_CODES = TARGET_TEAMS.map(team => team.code);
 const BRIEFING_STATUSES = ['OFFICIAL', 'RUMOUR', 'UPDATE', 'CONFIRMED', 'DENIED'];
 const TEAM_RESOLUTIONS = ['certain', 'ambiguous', 'none'];
-const AUTO_PUBLISH_CONFIDENCE = 0.7;
+const CONTENT_PROMPT = fs.readFileSync(path.join(__dirname, '../../content.md'), 'utf8').trim();
 const TARGET_TEAM_NAME_PATTERN = [
   'manchester united',
   'man utd',
@@ -328,7 +330,9 @@ function enforcePolicy(result, post, aliases = []) {
   const modelClaimsTarget = normalizeBoolean(result.is_target_relevant, false) || modelTeams.length > 0;
   const confirmedTarget = localEvidenceTeams.length > 0;
   const hasPossibleTarget = confirmedTarget || modelClaimsTarget;
-  const teams = confirmedTarget ? localEvidenceTeams : modelTeams;
+  const teams = confirmedTarget
+    ? uniqueTargetTeams([...localEvidenceTeams, ...modelTeams])
+    : modelTeams;
   const confidence = normalizeConfidence(result.confidence);
   const briefing = normalizeBriefing(result, teams, post);
   const evidence = Array.isArray(result.evidence) ? result.evidence.filter(Boolean).map(String) : [];
@@ -421,12 +425,8 @@ function enforcePolicy(result, post, aliases = []) {
     };
   }
 
-  const canPublish =
-    cleanResult.confidence >= AUTO_PUBLISH_CONFIDENCE &&
-    !cleanResult.review_reason &&
-    hasEvidence;
-
-  if (canPublish && decision !== 'discard') {
+  // 모든 review 조건 통과 → 팀이 확실하면 무조건 발행
+  if (!cleanResult.review_reason) {
     return {
       ...cleanResult,
       decision: 'publish',
@@ -434,20 +434,9 @@ function enforcePolicy(result, post, aliases = []) {
     };
   }
 
-  if (decision === 'publish' && !canPublish) {
-    return {
-      ...cleanResult,
-      decision: 'review',
-      review_reason: cleanResult.review_reason || (hasEvidence
-        ? `자동 발행 확신도가 ${AUTO_PUBLISH_CONFIDENCE} 미만이라 검수가 필요합니다.`
-        : '원문 텍스트 근거가 부족해 검수가 필요합니다.'),
-    };
-  }
-
   return {
     ...cleanResult,
-    decision: cleanResult.decision === 'publish' ? 'review' : cleanResult.decision,
-    review_reason: cleanResult.review_reason || 'AI가 검수를 요청했습니다.',
+    decision: 'review',
   };
 }
 
@@ -463,34 +452,40 @@ function systemPrompt() {
     'Only these target teams are in scope: MUN, MCI, LIV, ARS, TOT, CHE.',
     'Target team Korean names: MUN=맨유, MCI=맨시티, LIV=리버풀, ARS=아스널, TOT=토트넘, CHE=첼시.',
     'Discard posts unrelated to those six teams.',
-    'If a team is not named but a player/manager alias clearly links to one target team, tag that team and set team_resolution=certain. If the link is uncertain, choose review and set team_resolution=ambiguous.',
-    'Set is_informative=true when the text itself conveys football news or an update, including rumours, talks, interest, denials, collapses, injuries, contracts, squad news, or official announcements.',
+    '',
+    'TEAM TAGGING RULES:',
+    'Only Big 6 codes are allowed in teams[]: ARS, CHE, LIV, MCI, MUN, TOT.',
+    'Tag a team when a player, manager, or executive is clearly linked to that team — even if the club is not named directly — via their current club affiliation or strong transfer context.',
+    'For transfer/negotiation/interest/collapse: if both origin club and destination club are Big 6, tag BOTH. If only one side is Big 6, tag only that one.',
+    'For departure rumour with no confirmed destination: tag current club only.',
+    'Do NOT tag a team just because "Premier League" is mentioned.',
+    'Only tag with confirmed Big 6 connections. Never tag all 6 teams at once.',
+    'Duplicate codes are not allowed in teams[].',
+    'If no Big 6 connection exists, return teams=[].',
+    'Set team_resolution=certain when target team(s) are clearly identified via aliases or explicit mention.',
+    'Set team_resolution=ambiguous when team is possible but uncertain.',
+    'Set team_resolution=none when no Big 6 connection.',
+    '',
+    'CLASSIFICATION RULES:',
+    'Set is_informative=true when the text conveys football news: rumours, talks, interest, denials, collapses, injuries, contracts, squad news, or official announcements.',
     'Set is_informative=false when the text is only a tease, reaction, generic caption, question, joke, or does not convey a concrete update.',
     'Set requires_visual_context=true when the reader must inspect an image, video, link card, or quoted post to understand the news.',
-    'Set is_journalist_opinion=true when the post is mainly the journalist author giving a personal opinion, feeling, evaluation, joke, or reaction rather than conveying reportable information.',
-    'All user-facing briefing fields must be written in Korean.',
-    'The fields briefing.title, briefing.summary_short, and briefing.summary_detail must each contain Korean Hangul characters.',
-    'Do not copy the English source text into briefing.summary_short or briefing.summary_detail.',
-    'Use only facts stated in the original X post. Do not add background context, fan sentiment, source credibility commentary, debate framing, opinion, or emotional wording.',
-    'Never mention names, seasons, clubs, records, or historical context that are not literally present in the original X post.',
-    'Do not add "reported by", "according to", source attribution, or journalist framing unless that wording is visible in the original X post text.',
-    'The author_handle is metadata for routing only, not a fact to include in briefing text.',
-    'Every person name in briefing.title, briefing.summary_short, and briefing.summary_detail must correspond to a person name visible in the original X post.',
-    'Preserve visible person names accurately. If the post says "Mikel Arteta", write "미켈 아르테타"; do not replace him with Arsenal or "아르센".',
-    'Write Arsenal as "아스널"; never write Arsenal as "아르센".',
-    'Do not introduce historical person names such as Arsene Wenger, Sir Alex Ferguson, Jose Mourinho, Pep Guardiola, Jurgen Klopp, or Mauricio Pochettino unless the original X post contains that name.',
-    'If the post says a generic fact such as "first title in 22 years", translate that fact literally; do not infer who the previous manager was or what season it refers to.',
-    'For example, if an Arsenal post says only "first title in 22 years", do not write "아르센 벵거 이후".',
-    'For discarded posts, keep the briefing neutral and based only on the visible text.',
-    'Do not use clickbait, exclamation marks, emojis, or exaggerated Korean words such as 충격, 초대형, 전격.',
-    'Use speculative Korean reporting endings for unconfirmed information.',
-    'Allowed decision values: publish, review, discard.',
-    'Allowed briefing.status values: OFFICIAL, CONFIRMED, UPDATE, RUMOUR, DENIED.',
-    'Set briefing.status to OFFICIAL for club/player official announcements, CONFIRMED for definitive completed reports, UPDATE for progress, RUMOUR for interest/talks/possibility, and DENIED for denial/collapse/rejection.',
-    'Choose decision=publish when the post has a certain target team, is_informative=true, requires_visual_context=false, is_journalist_opinion=false, evidence exists, and review_reason is null.',
-    'Rumours, speculative wording, updates, denials, collapses, and rejections can be decision=publish if they meet the same target-team and text-supported information rules.',
-    'Choose decision=review when the team is uncertain after aliases, the post needs image/video/link context, the text lacks concrete information, the post is journalist opinion, confidence is low, or Korean briefing quality is uncertain.',
+    'Set is_journalist_opinion=true when the post is mainly the journalist giving a personal opinion, feeling, evaluation, joke, or reaction rather than reportable information.',
+    'Choose decision=publish when: team_resolution=certain, is_informative=true, requires_visual_context=false, is_journalist_opinion=false.',
+    'Choose decision=review when: team is uncertain, needs visual context, lacks concrete information, or is journalist opinion.',
     'Choose decision=discard only when the post is unrelated to all six target teams.',
+    'Rumours, speculative updates, denials, and collapses are eligible for decision=publish as long as team and information criteria are met.',
+    '',
+    'KOREAN NAME RULES:',
+    'When writing player/manager/executive names in the briefing, look in target_team_aliases for a Korean (Hangul) alias of that person.',
+    'If a Korean Hangul alias exists for the same person in target_team_aliases, use it as the primary name in all briefing fields.',
+    'If no Korean alias is available in target_team_aliases, use the most commonly used Korean transcription.',
+    '',
+    '=== BRIEFING GENERATION RULES ===',
+    'The briefing object maps to the "briefing" field in the outer classification JSON.',
+    'NOTE: The JSON output described in the rules below is the "briefing" nested object — do NOT output it as a standalone response. It must be embedded as briefing:{} inside the outer classification JSON.',
+    CONTENT_PROMPT,
+    '=== END BRIEFING RULES ===',
   ].join('\n');
 }
 
