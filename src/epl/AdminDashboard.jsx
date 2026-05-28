@@ -195,7 +195,7 @@ function SourceSkeleton() {
   );
 }
 
-function ItemEditor({ item, draft, onDraft, onAction, onDebate, busy }) {
+function ItemEditor({ item, draft, onDraft, onAction, onDebate, busy, isNew }) {
   const briefing = briefingFor(item);
   const title = draft.title_ko ?? briefing.title ?? '';
   const summaryShort = draft.summary_short_ko ?? briefing.summary_short ?? '';
@@ -213,6 +213,12 @@ function ItemEditor({ item, draft, onDraft, onAction, onDebate, busy }) {
         <Badge tone={briefingTone(briefingStatus)}>{briefingStatus || item.news_type}</Badge>
         {teamTags.map(team => <Badge key={team}>{team}</Badge>)}
         {item.debate_question && <Badge tone="warn">DEBATE</Badge>}
+        {isNew && (
+          <span className="rounded px-1.5 py-0.5 text-xs font-black leading-none"
+            style={{ background: '#0e2d1a', color: '#34d399' }}>
+            NEW
+          </span>
+        )}
         <span className="ml-auto text-xs" style={{ color: '#737b91' }}>
           confidence {Number(item.confidence || 0).toFixed(2)}
         </span>
@@ -423,6 +429,7 @@ export default function AdminDashboard() {
   const [busy, setBusy] = useState(false);
   const [loaded, setLoaded] = useState(false);
   const [debateModal, setDebateModal] = useState(null);
+  const [newIds, setNewIds] = useState(new Set());
   const isInitialLoading = Boolean(adminToken && busy && !loaded && !error);
 
   useEffect(() => {
@@ -438,12 +445,13 @@ export default function AdminDashboard() {
 
   const loadItems = async (options = {}) => {
     const preserveMessage = options?.preserveMessage === true;
+    const clearNew = options?.clearNew !== false;
     if (!adminToken) {
       setItems([]);
       setDashboard(null);
       setLoaded(false);
       setError('');
-      return;
+      return [];
     }
     setBusy(true);
     if (!preserveMessage) setMessage('');
@@ -452,13 +460,17 @@ export default function AdminDashboard() {
       const response = await fetch(`/api/admin/items?status=${status}&limit=100`, { headers });
       const data = await readJsonResponse(response);
       if (!response.ok) throw new Error(data.error || 'Failed to load admin items');
-      setItems(data.items || []);
+      const loaded_items = data.items || [];
+      setItems(loaded_items);
       setDashboard(data.dashboard || null);
       setLoaded(true);
+      if (clearNew) setNewIds(new Set());
       localStorage.setItem('epl_admin_token', adminToken);
+      return loaded_items;
     } catch (error) {
       setError(error.message);
       setLoaded(false);
+      return [];
     } finally {
       setBusy(false);
     }
@@ -566,6 +578,7 @@ export default function AdminDashboard() {
     setMessage('');
     setError('');
     try {
+      const prevIds = new Set(items.map(i => i.id));
       const response = await fetch('/api/collect', {
         method: 'POST',
         headers: { Authorization: `Bearer ${cronSecret}` },
@@ -573,7 +586,9 @@ export default function AdminDashboard() {
       const data = await readJsonResponse(response);
       if (!response.ok) throw new Error(data.error || 'Collection failed');
       localStorage.setItem('epl_cron_secret', cronSecret);
-      await loadItems({ preserveMessage: true });
+      const newItems = await loadItems({ preserveMessage: true, clearNew: false });
+      const freshIds = new Set(newItems.filter(i => !prevIds.has(i.id)).map(i => i.id));
+      setNewIds(freshIds);
       setMessageTone('good');
       setMessage(`수집 완료: 신규 ${data.summary?.inserted || 0}, 검수 ${data.summary?.review || 0}`);
     } catch (error) {
@@ -676,9 +691,14 @@ export default function AdminDashboard() {
                 const count = countMap[option] || 0;
                 const isActive = status === option;
                 const isWarn = option === 'review' && count > 0;
+                const newCount = [...newIds].filter(id => {
+                  const it = items.find(i => i.id === id);
+                  if (!it) return false;
+                  return option === 'all' || it.status === option;
+                }).length;
                 return (
                   <button key={option}
-                    onClick={() => setStatus(option)}
+                    onClick={() => { setStatus(option); setNewIds(new Set()); }}
                     className="inline-flex items-center gap-2 rounded-md px-3 py-2 text-sm font-bold"
                     style={{
                       background: isActive ? '#e8edf7' : '#11141d',
@@ -693,6 +713,12 @@ export default function AdminDashboard() {
                           color: isActive ? '#e8edf7' : isWarn ? '#ffd166' : '#a8b0c7',
                         }}>
                         {count}
+                      </span>
+                    )}
+                    {newCount > 0 && (
+                      <span className="rounded px-1.5 py-0.5 text-xs font-black leading-none"
+                        style={{ background: '#0e2d1a', color: '#34d399' }}>
+                        +{newCount}
                       </span>
                     )}
                   </button>
@@ -720,6 +746,7 @@ export default function AdminDashboard() {
                   onAction={reviewAction}
                   onDebate={item => setDebateModal(item)}
                   busy={busy}
+                  isNew={newIds.has(item.id)}
                 />
               ))}
             </div>
