@@ -306,13 +306,13 @@ function fallbackClassify(post, aliases) {
       competitions: [],
       journalists: post.author_handle ? [post.author_handle] : [],
     },
-    evidence: relevant ? ['Upstage Solar 키가 없어 alias 기반 규칙으로만 분류했습니다.'] : ['대상 6개 팀 alias와 일치하지 않았습니다.'],
+    evidence: relevant ? ['OpenAI 키가 없어 alias 기반 규칙으로만 분류했습니다.'] : ['대상 6개 팀 alias와 일치하지 않았습니다.'],
     is_informative: !isClearlyNonInformative(post),
     requires_visual_context: isMediaHeavy(post),
     is_journalist_opinion: false,
     team_resolution: relevant ? 'certain' : 'none',
     review_reason: relevant
-      ? (isMediaHeavy(post) ? '사진/영상 중심이거나 텍스트가 짧아 검수가 필요합니다.' : 'Upstage Solar 키가 없어 자동 발행하지 않고 검수로 보냅니다.')
+      ? (isMediaHeavy(post) ? '사진/영상 중심이거나 텍스트가 짧아 검수가 필요합니다.' : 'OpenAI 키가 없어 자동 발행하지 않고 검수로 보냅니다.')
       : null,
     briefing: {
       title: relevant ? '검수 필요 EPL 업데이트' : '비대상 EPL 업데이트',
@@ -446,8 +446,8 @@ function enforcePolicy(result, post, aliases = []) {
   };
 }
 
-function solarBaseUrl() {
-  return String(process.env.UPSTAGE_BASE_URL || 'https://api.upstage.ai/v1').replace(/\/$/, '');
+function openAiBaseUrl() {
+  return String(process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1').replace(/\/$/, '');
 }
 
 function systemPrompt() {
@@ -506,11 +506,11 @@ function userPrompt(post, aliases) {
   });
 }
 
-async function requestSolar(body, allowRetry = true) {
-  const response = await fetch(`${solarBaseUrl()}/chat/completions`, {
+async function requestOpenAI(body, allowRetry = true) {
+  const response = await fetch(`${openAiBaseUrl()}/chat/completions`, {
     method: 'POST',
     headers: {
-      Authorization: `Bearer ${process.env.UPSTAGE_API_KEY}`,
+      Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
       'Content-Type': 'application/json',
     },
     body: JSON.stringify(body),
@@ -522,20 +522,20 @@ async function requestSolar(body, allowRetry = true) {
   const message = payload.error?.message || '';
   if (allowRetry && response.status === 400 && /response_format|json_object/i.test(message)) {
     const { response_format: _ignored, ...retryBody } = body;
-    return requestSolar(retryBody, false);
+    return requestOpenAI(retryBody, false);
   }
 
-  throw Object.assign(new Error(message || 'Upstage Solar classification failed'), {
+  throw Object.assign(new Error(message || 'OpenAI classification failed'), {
     statusCode: response.status >= 500 ? 502 : response.status,
     payload,
   });
 }
 
 async function classifyPost(post, aliases) {
-  if (!process.env.UPSTAGE_API_KEY) return fallbackClassify(post, aliases);
+  if (!process.env.OPENAI_API_KEY) return fallbackClassify(post, aliases);
 
-  const payload = await requestSolar({
-    model: process.env.UPSTAGE_MODEL || 'solar-pro3',
+  const payload = await requestOpenAI({
+    model: process.env.OPENAI_MODEL || 'gpt-4o-mini',
     messages: [
       {
         role: 'system',
