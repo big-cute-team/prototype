@@ -107,7 +107,7 @@ BAD:  "첼시 초대형 영입 임박!!" / "충격! 맨유 핵심 방출"
 [SUMMARY_SHORT RULES]
 ═══════════════════════════════════════
 
-- Exactly 2-3 sentences. No more, no less.
+- 1-3 sentences. Write only as many as the tweet's facts support — do NOT pad.
 - Each sentence MUST contain at least one concrete fact from the tweet (who, what, when, why, or how much).
 - Do NOT write a sentence that only restates the title or contains no new information.
 - First mention of a player: full Korean name. Subsequent mentions: last name only.
@@ -123,15 +123,20 @@ GOOD (each sentence adds a distinct fact):
 [SUMMARY_DETAIL RULES]
 ═══════════════════════════════════════
 
-- Exactly 4-5 sentences. Each sentence must add information not already covered in summary_short.
-- Slightly more detailed: include all specific facts from the tweet (amounts, dates, conditions, source attribution).
+- Write one sentence per distinct fact in the tweet. Do NOT invent, pad, or imply content not stated.
+- If the tweet has 2 facts, write 2 sentences. If it has 5 facts, write 5 sentences.
+- Each sentence must add information not already covered in summary_short.
+- Include all specific facts from the tweet (amounts, dates, conditions, source attribution).
 - ONLY facts from the tweet. No background, no context, no interpretation.
 - Attribute the source naturally when relevant: "BBC 보도를 로마노가 확인했다" / "~로 전해진다"
 
-BAD (only 2 sentences, repeats summary_short):
-"첼시 소속 골키퍼 필립 요르겐센이 이번 여름 이적 시장에서 팀을 떠나고 싶다는 요청을 BBC가 보도했다. 그는 더 많은 경기 출전 기회를 원하며, 이미 1월에 이적을 요청한 바 있다."
+BAD (pads with invented content when tweet only has 2 facts):
+"이브라히마 코나테가 리버풀을 떠날 예정인 것으로 전해진다. 그는 클럽에서 5년을 보냈다. 새로운 도전을 모색하고 있는 상황이다. 향후 행보에 관심이 집중되고 있다."
 
-GOOD (4 sentences, each with distinct information):
+GOOD (tweet has 2 facts → 2 sentences, no padding):
+"이브라히마 코나테가 리버풀을 떠날 것으로 전해진다. 그는 클럽에서 5년을 보낸 것으로 알려졌다."
+
+GOOD (tweet has rich info → more sentences, each adds a new fact):
 "필립 요르겐센이 이번 여름 첼시 이적을 재차 요청한 것으로 전해진다. BBC 보도를 파브리지오 로마노가 확인했다. 요르겐센은 출전 시간 확보를 이유로 들었으며, 동일한 요청은 지난 1월에도 있었던 것으로 알려졌다. 최종 이적료와 목적지 클럽은 아직 확정되지 않은 상태다."
 
 ═══════════════════════════════════════
