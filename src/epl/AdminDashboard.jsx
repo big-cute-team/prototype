@@ -196,7 +196,7 @@ function SourceSkeleton() {
   );
 }
 
-function ItemEditor({ item, draft, onDraft, onAction, onDebate, busy, isNew }) {
+function ItemEditor({ item, draft, onDraft, onAction, onDebate, onRegenerate, busy, isNew }) {
   const briefing = briefingFor(item);
   const title = draft.title_ko ?? briefing.title ?? '';
   const summaryShort = draft.summary_short_ko ?? briefing.summary_short ?? '';
@@ -206,6 +206,7 @@ function ItemEditor({ item, draft, onDraft, onAction, onDebate, busy, isNew }) {
   const evidence = item.ai_result?.evidence || [];
   const reason = item.review_reason || item.ai_result?.review_reason;
   const reviewNote = draft.review_note ?? item.review_note ?? '';
+  const regenNote = draft.regen_note ?? '';
 
   return (
     <div className="min-w-0 rounded-md p-4" style={{ background: '#0b0d14', border: '1px solid #202635' }}>
@@ -325,6 +326,26 @@ function ItemEditor({ item, draft, onDraft, onAction, onDebate, busy, isNew }) {
                   </button>
                 );
               })}
+            </div>
+          </div>
+          <div>
+            <span className="mb-1 block text-xs font-bold uppercase" style={{ color: '#687086' }}>추가 의견 (재생성)</span>
+            <div className="flex gap-2">
+              <textarea
+                value={regenNote}
+                onChange={event => onDraft(item.id, { regen_note: event.target.value })}
+                rows={2}
+                placeholder="예: 바이에른 이적 유력, 이적료 4500만 유로. 공식 발표 아님."
+                className="min-w-0 flex-1 rounded-md px-3 py-2 text-sm leading-6 outline-none"
+                style={{ background: '#11141d', color: '#fff', border: '1px solid #283040' }}
+              />
+              <button
+                disabled={busy || !regenNote.trim()}
+                onClick={() => onRegenerate(item, regenNote)}
+                className="shrink-0 self-end rounded-md px-3 py-2 text-sm font-bold disabled:opacity-50"
+                style={{ background: '#2557ff', color: '#fff' }}>
+                재생성
+              </button>
             </div>
           </div>
           <details className="rounded-md p-3" style={{ background: '#080a10', border: '1px solid #202635' }}>
@@ -596,6 +617,37 @@ export default function AdminDashboard() {
     }
   };
 
+  const regenerateAction = async (item, note) => {
+    setBusy(true);
+    setMessage('');
+    setError('');
+    try {
+      const response = await fetch('/api/admin/regenerate', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ id: item.id, note, actor: 'admin-ui' }),
+      });
+      const data = await readJsonResponse(response);
+      if (!response.ok) throw new Error(data.error || 'Regeneration failed');
+      const { briefing } = data;
+      updateDraft(item.id, {
+        title_ko: briefing.title_ko,
+        summary_short_ko: briefing.summary_short_ko,
+        summary_detail_ko: briefing.summary_detail_ko,
+        briefing_status: briefing.briefing_status,
+        team_tags: briefing.team_tags,
+        regen_note: '',
+      });
+      setMessageTone('good');
+      setMessage('브리핑이 재생성됐습니다. 내용 확인 후 저장하세요.');
+    } catch (error) {
+      setMessageTone('bad');
+      setMessage(error.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const runCollection = async () => {
     if (!cronSecret) {
       setMessageTone('warn');
@@ -773,6 +825,7 @@ export default function AdminDashboard() {
                   onDraft={updateDraft}
                   onAction={reviewAction}
                   onDebate={item => setDebateModal(item)}
+                  onRegenerate={regenerateAction}
                   busy={busy}
                   isNew={newIds.has(item.id)}
                 />
