@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 
 const STATUS_OPTIONS = ['review', 'published', 'discarded', 'rejected', 'all'];
 const BRIEFING_STATUS_OPTIONS = ['OFFICIAL', 'CONFIRMED', 'UPDATE', 'RUMOUR', 'DENIED'];
+const TEAM_OPTIONS = ['ARS', 'CHE', 'LIV', 'MCI', 'MUN', 'TOT'];
 const STATUS_LABELS = {
   review: '검수',
   published: '발행',
@@ -201,7 +202,7 @@ function ItemEditor({ item, draft, onDraft, onAction, onDebate, busy, isNew }) {
   const summaryShort = draft.summary_short_ko ?? briefing.summary_short ?? '';
   const summaryDetail = draft.summary_detail_ko ?? briefing.summary_detail ?? item.raw_text ?? '';
   const briefingStatus = draft.briefing_status ?? normalizeBriefingStatus(briefing.status, item.news_type);
-  const teamTags = Array.isArray(briefing.tags) && briefing.tags.length > 0 ? briefing.tags : [];
+  const teamTags = draft.team_tags ?? (Array.isArray(briefing.tags) && briefing.tags.length > 0 ? briefing.tags : []);
   const evidence = item.ai_result?.evidence || [];
   const reason = item.review_reason || item.ai_result?.review_reason;
   const reviewNote = draft.review_note ?? item.review_note ?? '';
@@ -299,6 +300,33 @@ function ItemEditor({ item, draft, onDraft, onAction, onDebate, busy, isNew }) {
               ))}
             </select>
           </label>
+          <div>
+            <span className="mb-1 block text-xs font-bold uppercase" style={{ color: '#687086' }}>팀 태그</span>
+            <div className="flex flex-wrap gap-1.5">
+              {TEAM_OPTIONS.map(team => {
+                const active = teamTags.includes(team);
+                return (
+                  <button
+                    key={team}
+                    type="button"
+                    onClick={() => {
+                      const next = active
+                        ? teamTags.filter(t => t !== team)
+                        : [...teamTags, team];
+                      onDraft(item.id, { team_tags: next });
+                    }}
+                    className="rounded px-2.5 py-1 text-xs font-black"
+                    style={{
+                      background: active ? '#1e3a5f' : '#11141d',
+                      color: active ? '#60a5fa' : '#4a5568',
+                      border: active ? '1px solid #3b82f6' : '1px solid #283040',
+                    }}>
+                    {team}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
           <details className="rounded-md p-3" style={{ background: '#080a10', border: '1px solid #202635' }}>
             <summary className="cursor-pointer text-xs font-bold" style={{ color: '#8791aa' }}>AI JSON</summary>
             <pre className="mt-2 max-h-48 max-w-full overflow-auto text-xs" style={{ color: '#a8b0c7' }}>{safeJson(item.ai_result)}</pre>
@@ -497,7 +525,7 @@ export default function AdminDashboard() {
     setMessage('');
     setError('');
     const briefing = briefingFor(item);
-    const teamTags = Array.isArray(briefing.tags) ? briefing.tags : (item.team_tags || []);
+    const teamTags = draft.team_tags ?? (Array.isArray(briefing.tags) ? briefing.tags : (item.team_tags || []));
     try {
       const response = await fetch('/api/admin/review', {
         method: 'POST',
