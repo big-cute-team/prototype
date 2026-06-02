@@ -178,18 +178,13 @@ function hasHangul(value) {
   return /[가-힣]/.test(String(value || ''));
 }
 
-function ensureKoreanBriefing(briefing, targetRelevant) {
-  const fallback = targetRelevant
-    ? {
-      title: '검수 필요 EPL 업데이트',
-      summary_short: KOREAN_SUMMARY_FALLBACK,
-      summary_detail: KOREAN_SUMMARY_FALLBACK,
-    }
-    : {
-      title: '비대상 EPL 업데이트',
-      summary_short: NON_TARGET_SUMMARY,
-      summary_detail: NON_TARGET_SUMMARY,
-    };
+function ensureKoreanBriefing(briefing, targetRelevant, post) {
+  const rawSnippet = post ? textSnippet(post) : '';
+  const fallback = {
+    title: rawSnippet.slice(0, 40) || (targetRelevant ? '검수 필요 EPL 업데이트' : '비대상 EPL 업데이트'),
+    summary_short: rawSnippet || '원문 텍스트가 비어 있습니다.',
+    summary_detail: rawSnippet || '원문 텍스트가 비어 있습니다.',
+  };
 
   const next = {
     ...briefing,
@@ -344,7 +339,7 @@ function enforcePolicy(result, post, aliases = []) {
     ? 'certain'
     : normalizeTeamResolution(result.team_resolution, modelClaimsTarget ? 'ambiguous' : 'none');
   const reason = reviewReason(result.review_reason);
-  const koreanGuard = ensureKoreanBriefing(briefing, hasPossibleTarget);
+  const koreanGuard = ensureKoreanBriefing(briefing, hasPossibleTarget, post);
   const koreanReviewReason = hasPossibleTarget && koreanGuard.changed
     ? '한국어 브리핑이 충분하지 않아 검수가 필요합니다.'
     : null;
