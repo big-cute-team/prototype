@@ -526,27 +526,50 @@ async function requestOpenAI(body, allowRetry = true) {
   });
 }
 
+function briefingHasKorean(result) {
+  const b = result?.briefing || {};
+  return hasHangul(b.title) || hasHangul(b.summary_short) || hasHangul(b.summary_detail);
+}
+
 async function classifyPost(post, aliases) {
   if (!process.env.OPENAI_API_KEY) return fallbackClassify(post, aliases);
 
-  const payload = await requestOpenAI({
+  const baseMessages = [
+    { role: 'system', content: systemPrompt() },
+    { role: 'user', content: userPrompt(post, aliases) },
+  ];
+  const baseBody = {
     model: process.env.OPENAI_MODEL || 'gpt-4o-mini',
-    messages: [
-      {
-        role: 'system',
-        content: systemPrompt(),
-      },
-      {
-        role: 'user',
-        content: userPrompt(post, aliases),
-      },
-    ],
+    messages: baseMessages,
     temperature: 0.1,
     stream: false,
     response_format: { type: 'json_object' },
-  });
+  };
 
-  return enforcePolicy(parseJsonObject(parseChatContent(payload)), post, aliases);
+  let payload = await requestOpenAI(baseBody);
+  let parsed = parseJsonObject(parseChatContent(payload));
+
+  // 브리핑에 한국어 없으면 1회 재시도
+  if (!briefingHasKorean(parsed)) {
+    const retryPayload = await requestOpenAI({
+      ...baseBody,
+      messages: [
+        ...baseMessages,
+        { role: 'assistant', content: parseChatContent(payload) },
+        {
+          role: 'user',
+          content: 'IMPORTANT: The briefing fields (title, summary_short, summary_detail) MUST be written entirely in Korean (한국어/Hangul). Regenerate only the briefing object in Korean.',
+        },
+      ],
+    }).catch(() => null);
+
+    if (retryPayload) {
+      const retryParsed = parseJsonObject(parseChatContent(retryPayload));
+      if (briefingHasKorean(retryParsed)) parsed = retryParsed;
+    }
+  }
+
+  return enforcePolicy(parsed, post, aliases);
 }
 
 module.exports = {
