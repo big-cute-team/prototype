@@ -455,8 +455,6 @@ function SearchView() {
 /* ─── MY tab sub-sections ─── */
 function ClubSection({ selectedTeam, posts, onOpen }) {
   const myPosts = posts.filter(p => selectedTeam && p.club === selectedTeam.shortName);
-  const debatePosts = myPosts.filter(p => p.type === 'debate' || p.type === 'today_debate');
-  const otherPosts = myPosts.filter(p => p.type === 'sentimental' || p.type === 'general');
   const tc = selectedTeam?.primaryColor || '#3b82f6';
 
   if (myPosts.length === 0) {
@@ -464,13 +462,13 @@ function ClubSection({ selectedTeam, posts, onOpen }) {
       <div className="flex flex-col items-center justify-center py-16 px-5">
         <div className="text-4xl mb-3">⚽</div>
         <div className="text-sm text-white mb-1">아직 이슈가 없어요</div>
-        <div className="text-xs" style={{ color: '#3a3a5a' }}>피드에서 {selectedTeam?.name} 관련 이슈를 확인해보세요</div>
+        <div className="text-xs" style={{ color: '#3a3a5a' }}>{selectedTeam?.name} 관련 소식이 들어오면 여기에 표시됩니다</div>
       </div>
     );
   }
 
   return (
-    <div className="px-5 py-4 pb-8 space-y-4">
+    <div className="px-5 py-4 pb-8 space-y-3">
       <div className="flex items-center gap-3 mb-2">
         <div className="w-10 h-10 rounded-full flex items-center justify-center font-black text-sm shrink-0"
           style={{ background: tc, color: '#fff' }}>
@@ -478,50 +476,29 @@ function ClubSection({ selectedTeam, posts, onOpen }) {
         </div>
         <div>
           <div className="font-black text-white text-base">{selectedTeam?.name}</div>
-          <div className="text-xs mt-0.5" style={{ color: '#4a4a6a' }}>최근 업데이트 2분 전</div>
+          <div className="text-xs mt-0.5" style={{ color: '#4a4a6a' }}>{myPosts.length}개 이슈</div>
         </div>
       </div>
 
-      {debatePosts.length > 0 && (
-        <div>
-          <p className="text-xs font-bold mb-2" style={{ color: '#e63946' }}>HOT DEBATE</p>
-          {debatePosts.map(post => (
-            <button key={post.id} onClick={() => onOpen(post)}
-              className="w-full rounded-xl p-4 text-left mb-2 active:scale-[0.98] transition-transform"
-              style={{ background: '#0d0d1a', border: '1px solid #1a1a2a' }}>
-              <div className="font-bold text-white text-sm leading-snug mb-2">
-                {post.title.replace('\n', ' ')}
-              </div>
-              <div className="flex h-1 rounded-full overflow-hidden mb-1.5" style={{ background: '#1a1a2a' }}>
-                <div style={{ width: `${post.voteFor}%`, background: '#3b82f6' }} />
-                <div style={{ width: `${post.voteAgainst}%`, background: '#e63946' }} />
-              </div>
-              <div className="flex justify-between text-xs">
-                <span style={{ color: '#3b82f6' }}>{post.voteForLabel} {post.voteFor}%</span>
-                <span style={{ color: '#4a4a6a' }}>{fmt(post.participants)} 참여</span>
-                <span style={{ color: '#e63946' }}>{post.voteAgainst}% {post.voteAgainstLabel}</span>
-              </div>
-            </button>
-          ))}
-        </div>
-      )}
-
-      {otherPosts.length > 0 && (
-        <div>
-          <p className="text-xs font-bold mb-2" style={{ color: '#4a4a6a' }}>최신 이슈</p>
-          {otherPosts.map(post => (
-            <button key={post.id} onClick={() => onOpen(post)}
-              className="w-full rounded-xl px-4 py-3 text-left mb-2 flex items-center gap-3 active:scale-[0.98] transition-transform"
-              style={{ background: '#0d0d1a', border: '1px solid #1a1a2a' }}>
-              <div className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: tc }} />
-              <div className="font-medium text-white text-sm leading-snug flex-1">
-                {post.title.replace('\n', ' ')}
-              </div>
-              <span className="text-xs shrink-0" style={{ color: '#2a2a4a' }}>→</span>
-            </button>
-          ))}
-        </div>
-      )}
+      {myPosts.map(post => (
+        <button key={post.id} onClick={() => onOpen(post)}
+          className="w-full rounded-xl px-4 py-3 text-left flex items-start gap-3 active:scale-[0.98] transition-transform"
+          style={{ background: '#0d0d1a', border: '1px solid #1a1a2a' }}>
+          <div className="w-1.5 h-1.5 rounded-full shrink-0 mt-1.5" style={{ background: tc }} />
+          <div className="min-w-0 flex-1">
+            <div className="font-medium text-white text-sm leading-snug">
+              {post.title.replace('\n', ' ')}
+            </div>
+            <div className="flex items-center gap-2 mt-1">
+              <span className="text-xs" style={{ color: '#4a4a6a' }}>{post.status}</span>
+              {post.tweet?.timeAgo && (
+                <span className="text-xs" style={{ color: '#2a2a4a' }}>· {post.tweet.timeAgo}</span>
+              )}
+            </div>
+          </div>
+          <span className="text-xs shrink-0 mt-0.5" style={{ color: '#2a2a4a' }}>→</span>
+        </button>
+      ))}
     </div>
   );
 }
@@ -741,12 +718,10 @@ function BottomNav({ activeTab, onChange, selectedTeam }) {
   );
 }
 
-function sortFeed(posts, myTeam, readIds) {
-  return [...posts].sort((a, b) => {
-    const aScore = (myTeam && a.club === myTeam ? 2 : 0) + (readIds.has(a.id) ? 0 : 1);
-    const bScore = (myTeam && b.club === myTeam ? 2 : 0) + (readIds.has(b.id) ? 0 : 1);
-    return bScore - aScore;
-  });
+function sortFeed(posts, _myTeam, readIds) {
+  const unread = posts.filter(p => !readIds.has(p.id));
+  const read = posts.filter(p => readIds.has(p.id));
+  return [...unread, ...read];
 }
 
 const STORAGE_KEY = 'reax_read';
