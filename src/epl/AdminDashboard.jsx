@@ -215,6 +215,12 @@ function ItemEditor({ item, draft, onDraft, onAction, onDebate, onRegenerate, bu
         <Badge tone={briefingTone(briefingStatus)}>{briefingStatus || item.news_type}</Badge>
         {teamTags.map(team => <Badge key={team}>{team}</Badge>)}
         {item.debate_question && <Badge tone="warn">DEBATE</Badge>}
+        {item.specialist_match && (
+          <span className="rounded px-1.5 py-0.5 text-xs font-black leading-none"
+            style={{ background: '#2a1f00', color: '#f4a100' }}>
+            ★ 전문기자
+          </span>
+        )}
         {isNew && (
           <span className="rounded px-1.5 py-0.5 text-xs font-black leading-none"
             style={{ background: '#0e2d1a', color: '#34d399' }}>

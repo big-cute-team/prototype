@@ -84,7 +84,7 @@ function BriefingCard({ post }) {
           </div>
           <span className="text-xs font-semibold" style={{ color: '#8b8fa8' }}>{post.tweet.author}</span>
           <span className="text-xs font-bold px-1.5 py-0.5 rounded"
-            style={{ background: '#2a1f00', color: '#f4a100' }}>T{post.tweet.tier}</span>
+            style={{ background: '#2a1f00', color: '#f4a100' }}>{post.tweet.specialist ? '★ 전문기자' : `T${post.tweet.tier}`}</span>
           <span className="text-xs ml-auto shrink-0" style={{ color: '#3a3a5a' }}>{post.tweet.timeAgo}</span>
         </div>
       )}

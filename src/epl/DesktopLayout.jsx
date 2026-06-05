@@ -284,7 +284,7 @@ function DesktopFeedCard({ post, selected, onSelect, vote, fillHeight = false })
               <span className="text-xs truncate" style={{ color: '#6b6f88' }}>{post.tweet.author}</span>
               <span className="text-xs font-bold px-1.5 py-0.5 rounded shrink-0"
                 style={{ background: '#2a1f00', color: '#f4a100' }}>
-                T{post.tweet.tier}
+                {post.tweet.specialist ? '★ 전문기자' : `T${post.tweet.tier}`}
               </span>
               <span className="text-xs ml-auto shrink-0" style={{ color: '#3a3a5a' }}>{post.tweet.timeAgo}</span>
             </div>
