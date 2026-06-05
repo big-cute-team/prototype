@@ -369,25 +369,7 @@ function enforcePolicy(result, post, aliases = []) {
     },
   };
 
-  // 1. 이미지/영상/링크 없이 의미 불명 → 팀 특정 여부와 무관하게 review
-  if (requiresVisualContext) {
-    return {
-      ...cleanResult,
-      decision: 'review',
-      review_reason: cleanResult.review_reason || '이미지/영상 또는 링크를 봐야 의미를 파악할 수 있어 검수가 필요합니다.',
-    };
-  }
-
-  // 2. 정보성 부족 → review
-  if (!informative) {
-    return {
-      ...cleanResult,
-      decision: 'review',
-      review_reason: cleanResult.review_reason || '게시글 자체에서 전달할 정보가 부족해 검수가 필요합니다.',
-    };
-  }
-
-  // 3. 대상 팀 없음 → discard
+  // 1. 대상 팀 없음 → discard (비대상 트윗을 검토 큐로 보내지 않음)
   if (!hasPossibleTarget) {
     return {
       ...cleanResult,
@@ -396,6 +378,24 @@ function enforcePolicy(result, post, aliases = []) {
       decision: 'discard',
       review_reason: null,
       briefing: neutralBriefing(post),
+    };
+  }
+
+  // 2. 이미지/영상/링크 없이 의미 불명 → review
+  if (requiresVisualContext) {
+    return {
+      ...cleanResult,
+      decision: 'review',
+      review_reason: cleanResult.review_reason || '이미지/영상 또는 링크를 봐야 의미를 파악할 수 있어 검수가 필요합니다.',
+    };
+  }
+
+  // 3. 정보성 부족 → review
+  if (!informative) {
+    return {
+      ...cleanResult,
+      decision: 'review',
+      review_reason: cleanResult.review_reason || '게시글 자체에서 전달할 정보가 부족해 검수가 필요합니다.',
     };
   }
 
