@@ -962,12 +962,19 @@ function CardPreviewPage({ type, fields, imageSource }) {
                   fontWeight: 500,
                   letterSpacing: 0,
                   textAlign: 'center',
-                  whiteSpace: 'pre-wrap',
-                  wordBreak: 'keep-all',
-                  overflowWrap: 'break-word',
+                  display: 'flex',
+                  alignItems: 'center',
                   overflow: 'hidden',
                 }}>
-                {detailText}
+                <div
+                  style={{
+                    width: '100%',
+                    whiteSpace: 'pre-wrap',
+                    wordBreak: 'keep-all',
+                    overflowWrap: 'break-word',
+                  }}>
+                  {detailText}
+                </div>
               </div>
               <div
                 style={{
