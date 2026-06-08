@@ -109,12 +109,75 @@ function briefingFor(item) {
   };
 }
 
+function firstMediaUrl(media) {
+  if (!Array.isArray(media)) return '';
+  const first = media.find(item => item?.url || item?.preview_image_url);
+  return first?.url || first?.preview_image_url || '';
+}
+
 function normalizeBriefingStatus(status, newsType) {
   const value = String(status || newsType || '').trim().toUpperCase();
   if (BRIEFING_STATUS_OPTIONS.includes(value)) return value;
   if (value === 'OFFICIAL') return 'OFFICIAL';
   if (value === 'RUMOUR' || value === 'RUMOR') return 'RUMOUR';
   return 'UPDATE';
+}
+
+function compactText(value, max, fallback = '') {
+  const clean = String(value || fallback || '').replace(/\s+/g, ' ').trim();
+  if (clean.length <= max) return clean;
+  return `${clean.slice(0, Math.max(0, max - 3)).trim()}...`;
+}
+
+function detailParagraphsFor(value) {
+  const clean = String(value || '').replace(/\s+/g, ' ').trim();
+  if (!clean) return '발행된 기사 내용을 바탕으로 카드뉴스 본문을 입력하세요.';
+
+  const paragraphs = [];
+  let rest = clean;
+  while (rest && paragraphs.length < 4) {
+    paragraphs.push(compactText(rest, 170));
+    rest = rest.slice(170).trim();
+  }
+  return paragraphs.join('\n\n');
+}
+
+function cardNewsDefaultFor(item) {
+  const briefing = briefingFor(item);
+  const tags = Array.isArray(briefing.tags) ? briefing.tags : [];
+  const source = String(item.raw_author_name || item.raw_author_handle || 'source').replace(/^@/, '').trim() || 'source';
+
+  return {
+    cover: {
+      subject: compactText(tags[0] || briefing.status || 'EPL', 30, 'EPL'),
+      headline: compactText(briefing.title || item.raw_text, 60, 'EPL 업데이트'),
+      summary: compactText(briefing.summary_short || item.raw_text, 140, '발행된 EPL 기사입니다.'),
+    },
+    detail: {
+      paragraphs: detailParagraphsFor(briefing.summary_detail || briefing.summary_short || item.raw_text),
+      source: compactText(source, 120, 'source'),
+    },
+  };
+}
+
+function fileToDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = () => reject(reader.error || new Error('Failed to read image file'));
+    reader.readAsDataURL(file);
+  });
+}
+
+function downloadBlob(blob, filename) {
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
 }
 
 function Metric({ label, value, warn }) {
@@ -196,7 +259,7 @@ function SourceSkeleton() {
   );
 }
 
-function ItemEditor({ item, draft, onDraft, onAction, onDebate, onRegenerate, busy, isNew }) {
+function ItemEditor({ item, draft, onDraft, onAction, onDebate, onRegenerate, onCardNews, busy, isNew }) {
   const briefing = briefingFor(item);
   const title = draft.title_ko ?? briefing.title ?? '';
   const summaryShort = draft.summary_short_ko ?? briefing.summary_short ?? '';
@@ -392,8 +455,190 @@ function ItemEditor({ item, draft, onDraft, onAction, onDebate, onRegenerate, bu
               style={{ background: '#332400', color: '#fbbf24', border: '1px solid #665017' }}>
               {item.debate_question ? '논쟁 편집' : '논쟁 설정'}
             </button>
+            {item.status === 'published' && (
+              <button
+                disabled={busy}
+                onClick={() => onCardNews(item)}
+                className="rounded-md px-4 py-2 text-sm font-bold disabled:opacity-50"
+                style={{ background: '#0f2d46', color: '#7dd3fc', border: '1px solid #1d4f72' }}>
+                카드뉴스
+              </button>
+            )}
           </div>
         </div>
+      </div>
+    </div>
+  );
+}
+
+function CardNewsModal({ item, headers, onClose, onNotify }) {
+  const [cardJson, setCardJson] = useState(() => JSON.stringify(cardNewsDefaultFor(item), null, 2));
+  const [imageUrl, setImageUrl] = useState(firstMediaUrl(item.media));
+  const [imageFile, setImageFile] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [localMessage, setLocalMessage] = useState('');
+  const [localTone, setLocalTone] = useState('neutral');
+
+  const setNotice = (tone, text) => {
+    setLocalTone(tone);
+    setLocalMessage(text);
+    onNotify?.(tone, text);
+  };
+
+  const generateDraft = async () => {
+    setBusy(true);
+    setLocalMessage('');
+    try {
+      const response = await fetch('/api/admin/card-news-draft', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ id: item.id, actor: 'admin-ui' }),
+      });
+      const data = await readJsonResponse(response);
+      if (!response.ok) throw new Error(data.error || '카드뉴스 초안 생성에 실패했습니다.');
+      setCardJson(JSON.stringify(data.card, null, 2));
+      setNotice('good', '카드뉴스 초안이 생성됐습니다.');
+    } catch (error) {
+      setNotice('bad', error.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const renderCardNews = async () => {
+    let card;
+    try {
+      card = JSON.parse(cardJson);
+    } catch {
+      setNotice('bad', '카드뉴스 JSON 형식이 올바르지 않습니다.');
+      return;
+    }
+
+    if (!imageFile && !imageUrl.trim()) {
+      setNotice('warn', '이미지 파일 또는 이미지 URL이 필요합니다.');
+      return;
+    }
+
+    setBusy(true);
+    setLocalMessage('');
+    try {
+      const body = {
+        id: item.id,
+        actor: 'admin-ui',
+        card,
+      };
+
+      if (imageFile) {
+        body.image_data_url = await fileToDataUrl(imageFile);
+        body.image_name = imageFile.name;
+      } else {
+        body.image_url = imageUrl.trim();
+      }
+
+      const response = await fetch('/api/admin/card-news-render', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(body),
+      });
+
+      if (!response.ok) {
+        const data = await readJsonResponse(response);
+        throw new Error(data.error || '카드뉴스 렌더링에 실패했습니다.');
+      }
+
+      const blob = await response.blob();
+      downloadBlob(blob, `cardnews-${item.raw_post_id || item.id}.zip`);
+      setNotice('good', '카드뉴스 ZIP이 생성됐습니다.');
+    } catch (error) {
+      setNotice('bad', error.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      style={{ background: 'rgba(0,0,0,0.7)' }}
+      onClick={e => e.target === e.currentTarget && onClose()}>
+      <div className="grid max-h-[92vh] w-full max-w-5xl min-w-0 gap-4 overflow-auto rounded-xl p-5 lg:grid-cols-[minmax(0,1fr)_320px]"
+        style={{ background: '#0f1118', border: '1px solid #2a3040' }}>
+        <div className="min-w-0">
+          <div className="mb-3 flex min-w-0 items-center gap-3">
+            <div className="min-w-0 flex-1">
+              <div className="text-xs font-bold uppercase" style={{ color: '#687086' }}>Card news</div>
+              <div className="mt-1 break-words text-lg font-black text-white">
+                {item.title_ko || item.raw_text?.slice(0, 80) || '발행 기사'}
+              </div>
+            </div>
+            <button onClick={onClose}
+              className="rounded-md px-3 py-2 text-sm font-bold"
+              style={{ background: '#171923', color: '#a8b0c7', border: '1px solid #2a3040' }}>
+              닫기
+            </button>
+          </div>
+
+          {localMessage && (
+            <div className="mb-3">
+              <Notice tone={localTone}>{localMessage}</Notice>
+            </div>
+          )}
+
+          <label className="block">
+            <span className="mb-1 block text-xs font-bold uppercase" style={{ color: '#687086' }}>카드뉴스 JSON</span>
+            <textarea
+              value={cardJson}
+              onChange={event => setCardJson(event.target.value)}
+              rows={20}
+              className="w-full rounded-md px-3 py-2 font-mono text-xs leading-5 outline-none"
+              style={{ background: '#080a10', color: '#d6deef', border: '1px solid #283040' }}
+              spellCheck={false}
+            />
+          </label>
+        </div>
+
+        <aside className="min-w-0 space-y-3">
+          <div className="rounded-md p-3" style={{ background: '#080a10', border: '1px solid #202635' }}>
+            <div className="mb-2 text-xs font-bold uppercase" style={{ color: '#687086' }}>이미지 URL</div>
+            <input
+              value={imageUrl}
+              onChange={event => setImageUrl(event.target.value)}
+              placeholder="https://..."
+              className="w-full rounded-md px-3 py-2 text-sm outline-none"
+              style={{ background: '#11141d', color: '#fff', border: '1px solid #283040' }}
+            />
+          </div>
+
+          <div className="rounded-md p-3" style={{ background: '#080a10', border: '1px solid #202635' }}>
+            <div className="mb-2 text-xs font-bold uppercase" style={{ color: '#687086' }}>이미지 업로드</div>
+            <input
+              type="file"
+              accept="image/png,image/jpeg,image/webp"
+              onChange={event => setImageFile(event.target.files?.[0] || null)}
+              className="block w-full text-sm"
+              style={{ color: '#a8b0c7' }}
+            />
+            {imageFile && (
+              <div className="mt-2 break-words text-xs" style={{ color: '#8791aa', overflowWrap: 'anywhere' }}>
+                {imageFile.name} · {(imageFile.size / 1024 / 1024).toFixed(2)}MB
+              </div>
+            )}
+          </div>
+
+          <button
+            disabled={busy}
+            onClick={generateDraft}
+            className="w-full rounded-md px-4 py-3 text-sm font-black disabled:opacity-50"
+            style={{ background: '#2557ff', color: '#fff' }}>
+            초안 생성
+          </button>
+          <button
+            disabled={busy}
+            onClick={renderCardNews}
+            className="w-full rounded-md px-4 py-3 text-sm font-black disabled:opacity-50"
+            style={{ background: '#21c17a', color: '#03130c' }}>
+            ZIP 생성
+          </button>
+        </aside>
       </div>
     </div>
   );
@@ -478,6 +723,7 @@ export default function AdminDashboard() {
   const [busy, setBusy] = useState(false);
   const [loaded, setLoaded] = useState(false);
   const [debateModal, setDebateModal] = useState(null);
+  const [cardNewsModal, setCardNewsModal] = useState(null);
   const [newIds, setNewIds] = useState(new Set());
   const isInitialLoading = Boolean(adminToken && busy && !loaded && !error);
 
@@ -689,6 +935,17 @@ export default function AdminDashboard() {
           onSave={data => debateAction(debateModal, data)}
         />
       )}
+      {cardNewsModal && (
+        <CardNewsModal
+          item={cardNewsModal}
+          headers={headers}
+          onClose={() => setCardNewsModal(null)}
+          onNotify={(tone, text) => {
+            setMessageTone(tone);
+            setMessage(text);
+          }}
+        />
+      )}
       <div className="mx-auto w-full max-w-7xl px-5 py-6" style={{ maxWidth: '100vw' }}>
         <header className="flex min-w-0 flex-col gap-4 border-b pb-5 lg:flex-row lg:items-end"
           style={{ borderColor: '#1c2230' }}>
@@ -826,6 +1083,7 @@ export default function AdminDashboard() {
                   onAction={reviewAction}
                   onDebate={item => setDebateModal(item)}
                   onRegenerate={regenerateAction}
+                  onCardNews={item => setCardNewsModal(item)}
                   busy={busy}
                   isNew={newIds.has(item.id)}
                 />
