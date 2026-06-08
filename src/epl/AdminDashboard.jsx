@@ -298,6 +298,26 @@ function downloadBlob(blob, filename) {
   URL.revokeObjectURL(url);
 }
 
+async function copyTextToClipboard(text) {
+  const value = String(text || '');
+  if (!value.trim()) return false;
+  if (navigator.clipboard?.writeText) {
+    await navigator.clipboard.writeText(value);
+    return true;
+  }
+
+  const textarea = document.createElement('textarea');
+  textarea.value = value;
+  textarea.style.position = 'fixed';
+  textarea.style.left = '-9999px';
+  document.body.appendChild(textarea);
+  textarea.focus();
+  textarea.select();
+  const ok = document.execCommand('copy');
+  textarea.remove();
+  return ok;
+}
+
 function formatDuration(startedAt, now = Date.now()) {
   const totalSeconds = Math.max(0, Math.floor((now - startedAt) / 1000));
   const minutes = Math.floor(totalSeconds / 60);
@@ -808,6 +828,22 @@ function cardFromFields(fields) {
   };
 }
 
+function captionTitleForFields(fields) {
+  const subject = String(fields.subject || '').replace(/\s+/g, ' ').trim();
+  let headline = String(fields.headline || '').replace(/\s+/g, ' ').trim();
+  if (subject && headline.startsWith(subject)) {
+    headline = headline.slice(subject.length).replace(/^[\s,]+/, '').trim();
+  }
+  return [subject, headline].filter(Boolean).join(' ').trim() || 'EPL 소식';
+}
+
+function composeInstagramCaption(fields, hashtags) {
+  const title = captionTitleForFields(fields);
+  const paragraphs = normalizeParagraphText(fields.paragraphs);
+  const tagLine = String(hashtags || '').trim();
+  return [`🚨${title}`, paragraphs, tagLine, '📸AI'].filter(Boolean).join('\n\n');
+}
+
 function CardPreviewPage({ type, fields, imageSource }) {
   const wrapperRef = useRef(null);
   const [previewWidth, setPreviewWidth] = useState(360);
@@ -1132,6 +1168,8 @@ function CardNewsWorkspace({ headers, adminToken, seedItem, onNotify }) {
     seedItem ? cardNewsDefaultFor(seedItem) : { cover: {}, detail: {} },
     seedItem ? defaultSubjectColorForItem(seedItem) : DEFAULT_SUBJECT_COLOR,
   ));
+  const [caption, setCaption] = useState('');
+  const [captionBusy, setCaptionBusy] = useState(false);
   const [imageUrl, setImageUrl] = useState(seedItem ? firstMediaUrl(seedItem.media) : '');
   const [imageFile, setImageFile] = useState(null);
   const [imagePreviewUrl, setImagePreviewUrl] = useState('');
@@ -1164,11 +1202,13 @@ function CardNewsWorkspace({ headers, adminToken, seedItem, onNotify }) {
   const applyItemDefaults = item => {
     if (!item) {
       setFields({ ...EMPTY_CARD_FIELDS });
+      setCaption('');
       setImageUrl('');
       setImageFile(null);
       return;
     }
     setFields(fieldsFromCard(cardNewsDefaultFor(item), defaultSubjectColorForItem(item)));
+    setCaption('');
     setImageUrl(firstMediaUrl(item.media));
     setImageFile(null);
     setLocalMessage('');
@@ -1256,11 +1296,60 @@ function CardNewsWorkspace({ headers, adminToken, seedItem, onNotify }) {
       const data = await readJsonResponse(response);
       if (!response.ok) throw new Error(data.error || '카드뉴스 초안 생성에 실패했습니다.');
       setFields(fieldsFromCard(data.card, defaultSubjectColorForItem(selectedItem)));
+      setCaption('');
       setNotice('good', '카드뉴스 초안을 가져왔습니다. 왼쪽에서 바로 수정할 수 있습니다.');
     } catch (error) {
       setNotice('bad', error.message);
     } finally {
       setBusy(false);
+    }
+  };
+
+  const generateCaption = async () => {
+    if (!selectedItem) {
+      setNotice('warn', '먼저 발행된 기사를 선택해주세요.');
+      return;
+    }
+    const card = cardFromFields(fields);
+    if (!card.cover.headline || !card.cover.summary || !card.detail.paragraphs) {
+      setNotice('warn', 'headline, summary, paragraphs를 먼저 입력해주세요.');
+      return;
+    }
+
+    setCaptionBusy(true);
+    setLocalMessage('');
+    try {
+      const response = await fetch('/api/admin/card-news-caption', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          id: selectedItem.id,
+          actor: 'admin-ui',
+          card,
+        }),
+      });
+      const data = await readJsonResponse(response);
+      if (!response.ok) throw new Error(data.error || '해시태그 생성에 실패했습니다.');
+      const hashtags = String(data.hashtags || data.caption || '').trim();
+      setCaption(composeInstagramCaption(fields, hashtags));
+      setNotice('good', '해시태그를 생성하고 캡션을 조립했습니다.');
+    } catch (error) {
+      setNotice('bad', error.message);
+    } finally {
+      setCaptionBusy(false);
+    }
+  };
+
+  const copyCaption = async () => {
+    try {
+      const ok = await copyTextToClipboard(caption);
+      if (!ok) {
+        setNotice('warn', '복사할 캡션이 없습니다.');
+        return;
+      }
+      setNotice('good', '캡션을 클립보드에 복사했습니다.');
+    } catch (error) {
+      setNotice('bad', error.message || '캡션 복사에 실패했습니다.');
     }
   };
 
@@ -1543,13 +1632,52 @@ function CardNewsWorkspace({ headers, adminToken, seedItem, onNotify }) {
                 style={{ background: '#11141d', color: '#fff', border: '1px solid #283040' }}
               />
             </label>
-            <label className="block">
-              <span className="mb-1 block text-xs font-bold uppercase" style={{ color: '#687086' }}>paragraphs</span>
-              <CardParagraphEditor
-                value={fields.paragraphs}
-                onChange={event => updateField('paragraphs', event.target.value)}
-              />
-            </label>
+            <div className="grid min-w-0 gap-3 lg:grid-cols-2">
+              <label className="block min-w-0">
+                <span className="mb-1 block text-xs font-bold uppercase" style={{ color: '#687086' }}>paragraphs</span>
+                <CardParagraphEditor
+                  value={fields.paragraphs}
+                  onChange={event => updateField('paragraphs', event.target.value)}
+                />
+              </label>
+              <div className="block min-w-0">
+                <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
+                  <span className="block text-xs font-bold uppercase" style={{ color: '#687086' }}>instagram caption</span>
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      onClick={generateCaption}
+                      disabled={!adminToken || !selectedItem || captionBusy}
+                      className="rounded px-2 py-1 text-xs font-bold disabled:opacity-50"
+                      style={{ background: '#2557ff', color: '#fff' }}>
+                      {captionBusy ? '생성 중' : '캡션 생성하기'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={copyCaption}
+                      disabled={!caption.trim()}
+                      className="rounded px-2 py-1 text-xs font-bold disabled:opacity-50"
+                      style={{ background: '#171923', color: '#cbd3e8', border: '1px solid #2a3040' }}>
+                      복사
+                    </button>
+                  </div>
+                </div>
+                <textarea
+                  value={caption}
+                  onChange={event => setCaption(event.target.value)}
+                  rows={9}
+                  placeholder={`🚨subject headline\n\nparagraphs\n\n#AI해시태그\n\n📸AI`}
+                  className="w-full rounded-md px-3 py-2 text-sm leading-6 outline-none"
+                  style={{
+                    minHeight: CARD_DETAIL_TEXT_HEIGHT * (CARD_DETAIL_EDITOR_MAX_WIDTH / CARD_DETAIL_TEXT_WIDTH),
+                    background: '#11141d',
+                    color: '#fff',
+                    border: '1px solid #283040',
+                    whiteSpace: 'pre-wrap',
+                  }}
+                />
+              </div>
+            </div>
             <label className="block">
               <span className="mb-1 block text-xs font-bold uppercase" style={{ color: '#687086' }}>source</span>
               <input
