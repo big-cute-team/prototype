@@ -1831,6 +1831,133 @@ const CARD_TYPE_OPTIONS = [
   { value: 'lineup', label: '선발 라인업' },
 ];
 
+function newMatch() { return { time: '', home: '', away: '', group: '' }; }
+function newDay() { return { date: '', matches: [newMatch()] }; }
+
+function WeeklyScheduleModal({ onClose, onSave, busy }) {
+  const [competition, setCompetition] = useState('월드컵 2026 · 조별리그');
+  const [period, setPeriod] = useState('');
+  const [teamTags, setTeamTags] = useState([]);
+  const [days, setDays] = useState([newDay()]);
+
+  const updateDay = (di, field, val) =>
+    setDays(prev => prev.map((d, i) => i === di ? { ...d, [field]: val } : d));
+  const removeDay = (di) => setDays(prev => prev.filter((_, i) => i !== di));
+  const addDay = () => setDays(prev => [...prev, newDay()]);
+
+  const updateMatch = (di, mi, field, val) =>
+    setDays(prev => prev.map((d, i) => i !== di ? d : {
+      ...d, matches: d.matches.map((m, j) => j === mi ? { ...m, [field]: val } : m),
+    }));
+  const removeMatch = (di, mi) =>
+    setDays(prev => prev.map((d, i) => i !== di ? d : {
+      ...d, matches: d.matches.filter((_, j) => j !== mi),
+    }));
+  const addMatch = (di) =>
+    setDays(prev => prev.map((d, i) => i !== di ? d : { ...d, matches: [...d.matches, newMatch()] }));
+
+  const canSave = period.trim() && days.some(d => d.date.trim() && d.matches.some(m => m.home.trim() && m.away.trim()));
+
+  const inputCls = 'rounded px-2 py-1 text-xs outline-none';
+  const inputStyle = { background: '#11141d', color: '#fff', border: '1px solid #283040' };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      style={{ background: 'rgba(0,0,0,0.75)' }}
+      onClick={e => e.target === e.currentTarget && onClose()}>
+      <div className="max-h-[90vh] w-full max-w-xl min-w-0 overflow-auto rounded-xl p-5"
+        style={{ background: '#0f1118', border: '1px solid #2a3040' }}>
+        <div className="mb-4 flex items-center justify-between">
+          <span className="text-base font-black text-white">이번주 경기 일정</span>
+          <button onClick={onClose} style={{ color: '#687086' }}>✕</button>
+        </div>
+
+        {/* 대회명·기간 */}
+        <div className="mb-3 grid grid-cols-2 gap-2">
+          <label className="block">
+            <span className="mb-1 block text-xs font-bold uppercase" style={{ color: '#687086' }}>대회명</span>
+            <input value={competition} onChange={e => setCompetition(e.target.value)}
+              className={`w-full ${inputCls}`} style={inputStyle} />
+          </label>
+          <label className="block">
+            <span className="mb-1 block text-xs font-bold uppercase" style={{ color: '#687086' }}>기간 *</span>
+            <input value={period} onChange={e => setPeriod(e.target.value)}
+              placeholder="6월 11일 ~ 6월 14일"
+              className={`w-full ${inputCls}`} style={inputStyle} />
+          </label>
+        </div>
+
+        {/* 팀 태그 */}
+        <div className="mb-3">
+          <span className="mb-1 block text-xs font-bold uppercase" style={{ color: '#687086' }}>팀 태그</span>
+          <div className="flex flex-wrap gap-1.5">
+            {TEAM_OPTIONS.map(team => {
+              const active = teamTags.includes(team);
+              return (
+                <button key={team} type="button"
+                  onClick={() => setTeamTags(active ? teamTags.filter(t => t !== team) : [...teamTags, team])}
+                  className="rounded px-2 py-0.5 text-xs font-black"
+                  style={{ background: active ? '#1e3a5f' : '#11141d', color: active ? '#60a5fa' : '#4a5568', border: active ? '1px solid #3b82f6' : '1px solid #283040' }}>
+                  {team}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* 날짜별 경기 */}
+        <div className="mb-3 space-y-3">
+          <span className="block text-xs font-bold uppercase" style={{ color: '#687086' }}>경기 일정</span>
+          {days.map((day, di) => (
+            <div key={di} className="rounded-lg p-3" style={{ background: '#080a10', border: '1px solid #1c2230' }}>
+              <div className="mb-2 flex items-center gap-2">
+                <input value={day.date} onChange={e => updateDay(di, 'date', e.target.value)}
+                  placeholder="6월 11일 (수)"
+                  className={`flex-1 ${inputCls}`} style={inputStyle} />
+                {days.length > 1 && (
+                  <button onClick={() => removeDay(di)} className="text-xs px-2 py-1 rounded"
+                    style={{ background: '#2a1115', color: '#f87171' }}>날짜 삭제</button>
+                )}
+              </div>
+              {day.matches.map((m, mi) => (
+                <div key={mi} className="mb-1.5 flex items-center gap-1.5">
+                  <input value={m.time} onChange={e => updateMatch(di, mi, 'time', e.target.value)}
+                    placeholder="09:00" className={`w-14 ${inputCls}`} style={inputStyle} />
+                  <input value={m.home} onChange={e => updateMatch(di, mi, 'home', e.target.value)}
+                    placeholder="홈팀" className={`flex-1 ${inputCls}`} style={inputStyle} />
+                  <span className="text-xs" style={{ color: '#4a4a6a' }}>vs</span>
+                  <input value={m.away} onChange={e => updateMatch(di, mi, 'away', e.target.value)}
+                    placeholder="원정팀" className={`flex-1 ${inputCls}`} style={inputStyle} />
+                  <input value={m.group} onChange={e => updateMatch(di, mi, 'group', e.target.value)}
+                    placeholder="조" className={`w-10 ${inputCls}`} style={inputStyle} />
+                  {day.matches.length > 1 && (
+                    <button onClick={() => removeMatch(di, mi)} style={{ color: '#f87171', fontSize: '14px' }}>×</button>
+                  )}
+                </div>
+              ))}
+              <button onClick={() => addMatch(di)}
+                className="mt-1 text-xs px-2 py-1 rounded"
+                style={{ background: '#0d2a1a', color: '#34d399' }}>+ 경기 추가</button>
+            </div>
+          ))}
+          <button onClick={addDay}
+            className="w-full rounded py-1.5 text-xs font-bold"
+            style={{ background: '#11141d', color: '#687086', border: '1px dashed #283040' }}>+ 날짜 추가</button>
+        </div>
+
+        <div className="flex justify-end gap-2">
+          <button onClick={onClose} className="rounded-md px-4 py-2 text-sm font-bold"
+            style={{ background: '#171923', color: '#a8b0c7', border: '1px solid #2a3040' }}>취소</button>
+          <button disabled={busy || !canSave}
+            onClick={() => onSave({ competition, period, days, team_tags: teamTags })}
+            className="rounded-md px-4 py-2 text-sm font-bold disabled:opacity-50"
+            style={{ background: '#1f6f4a', color: '#fff' }}>발행</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function CustomCardModal({ onClose, onSave, busy }) {
   const [files, setFiles] = useState([]);
   const [previewUrls, setPreviewUrls] = useState([]);
@@ -1990,6 +2117,7 @@ export default function AdminDashboard() {
   const [debateModal, setDebateModal] = useState(null);
   const [cardNewsSeed, setCardNewsSeed] = useState(null);
   const [customModal, setCustomModal] = useState(false);
+  const [scheduleModal, setScheduleModal] = useState(false);
   const [newIds, setNewIds] = useState(new Set());
   const isInitialLoading = Boolean(adminToken && busy && !loaded && !error);
 
@@ -2213,6 +2341,37 @@ export default function AdminDashboard() {
     }
   };
 
+  const scheduleCreate = async (form) => {
+    setBusy(true);
+    setMessage('');
+    setError('');
+    try {
+      const response = await fetch('/api/admin/custom', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          card_data: { competition: form.competition, period: form.period, days: form.days },
+          card_type: 'schedule',
+          title: `이번주 경기 일정 · ${form.period}`,
+          description: form.competition,
+          team_tags: form.team_tags || [],
+          actor: 'admin-ui',
+        }),
+      });
+      const data = await readJsonResponse(response);
+      if (!response.ok) throw new Error(data.error || 'Schedule card create failed');
+      setScheduleModal(false);
+      setMessageTone('good');
+      setMessage('이번주 경기 일정이 발행됐습니다.');
+      await loadItems({ preserveMessage: true });
+    } catch (error) {
+      setMessageTone('bad');
+      setMessage(error.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const runCollection = async () => {
     if (!cronSecret) {
       setMessageTone('warn');
@@ -2261,6 +2420,13 @@ export default function AdminDashboard() {
           onSave={customCreate}
         />
       )}
+      {scheduleModal && (
+        <WeeklyScheduleModal
+          busy={busy}
+          onClose={() => setScheduleModal(false)}
+          onSave={scheduleCreate}
+        />
+      )}
       <div className="mx-auto w-full max-w-7xl px-5 py-6" style={{ maxWidth: '100vw' }}>
         <header className="flex min-w-0 flex-col gap-4 border-b pb-5 lg:flex-row lg:items-end"
           style={{ borderColor: '#1c2230' }}>
@@ -2301,6 +2467,11 @@ export default function AdminDashboard() {
               className="rounded-md px-4 py-2 text-sm font-bold disabled:opacity-50"
               style={{ background: '#1f6f4a', color: '#fff' }}>
               직접 올리기
+            </button>
+            <button onClick={() => setScheduleModal(true)} disabled={busy || !adminToken}
+              className="rounded-md px-4 py-2 text-sm font-bold disabled:opacity-50"
+              style={{ background: '#1a2a4a', color: '#60a5fa', border: '1px solid #1e3a5f' }}>
+              이번주 일정
             </button>
           </div>
         </header>

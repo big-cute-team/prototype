@@ -53,6 +53,7 @@ function mapItemToPost(item) {
     briefing: briefing.summary_detail || item.raw_text || '',
     isCustom,
     cardType: item.card_type || null,
+    cardData: item.card_data || null,
     imageUrls: allMediaUrls(item.media),
     tweet: isCustom ? {
       author: 'PLICK',

@@ -215,6 +215,61 @@ function ImageCarousel({ urls }) {
   );
 }
 
+function WeeklyScheduleCard({ post, onOpen }) {
+  const d = post.cardData;
+  if (!d) return <CustomImageFeedCard post={post} onOpen={onOpen} />;
+  return (
+    <div className="h-full flex flex-col" style={{ background: '#080810' }}>
+      {/* 헤더 */}
+      <div className="px-5 pt-6 pb-4 shrink-0">
+        <div className="text-xs font-bold tracking-widest mb-2" style={{ color: '#3a3a5a' }}>
+          {d.competition || 'SCHEDULE'}
+        </div>
+        <div className="font-black text-white leading-tight" style={{ fontSize: '30px', letterSpacing: '-0.5px' }}>
+          이번주<br />경기 일정
+        </div>
+        <div className="mt-2 text-sm font-medium" style={{ color: '#4a4a6a' }}>{d.period}</div>
+      </div>
+
+      <div className="mx-5 shrink-0" style={{ height: '1px', background: '#141420' }} />
+
+      {/* 경기 목록 */}
+      <div className="flex-1 overflow-y-auto px-5 py-3 space-y-4" style={{ scrollbarWidth: 'none' }}>
+        {(d.days || []).map((day, di) => (
+          <div key={di}>
+            <div className="text-xs font-bold mb-2 pt-1" style={{ color: '#3a3a5a' }}>{day.date}</div>
+            {(day.matches || []).map((m, mi) => (
+              <div key={mi} className="flex items-center py-2.5"
+                style={{ borderBottom: '1px solid #0e0e18' }}>
+                <div className="shrink-0 w-14 text-xs font-black tabular-nums" style={{ color: '#2a3050' }}>{m.time}</div>
+                <div className="flex-1 text-sm font-bold text-white text-right pr-3 truncate">{m.home}</div>
+                <div className="shrink-0 text-xs font-black px-1" style={{ color: '#1e1e38' }}>vs</div>
+                <div className="flex-1 text-sm font-bold text-white pl-3 truncate">{m.away}</div>
+                {m.group && (
+                  <div className="shrink-0 ml-2 text-xs" style={{ color: '#252540' }}>{m.group}</div>
+                )}
+              </div>
+            ))}
+          </div>
+        ))}
+      </div>
+
+      <div className="mx-5 shrink-0" style={{ height: '1px', background: '#141420' }} />
+
+      {/* 푸터 */}
+      <div className="px-5 py-3 shrink-0 flex items-center gap-2">
+        <span className="text-xs font-black" style={{ color: '#34d399' }}>PLICK</span>
+        <span className="text-xs font-bold px-1.5 py-0.5 rounded" style={{ background: '#0d2a1a', color: '#34d399' }}>경기 일정</span>
+        {post.hashtags?.map(h => (
+          <span key={h} className="text-xs" style={{ color: '#1e2a3a' }}>{h}</span>
+        ))}
+      </div>
+
+      <ActionBar post={post} onOpen={onOpen} />
+    </div>
+  );
+}
+
 function CustomImageFeedCard({ post, onOpen }) {
   const multiImage = post.imageUrls && post.imageUrls.length > 1;
   const urls = post.imageUrls && post.imageUrls.length > 0 ? post.imageUrls : (post.imageUrl ? [post.imageUrl] : []);
@@ -259,6 +314,7 @@ function CustomImageFeedCard({ post, onOpen }) {
 }
 
 function FeedCard({ post, selectedTeam, onOpen, vote }) {
+  if (post.isCustom && post.cardData) return <WeeklyScheduleCard post={post} onOpen={onOpen} />;
   if (post.isCustom) return <CustomImageFeedCard post={post} onOpen={onOpen} />;
 
   const isDebate = post.type === 'debate' || post.type === 'today_debate' || post.type === 'hot_debate';
