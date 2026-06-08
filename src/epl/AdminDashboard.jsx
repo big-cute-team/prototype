@@ -169,29 +169,90 @@ function compactText(value, max, fallback = '') {
   return `${clean.slice(0, Math.max(0, max - 3)).trim()}...`;
 }
 
-function detailParagraphsFor(value) {
-  const clean = String(value || '').replace(/\s+/g, ' ').trim();
-  if (!clean) return '발행된 기사 내용을 바탕으로 카드뉴스 본문을 입력하세요.';
+function isGeneratedSubjectFallback(value) {
+  const normalized = String(value || '').trim().toUpperCase();
+  return !normalized || TEAM_OPTIONS.includes(normalized) || ['EPL', 'UPDATE', 'OFFICIAL', 'CONFIRMED', 'RUMOUR', 'RUMOR', 'DENIED', 'UNKNOWN'].includes(normalized);
+}
 
-  const paragraphs = [];
-  let rest = clean;
-  while (rest && paragraphs.length < 4) {
-    paragraphs.push(compactText(rest, 170));
-    rest = rest.slice(170).trim();
+function splitCardTitle(value) {
+  const clean = String(value || '').replace(/\s+/g, ' ').trim();
+  if (!clean) return { subject: '', headline: 'EPL 업데이트' };
+
+  const commaMatch = clean.match(/^(.{1,30}?)[,，:：]\s*(.+)$/);
+  if (commaMatch) {
+    const subject = commaMatch[1].trim();
+    const headline = commaMatch[2].trim();
+    if (headline && !isGeneratedSubjectFallback(subject)) {
+      return { subject, headline };
+    }
+  }
+
+  const dashMatch = clean.match(/^(.{1,30}?)\s[-–—]\s(.+)$/);
+  if (dashMatch) {
+    const subject = dashMatch[1].trim();
+    const headline = dashMatch[2].trim();
+    if (headline && !isGeneratedSubjectFallback(subject)) {
+      return { subject, headline };
+    }
+  }
+
+  return { subject: '', headline: clean };
+}
+
+function normalizeParagraphText(value) {
+  const clean = String(value || '')
+    .replace(/\r\n/g, '\n')
+    .replace(/\r/g, '\n')
+    .trim();
+  if (!clean) return '';
+
+  const blocks = clean
+    .split(/\n\s*\n/)
+    .map(block => block.split('\n').map(line => line.trim()).filter(Boolean).join('\n'))
+    .filter(Boolean);
+
+  return blocks.join('\n\n');
+}
+
+function splitSentences(value) {
+  const clean = String(value || '').replace(/\s+/g, ' ').trim();
+  if (!clean) return [];
+  const matches = clean.match(/[^.!?。！？]+[.!?。！？]+(?=\s|$)|[^.!?。！？]+$/g) || [clean];
+  return matches.map(sentence => sentence.trim()).filter(Boolean);
+}
+
+function detailParagraphsFor(value) {
+  const normalized = normalizeParagraphText(value);
+  if (!normalized) return '발행된 기사 내용을 바탕으로 카드뉴스 본문을 입력하세요.';
+
+  const existingParagraphs = normalized.split('\n\n').filter(Boolean);
+  if (existingParagraphs.length > 1) {
+    if (existingParagraphs.length <= 4) return existingParagraphs.join('\n\n');
+    return [...existingParagraphs.slice(0, 3), existingParagraphs.slice(3).join(' ')].join('\n\n');
+  }
+
+  const sentences = splitSentences(normalized);
+  if (sentences.length <= 1) return normalized;
+  if (sentences.length <= 4) return sentences.join('\n\n');
+
+  const paragraphs = sentences.slice(0, 3);
+  const remaining = sentences.slice(3).join(' ').trim();
+  if (remaining) {
+    paragraphs.push(remaining);
   }
   return paragraphs.join('\n\n');
 }
 
 function cardNewsDefaultFor(item) {
   const briefing = briefingFor(item);
-  const tags = teamTagsForItem(item);
+  const titleParts = splitCardTitle(briefing.title || item.raw_text);
   const source = String(item.raw_author_name || item.raw_author_handle || 'source').replace(/^@/, '').trim() || 'source';
 
   return {
     cover: {
-      subject: compactText(tags[0] || briefing.status || 'EPL', 30, 'EPL'),
+      subject: compactText(titleParts.subject, 30),
       subject_color: defaultSubjectColorForItem(item),
-      headline: compactText(briefing.title || item.raw_text, 60, 'EPL 업데이트'),
+      headline: compactText(titleParts.headline, 60, 'EPL 업데이트'),
       summary: compactText(briefing.summary_short || item.raw_text, 140, '발행된 EPL 기사입니다.'),
     },
     detail: {
@@ -714,8 +775,8 @@ function cardFromFields(fields) {
       summary: String(fields.summary || '').trim(),
     },
     detail: {
-      paragraphs: String(fields.paragraphs || '').trim(),
-      source: String(fields.source || '').trim(),
+      paragraphs: normalizeParagraphText(fields.paragraphs),
+      source: String(fields.source || '').replace(/^@+/, '').trim(),
     },
   };
 }
@@ -726,7 +787,7 @@ function CardPreviewPage({ type, fields, imageSource }) {
   const isCover = type === 'cover';
   const scale = previewWidth / CARD_PREVIEW_WIDTH;
   const subjectColor = normalizeSubjectColor(fields.subject_color);
-  const cleanSubject = String(fields.subject || 'EPL').trim();
+  const cleanSubject = String(fields.subject || '').trim();
   let cleanHeadline = String(fields.headline || '카드뉴스 제목을 입력하세요').replace(/\s+/g, ' ').trim();
   if (cleanSubject && cleanHeadline.startsWith(cleanSubject)) {
     cleanHeadline = cleanHeadline.slice(cleanSubject.length).replace(/^[\s,]+/, '').trim();
