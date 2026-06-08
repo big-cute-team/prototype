@@ -214,9 +214,43 @@ function normalizeParagraphText(value) {
   return blocks.join('\n\n');
 }
 
+function splitSentences(value) {
+  const clean = String(value || '').replace(/\s+/g, ' ').trim();
+  if (!clean) return [];
+  const matches = clean.match(/[^.!?。！？]+(?:[.!?。！？]+|$)/g) || [clean];
+  return matches.map(sentence => sentence.trim()).filter(Boolean);
+}
+
+function joinDefaultParagraphs(paragraphs) {
+  const cleanParagraphs = paragraphs
+    .map(paragraph => String(paragraph || '').replace(/\s+/g, ' ').trim())
+    .filter(Boolean);
+  if (cleanParagraphs.length <= 4) return cleanParagraphs.join('\n\n');
+  return [
+    ...cleanParagraphs.slice(0, 3),
+    cleanParagraphs.slice(3).join(' '),
+  ].join('\n\n');
+}
+
 function detailParagraphsFor(value) {
-  const normalized = normalizeParagraphText(value);
-  return normalized || '발행된 기사 내용을 바탕으로 카드뉴스 본문을 입력하세요.';
+  const clean = String(value || '')
+    .replace(/\r\n/g, '\n')
+    .replace(/\r/g, '\n')
+    .trim();
+  if (!clean) return '발행된 기사 내용을 바탕으로 카드뉴스 본문을 입력하세요.';
+
+  const normalized = normalizeParagraphText(clean);
+  const existingParagraphs = normalized.split('\n\n').filter(Boolean);
+  if (existingParagraphs.length > 1) return joinDefaultParagraphs(existingParagraphs);
+
+  const lineParagraphs = clean
+    .split('\n')
+    .map(line => line.trim())
+    .filter(Boolean);
+  if (lineParagraphs.length > 1) return joinDefaultParagraphs(lineParagraphs);
+
+  const sentences = splitSentences(clean);
+  return sentences.length > 1 ? joinDefaultParagraphs(sentences) : normalized;
 }
 
 function cardNewsDefaultFor(item) {
@@ -830,9 +864,9 @@ function CardPreviewPage({ type, fields, imageSource }) {
               alt=""
               style={{
                 position: 'absolute',
-                left: -74,
+                left: 0,
                 top: 0,
-                width: 1227,
+                width: CARD_PREVIEW_WIDTH,
                 height: 1350,
                 objectFit: 'cover',
                 objectPosition: 'center center',
@@ -843,9 +877,9 @@ function CardPreviewPage({ type, fields, imageSource }) {
             <div
               style={{
                 position: 'absolute',
-                left: -74,
+                left: 0,
                 top: 0,
-                width: 1227,
+                width: CARD_PREVIEW_WIDTH,
                 height: 1350,
                 background: 'linear-gradient(145deg, #182233, #07101b 56%, #280f16)',
               }}
