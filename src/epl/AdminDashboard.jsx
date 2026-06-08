@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 
+const CARD_NEWS_TAB = 'card_news_workspace';
 const STATUS_OPTIONS = ['review', 'published', 'discarded', 'rejected', 'all'];
+const ADMIN_TAB_OPTIONS = [...STATUS_OPTIONS, CARD_NEWS_TAB];
 const BRIEFING_STATUS_OPTIONS = ['OFFICIAL', 'CONFIRMED', 'UPDATE', 'RUMOUR', 'DENIED'];
 const TEAM_OPTIONS = ['ARS', 'CHE', 'LIV', 'MCI', 'MUN', 'TOT'];
 const STATUS_LABELS = {
@@ -644,6 +646,456 @@ function CardNewsModal({ item, headers, onClose, onNotify }) {
   );
 }
 
+const EMPTY_CARD_FIELDS = {
+  subject: '',
+  headline: '',
+  summary: '',
+  paragraphs: '',
+  source: '',
+};
+
+function fieldsFromCard(card) {
+  return {
+    subject: card?.cover?.subject || '',
+    headline: card?.cover?.headline || '',
+    summary: card?.cover?.summary || '',
+    paragraphs: card?.detail?.paragraphs || '',
+    source: card?.detail?.source || '',
+  };
+}
+
+function cardFromFields(fields) {
+  return {
+    cover: {
+      subject: String(fields.subject || '').trim(),
+      headline: String(fields.headline || '').trim(),
+      summary: String(fields.summary || '').trim(),
+    },
+    detail: {
+      paragraphs: String(fields.paragraphs || '').trim(),
+      source: String(fields.source || '').trim(),
+    },
+  };
+}
+
+function CardPreviewPage({ type, fields, imageSource }) {
+  const isCover = type === 'cover';
+  const paragraphs = String(fields.paragraphs || '')
+    .split(/\n{2,}|\n/)
+    .map(line => line.trim())
+    .filter(Boolean)
+    .slice(0, 4);
+
+  return (
+    <div className="min-w-0">
+      <div className="mb-2 flex items-center justify-between text-xs font-bold uppercase" style={{ color: '#687086' }}>
+        <span>{isCover ? 'Page 1' : 'Page 2'}</span>
+        <span>{isCover ? 'cover' : 'detail'}</span>
+      </div>
+      <div
+        className="relative mx-auto w-full max-w-[360px] overflow-hidden rounded-md"
+        style={{
+          aspectRatio: '4 / 5',
+          background: '#05070d',
+          border: '1px solid #2a3040',
+          boxShadow: '0 18px 50px rgba(0,0,0,0.34)',
+        }}>
+        {imageSource ? (
+          <img
+            src={imageSource}
+            alt=""
+            className="absolute inset-0 h-full w-full object-cover"
+          />
+        ) : (
+          <div className="absolute inset-0" style={{ background: 'linear-gradient(145deg, #182233, #07101b 56%, #280f16)' }} />
+        )}
+        <div className="absolute inset-0" style={{ background: isCover ? 'linear-gradient(180deg, rgba(0,0,0,0.14), rgba(0,0,0,0.82))' : 'rgba(0,0,0,0.72)' }} />
+        <div className="absolute left-5 top-5 rounded px-2 py-1 text-[11px] font-black uppercase tracking-normal"
+          style={{ background: '#e11d48', color: '#fff' }}>
+          PLick
+        </div>
+        {isCover ? (
+          <div className="absolute inset-x-0 bottom-0 p-5">
+            <div className="mb-3 inline-flex max-w-full rounded px-2 py-1 text-xs font-black uppercase"
+              style={{ background: '#ffffff', color: '#0b0d14' }}>
+              <span className="truncate">{fields.subject || 'EPL'}</span>
+            </div>
+            <div className="max-h-[136px] overflow-hidden break-words text-[29px] font-black leading-[1.06] text-white"
+              style={{ overflowWrap: 'anywhere' }}>
+              {fields.headline || '카드뉴스 제목을 입력하세요'}
+            </div>
+            <div className="mt-4 max-h-[72px] overflow-hidden break-words text-sm font-semibold leading-6"
+              style={{ color: '#dbe4f3', overflowWrap: 'anywhere' }}>
+              {fields.summary || '요약을 입력하면 커버 하단에 표시됩니다.'}
+            </div>
+          </div>
+        ) : (
+          <div className="absolute inset-x-0 bottom-0 top-14 flex flex-col justify-between p-5">
+            <div className="space-y-3 overflow-hidden">
+              {(paragraphs.length > 0 ? paragraphs : ['본문 문단을 입력하면 상세 카드에 표시됩니다.']).map((line, index) => (
+                <p key={index}
+                  className="break-words text-[15px] font-semibold leading-6 text-white"
+                  style={{ overflowWrap: 'anywhere' }}>
+                  {line}
+                </p>
+              ))}
+            </div>
+            <div className="mt-4 flex items-center justify-between gap-3 border-t pt-3 text-xs font-bold"
+              style={{ borderColor: 'rgba(255,255,255,0.2)', color: '#b8c4d8' }}>
+              <span className="min-w-0 truncate">source</span>
+              <span className="min-w-0 truncate text-right">{fields.source || '-'}</span>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function CardNewsPreview({ fields, imageSource }) {
+  return (
+    <aside className="min-w-0 rounded-md p-4" style={{ background: '#0b0d14', border: '1px solid #202635' }}>
+      <div className="mb-4 flex items-center justify-between gap-3">
+        <div>
+          <div className="text-xs font-bold uppercase" style={{ color: '#687086' }}>Live preview</div>
+          <div className="mt-1 text-sm font-bold text-white">실시간 카드 미리보기</div>
+        </div>
+        <Badge tone="warn">4:5</Badge>
+      </div>
+      <div className="grid min-w-0 gap-4 md:grid-cols-2 xl:grid-cols-2">
+        <CardPreviewPage type="cover" fields={fields} imageSource={imageSource} />
+        <CardPreviewPage type="detail" fields={fields} imageSource={imageSource} />
+      </div>
+    </aside>
+  );
+}
+
+function CardNewsWorkspace({ headers, adminToken, seedItem, onNotify }) {
+  const [publishedItems, setPublishedItems] = useState([]);
+  const [selectedId, setSelectedId] = useState(seedItem?.id || '');
+  const [fields, setFields] = useState(() => fieldsFromCard(seedItem ? cardNewsDefaultFor(seedItem) : { cover: {}, detail: {} }));
+  const [imageUrl, setImageUrl] = useState(seedItem ? firstMediaUrl(seedItem.media) : '');
+  const [imageFile, setImageFile] = useState(null);
+  const [imagePreviewUrl, setImagePreviewUrl] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [localMessage, setLocalMessage] = useState('');
+  const [localTone, setLocalTone] = useState('neutral');
+
+  const selectedItem = useMemo(() => {
+    const matched = publishedItems.find(item => String(item.id) === String(selectedId));
+    if (matched) return matched;
+    if (seedItem?.id && String(seedItem.id) === String(selectedId)) return seedItem;
+    return null;
+  }, [publishedItems, seedItem, selectedId]);
+
+  const previewSource = imagePreviewUrl || imageUrl.trim();
+
+  const setNotice = (tone, text) => {
+    setLocalTone(tone);
+    setLocalMessage(text);
+    onNotify?.(tone, text);
+  };
+
+  const applyItemDefaults = item => {
+    if (!item) {
+      setFields(EMPTY_CARD_FIELDS);
+      setImageUrl('');
+      setImageFile(null);
+      return;
+    }
+    setFields(fieldsFromCard(cardNewsDefaultFor(item)));
+    setImageUrl(firstMediaUrl(item.media));
+    setImageFile(null);
+    setLocalMessage('');
+  };
+
+  const loadPublishedItems = async () => {
+    if (!adminToken) {
+      setPublishedItems([]);
+      return;
+    }
+    setBusy(true);
+    setLocalMessage('');
+    try {
+      const response = await fetch('/api/admin/items?status=published&limit=100', { headers });
+      const data = await readJsonResponse(response);
+      if (!response.ok) throw new Error(data.error || '발행된 기사 목록을 불러오지 못했습니다.');
+      const rows = data.items || [];
+      setPublishedItems(rows);
+      setSelectedId(prev => {
+        if (seedItem?.id) return seedItem.id;
+        if (prev && rows.some(item => String(item.id) === String(prev))) return prev;
+        return rows[0]?.id || '';
+      });
+      if (rows.length === 0) {
+        setNotice('warn', '카드뉴스로 만들 발행 기사가 없습니다.');
+      }
+    } catch (error) {
+      setNotice('bad', error.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  useEffect(() => {
+    if (seedItem?.id) setSelectedId(seedItem.id);
+  }, [seedItem?.id]);
+
+  useEffect(() => {
+    loadPublishedItems();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [adminToken]);
+
+  useEffect(() => {
+    applyItemDefaults(selectedItem);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedItem?.id]);
+
+  useEffect(() => {
+    if (!imageFile) {
+      setImagePreviewUrl('');
+      return undefined;
+    }
+    const url = URL.createObjectURL(imageFile);
+    setImagePreviewUrl(url);
+    return () => URL.revokeObjectURL(url);
+  }, [imageFile]);
+
+  const updateField = (name, value) => {
+    setFields(prev => ({ ...prev, [name]: value }));
+  };
+
+  const generateDraft = async () => {
+    if (!selectedItem) {
+      setNotice('warn', '먼저 발행된 기사를 선택해주세요.');
+      return;
+    }
+    setBusy(true);
+    setLocalMessage('');
+    try {
+      const response = await fetch('/api/admin/card-news-draft', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ id: selectedItem.id, actor: 'admin-ui' }),
+      });
+      const data = await readJsonResponse(response);
+      if (!response.ok) throw new Error(data.error || '카드뉴스 초안 생성에 실패했습니다.');
+      setFields(fieldsFromCard(data.card));
+      setNotice('good', '카드뉴스 초안을 가져왔습니다. 왼쪽에서 바로 수정할 수 있습니다.');
+    } catch (error) {
+      setNotice('bad', error.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const renderCardNews = async () => {
+    if (!selectedItem) {
+      setNotice('warn', '먼저 발행된 기사를 선택해주세요.');
+      return;
+    }
+    if (!imageFile && !imageUrl.trim()) {
+      setNotice('warn', '이미지 파일을 업로드하거나 이미지 URL을 입력해주세요.');
+      return;
+    }
+    if (!fields.headline.trim() || !fields.summary.trim() || !fields.paragraphs.trim()) {
+      setNotice('warn', 'headline, summary, paragraphs는 비워둘 수 없습니다.');
+      return;
+    }
+
+    setBusy(true);
+    setLocalMessage('');
+    try {
+      const body = {
+        id: selectedItem.id,
+        actor: 'admin-ui',
+        card: cardFromFields(fields),
+      };
+
+      if (imageFile) {
+        body.image_data_url = await fileToDataUrl(imageFile);
+        body.image_name = imageFile.name;
+      } else {
+        body.image_url = imageUrl.trim();
+      }
+
+      const response = await fetch('/api/admin/card-news-render', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(body),
+      });
+
+      if (!response.ok) {
+        const data = await readJsonResponse(response);
+        throw new Error(data.error || '카드뉴스 렌더링에 실패했습니다.');
+      }
+
+      const blob = await response.blob();
+      downloadBlob(blob, `cardnews-${selectedItem.raw_post_id || selectedItem.id}.zip`);
+      setNotice('good', '카드뉴스 ZIP을 생성했습니다.');
+    } catch (error) {
+      setNotice('bad', error.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="min-w-0 space-y-4">
+      {localMessage && <Notice tone={localTone}>{localMessage}</Notice>}
+
+      <div className="grid min-w-0 gap-5 xl:grid-cols-[minmax(0,0.9fr)_minmax(520px,1.1fr)]">
+        <section className="min-w-0 rounded-md p-4" style={{ background: '#0b0d14', border: '1px solid #202635' }}>
+          <div className="mb-4 flex flex-wrap items-end gap-3">
+            <label className="min-w-[260px] flex-1">
+              <span className="mb-1 block text-xs font-bold uppercase" style={{ color: '#687086' }}>발행 기사</span>
+              <select
+                value={selectedId}
+                onChange={event => setSelectedId(event.target.value)}
+                disabled={!adminToken || busy}
+                className="w-full rounded-md px-3 py-2 text-sm font-bold outline-none disabled:opacity-50"
+                style={{ background: '#11141d', color: '#fff', border: '1px solid #283040' }}>
+                {!selectedId && <option value="">발행 기사를 선택하세요</option>}
+                {publishedItems.map(item => (
+                  <option key={item.id} value={item.id}>
+                    {compactText(item.title_ko || item.raw_text, 72, '발행 기사')}
+                  </option>
+                ))}
+                {seedItem && !publishedItems.some(item => String(item.id) === String(seedItem.id)) && (
+                  <option value={seedItem.id}>{compactText(seedItem.title_ko || seedItem.raw_text, 72, '선택한 기사')}</option>
+                )}
+              </select>
+            </label>
+            <button
+              type="button"
+              onClick={loadPublishedItems}
+              disabled={!adminToken || busy}
+              className="rounded-md px-4 py-2 text-sm font-bold disabled:opacity-50"
+              style={{ background: '#171923', color: '#cbd3e8', border: '1px solid #2a3040' }}>
+              발행 기사 불러오기
+            </button>
+            <button
+              type="button"
+              onClick={generateDraft}
+              disabled={!adminToken || !selectedItem || busy}
+              className="rounded-md px-4 py-2 text-sm font-bold disabled:opacity-50"
+              style={{ background: '#2557ff', color: '#fff' }}>
+              AI 초안 생성
+            </button>
+          </div>
+
+          {selectedItem && (
+            <div className="mb-4 rounded-md px-3 py-2 text-sm" style={{ background: '#080a10', color: '#8791aa', border: '1px solid #202635' }}>
+              <div className="break-words font-bold text-white" style={{ overflowWrap: 'anywhere' }}>
+                {selectedItem.title_ko || selectedItem.raw_text?.slice(0, 90) || '발행 기사'}
+              </div>
+              <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-xs">
+                <span>@{selectedItem.raw_author_handle || selectedItem.raw_author_name || 'source'}</span>
+                {selectedItem.raw_created_at && <span>{fmtKST(selectedItem.raw_created_at)} KST</span>}
+              </div>
+            </div>
+          )}
+
+          <div className="space-y-3">
+            <label className="block">
+              <span className="mb-1 block text-xs font-bold uppercase" style={{ color: '#687086' }}>subject</span>
+              <input
+                value={fields.subject}
+                onChange={event => updateField('subject', event.target.value)}
+                placeholder="예: MUN, TRANSFER, EPL"
+                className="w-full rounded-md px-3 py-2 text-sm outline-none"
+                style={{ background: '#11141d', color: '#fff', border: '1px solid #283040' }}
+              />
+            </label>
+            <label className="block">
+              <span className="mb-1 block text-xs font-bold uppercase" style={{ color: '#687086' }}>headline</span>
+              <textarea
+                value={fields.headline}
+                onChange={event => updateField('headline', event.target.value)}
+                rows={2}
+                placeholder="카드뉴스 메인 제목"
+                className="w-full rounded-md px-3 py-2 text-sm leading-6 outline-none"
+                style={{ background: '#11141d', color: '#fff', border: '1px solid #283040' }}
+              />
+            </label>
+            <label className="block">
+              <span className="mb-1 block text-xs font-bold uppercase" style={{ color: '#687086' }}>summary</span>
+              <textarea
+                value={fields.summary}
+                onChange={event => updateField('summary', event.target.value)}
+                rows={3}
+                placeholder="커버 카드에 들어갈 짧은 요약"
+                className="w-full rounded-md px-3 py-2 text-sm leading-6 outline-none"
+                style={{ background: '#11141d', color: '#fff', border: '1px solid #283040' }}
+              />
+            </label>
+            <label className="block">
+              <span className="mb-1 block text-xs font-bold uppercase" style={{ color: '#687086' }}>paragraphs</span>
+              <textarea
+                value={fields.paragraphs}
+                onChange={event => updateField('paragraphs', event.target.value)}
+                rows={7}
+                placeholder="상세 카드 본문. 줄바꿈으로 문단을 나눌 수 있습니다."
+                className="w-full rounded-md px-3 py-2 text-sm leading-6 outline-none"
+                style={{ background: '#11141d', color: '#fff', border: '1px solid #283040' }}
+              />
+            </label>
+            <label className="block">
+              <span className="mb-1 block text-xs font-bold uppercase" style={{ color: '#687086' }}>source</span>
+              <input
+                value={fields.source}
+                onChange={event => updateField('source', event.target.value)}
+                placeholder="출처 표기"
+                className="w-full rounded-md px-3 py-2 text-sm outline-none"
+                style={{ background: '#11141d', color: '#fff', border: '1px solid #283040' }}
+              />
+            </label>
+
+            <div className="grid min-w-0 gap-3 md:grid-cols-2">
+              <label className="block">
+                <span className="mb-1 block text-xs font-bold uppercase" style={{ color: '#687086' }}>이미지 URL</span>
+                <input
+                  value={imageUrl}
+                  onChange={event => setImageUrl(event.target.value)}
+                  placeholder="https://..."
+                  className="w-full rounded-md px-3 py-2 text-sm outline-none"
+                  style={{ background: '#11141d', color: '#fff', border: '1px solid #283040' }}
+                />
+              </label>
+              <label className="block">
+                <span className="mb-1 block text-xs font-bold uppercase" style={{ color: '#687086' }}>이미지 업로드</span>
+                <input
+                  type="file"
+                  accept="image/png,image/jpeg,image/webp"
+                  onChange={event => setImageFile(event.target.files?.[0] || null)}
+                  className="block w-full rounded-md px-3 py-2 text-sm"
+                  style={{ background: '#11141d', color: '#a8b0c7', border: '1px solid #283040' }}
+                />
+                {imageFile && (
+                  <div className="mt-1 break-words text-xs" style={{ color: '#8791aa', overflowWrap: 'anywhere' }}>
+                    {imageFile.name} · {(imageFile.size / 1024 / 1024).toFixed(2)}MB
+                  </div>
+                )}
+              </label>
+            </div>
+
+            <button
+              type="button"
+              onClick={renderCardNews}
+              disabled={!adminToken || !selectedItem || busy}
+              className="w-full rounded-md px-4 py-3 text-sm font-black disabled:opacity-50"
+              style={{ background: '#21c17a', color: '#03130c' }}>
+              카드뉴스 ZIP 생성
+            </button>
+          </div>
+        </section>
+
+        <CardNewsPreview fields={fields} imageSource={previewSource} />
+      </div>
+    </div>
+  );
+}
+
 function DebateModal({ item, onClose, onSave, busy }) {
   const isSet = Boolean(item.debate_question);
   const [question, setQuestion] = useState(item.debate_question || '');
@@ -723,7 +1175,7 @@ export default function AdminDashboard() {
   const [busy, setBusy] = useState(false);
   const [loaded, setLoaded] = useState(false);
   const [debateModal, setDebateModal] = useState(null);
-  const [cardNewsModal, setCardNewsModal] = useState(null);
+  const [cardNewsSeed, setCardNewsSeed] = useState(null);
   const [newIds, setNewIds] = useState(new Set());
   const isInitialLoading = Boolean(adminToken && busy && !loaded && !error);
 
@@ -747,6 +1199,11 @@ export default function AdminDashboard() {
       setLoaded(false);
       setError('');
       return [];
+    }
+    if (status === CARD_NEWS_TAB) {
+      setError('');
+      setLoaded(true);
+      return items;
     }
     setBusy(true);
     if (!preserveMessage) setMessage('');
@@ -935,17 +1392,6 @@ export default function AdminDashboard() {
           onSave={data => debateAction(debateModal, data)}
         />
       )}
-      {cardNewsModal && (
-        <CardNewsModal
-          item={cardNewsModal}
-          headers={headers}
-          onClose={() => setCardNewsModal(null)}
-          onNotify={(tone, text) => {
-            setMessageTone(tone);
-            setMessage(text);
-          }}
-        />
-      )}
       <div className="mx-auto w-full max-w-7xl px-5 py-6" style={{ maxWidth: '100vw' }}>
         <header className="flex min-w-0 flex-col gap-4 border-b pb-5 lg:flex-row lg:items-end"
           style={{ borderColor: '#1c2230' }}>
@@ -1020,15 +1466,16 @@ export default function AdminDashboard() {
           <Metric label="Rejected" value={dashboard?.rejected} />
         </section>
 
-        <section className="mt-5 grid min-w-0 gap-5 lg:grid-cols-[minmax(0,1fr)_320px]">
+        <section className={status === CARD_NEWS_TAB ? 'mt-5 grid min-w-0 gap-5' : 'mt-5 grid min-w-0 gap-5 lg:grid-cols-[minmax(0,1fr)_320px]'}>
           <div className="min-w-0">
             <div className="mb-3 flex flex-wrap items-center gap-2">
-              {STATUS_OPTIONS.map(option => {
-                const countMap = { review: dashboard?.review, published: dashboard?.published, discarded: dashboard?.discarded, rejected: dashboard?.rejected, all: dashboard?.total };
+              {ADMIN_TAB_OPTIONS.map(option => {
+                const countMap = { review: dashboard?.review, published: dashboard?.published, discarded: dashboard?.discarded, rejected: dashboard?.rejected, all: dashboard?.total, [CARD_NEWS_TAB]: dashboard?.published };
                 const count = countMap[option] || 0;
                 const isActive = status === option;
                 const isWarn = option === 'review' && count > 0;
                 const newCount = [...newIds].filter(id => {
+                  if (option === CARD_NEWS_TAB) return false;
                   const it = items.find(i => i.id === id);
                   if (!it) return false;
                   return option === 'all' || it.status === option;
@@ -1042,7 +1489,7 @@ export default function AdminDashboard() {
                       color: isActive ? '#05070d' : '#a8b0c7',
                       border: isActive ? '1px solid #283040' : isWarn ? '1px solid #665017' : '1px solid #283040',
                     }}>
-                    {STATUS_LABELS[option]}
+                    {option === CARD_NEWS_TAB ? '카드뉴스 작업대' : STATUS_LABELS[option]}
                     {count > 0 && (
                       <span className="rounded px-1.5 py-0.5 text-xs font-black leading-none"
                         style={{
@@ -1062,6 +1509,17 @@ export default function AdminDashboard() {
                 );
               })}
             </div>
+            {status === CARD_NEWS_TAB ? (
+              <CardNewsWorkspace
+                headers={headers}
+                adminToken={adminToken}
+                seedItem={cardNewsSeed}
+                onNotify={(tone, text) => {
+                  setMessageTone(tone);
+                  setMessage(text);
+                }}
+              />
+            ) : (
             <div className="space-y-3">
               {isInitialLoading ? (
                 <>
@@ -1083,14 +1541,19 @@ export default function AdminDashboard() {
                   onAction={reviewAction}
                   onDebate={item => setDebateModal(item)}
                   onRegenerate={regenerateAction}
-                  onCardNews={item => setCardNewsModal(item)}
+                  onCardNews={item => {
+                    setCardNewsSeed(item);
+                    setStatus(CARD_NEWS_TAB);
+                  }}
                   busy={busy}
                   isNew={newIds.has(item.id)}
                 />
               ))}
-            </div>
+              </div>
+            )}
           </div>
 
+          {status !== CARD_NEWS_TAB && (
           <aside className="min-w-0 space-y-3">
             <div className="min-w-0 rounded-md p-4" style={{ background: '#0b0d14', border: '1px solid #202635' }}>
               <div className="text-xs font-bold uppercase" style={{ color: '#687086' }}>Last collected</div>
@@ -1121,6 +1584,7 @@ export default function AdminDashboard() {
               </div>
             </div>
           </aside>
+          )}
         </section>
       </div>
     </div>
