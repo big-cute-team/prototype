@@ -215,7 +215,52 @@ function ImageCarousel({ urls }) {
   );
 }
 
+function CustomImageFeedCard({ post, onOpen }) {
+  const multiImage = post.imageUrls && post.imageUrls.length > 1;
+  const urls = post.imageUrls && post.imageUrls.length > 0 ? post.imageUrls : (post.imageUrl ? [post.imageUrl] : []);
+
+  return (
+    <div className="h-full relative overflow-hidden" style={{ background: '#000' }}>
+      {/* 이미지 — 오버레이 없이 선명하게 */}
+      {urls.length > 1 ? (
+        <ImageCarousel urls={urls} />
+      ) : urls.length === 1 ? (
+        <img src={urls[0]} alt="" className="absolute inset-0 w-full h-full object-cover object-top" />
+      ) : null}
+
+      {/* 하단 그라디언트 (텍스트 가독성용) */}
+      <div className="absolute bottom-0 left-0 right-0 pointer-events-none"
+        style={{ height: '130px', background: 'linear-gradient(to top, rgba(0,0,0,0.88) 0%, transparent 100%)' }} />
+
+      <ActionBar post={post} onOpen={onOpen} />
+
+      {/* 하단 메타 */}
+      <div className="absolute bottom-0 left-0 px-5 pb-3 z-10" style={{ right: '68px' }}>
+        <div className="flex gap-2 mb-2 flex-wrap">
+          <span className="text-xs font-bold px-1.5 py-0.5 rounded"
+            style={{ background: '#0d2a1a', color: '#34d399' }}>
+            {CARD_TYPE_LABEL[post.cardType] || '콘텐츠'}
+          </span>
+          {post.club && <Badge type="club" value={post.club} />}
+        </div>
+        <h2 className="font-black text-white leading-tight mb-1" style={{ fontSize: '22px', letterSpacing: '-0.3px' }}>
+          {post.title}
+        </h2>
+        {post.summary && (
+          <p className="text-sm" style={{ color: 'rgba(255,255,255,0.55)' }}>{post.summary}</p>
+        )}
+        <div className="flex items-center gap-1.5 mt-1.5">
+          <span className="text-xs font-bold" style={{ color: '#34d399' }}>PLICK</span>
+          <span className="text-xs" style={{ color: '#3a3a5a' }}>· {post.tweet?.timeAgo}</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function FeedCard({ post, selectedTeam, onOpen, vote }) {
+  if (post.isCustom) return <CustomImageFeedCard post={post} onOpen={onOpen} />;
+
   const isDebate = post.type === 'debate' || post.type === 'today_debate' || post.type === 'hot_debate';
   const isToday = post.type === 'today_debate';
   const isSentimental = post.type === 'sentimental';
@@ -228,15 +273,12 @@ function FeedCard({ post, selectedTeam, onOpen, vote }) {
     ? `radial-gradient(ellipse at 50% 0%, ${accent}28 0%, ${accent}08 35%, transparent 65%)`
     : 'radial-gradient(ellipse at 50% 0%, #1a1a3a14 0%, transparent 50%)';
 
-  const multiImage = post.imageUrls && post.imageUrls.length > 1;
-
   return (
     <div className="h-full relative overflow-hidden"
-      style={!multiImage && post.imageUrl
+      style={post.imageUrl
         ? { backgroundImage: `url(${post.imageUrl})`, backgroundSize: 'cover', backgroundPosition: 'center top' }
         : { background: '#080810' }}>
-      {multiImage && <ImageCarousel urls={post.imageUrls} />}
-      {(post.imageUrl || multiImage) && (
+      {post.imageUrl && (
         <div className="absolute inset-0 pointer-events-none" style={{ background: 'rgba(0,0,0,0.62)' }} />
       )}
       <div className="absolute inset-0 pointer-events-none" style={{ background: bgGradient }} />
