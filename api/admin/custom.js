@@ -16,7 +16,11 @@ module.exports = async function handler(req, res) {
     requireToken(req, 'ADMIN_TOKEN', 'admin');
     const body = await parseJsonBody(req);
 
-    if (!body.image_url) throw Object.assign(new Error('image_url is required'), { statusCode: 400 });
+    // image_urls (배열) 또는 image_url (단일, 하위 호환) 지원
+    const imageUrls = Array.isArray(body.image_urls) && body.image_urls.length > 0
+      ? body.image_urls
+      : body.image_url ? [body.image_url] : [];
+    if (imageUrls.length === 0) throw Object.assign(new Error('image_url or image_urls is required'), { statusCode: 400 });
     if (!body.title) throw Object.assign(new Error('title is required'), { statusCode: 400 });
     const cardType = CARD_TYPES.includes(body.card_type) ? body.card_type : null;
     if (!cardType) throw Object.assign(new Error(`card_type must be one of ${CARD_TYPES.join(', ')}`), { statusCode: 400 });
@@ -39,7 +43,7 @@ module.exports = async function handler(req, res) {
       raw_created_at: now,
       raw_author_name: 'PLICK',
       raw_author_handle: 'plick_football',
-      media: [{ url: body.image_url, type: 'photo' }],
+      media: imageUrls.map(url => ({ url, type: 'photo' })),
       team_tags: teamTags,
       card_type: cardType,
       is_custom: true,

@@ -190,6 +190,31 @@ function VoteBarMini({ post, voted }) {
   );
 }
 
+function ImageCarousel({ urls }) {
+  const [idx, setIdx] = useState(0);
+  if (!urls || urls.length === 0) return null;
+  if (urls.length === 1) return (
+    <img src={urls[0]} alt="" className="absolute inset-0 w-full h-full object-cover object-top" />
+  );
+  return (
+    <div className="absolute inset-0">
+      <img src={urls[idx]} alt="" className="absolute inset-0 w-full h-full object-cover object-top" />
+      {/* 좌우 탭 영역 */}
+      <button className="absolute left-0 top-0 bottom-0 w-1/3 z-10" style={{ background: 'transparent' }}
+        onClick={e => { e.stopPropagation(); setIdx(i => Math.max(0, i - 1)); }} />
+      <button className="absolute right-0 top-0 bottom-0 w-1/3 z-10" style={{ background: 'transparent' }}
+        onClick={e => { e.stopPropagation(); setIdx(i => Math.min(urls.length - 1, i + 1)); }} />
+      {/* 점 인디케이터 */}
+      <div className="absolute top-3 left-0 right-0 flex justify-center gap-1 z-10 pointer-events-none">
+        {urls.map((_, i) => (
+          <div key={i} className="h-1.5 rounded-full transition-all"
+            style={{ width: i === idx ? '16px' : '6px', background: i === idx ? '#fff' : 'rgba(255,255,255,0.4)' }} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function FeedCard({ post, selectedTeam, onOpen, vote }) {
   const isDebate = post.type === 'debate' || post.type === 'today_debate' || post.type === 'hot_debate';
   const isToday = post.type === 'today_debate';
@@ -203,12 +228,15 @@ function FeedCard({ post, selectedTeam, onOpen, vote }) {
     ? `radial-gradient(ellipse at 50% 0%, ${accent}28 0%, ${accent}08 35%, transparent 65%)`
     : 'radial-gradient(ellipse at 50% 0%, #1a1a3a14 0%, transparent 50%)';
 
+  const multiImage = post.imageUrls && post.imageUrls.length > 1;
+
   return (
     <div className="h-full relative overflow-hidden"
-      style={post.imageUrl
+      style={!multiImage && post.imageUrl
         ? { backgroundImage: `url(${post.imageUrl})`, backgroundSize: 'cover', backgroundPosition: 'center top' }
         : { background: '#080810' }}>
-      {post.imageUrl && (
+      {multiImage && <ImageCarousel urls={post.imageUrls} />}
+      {(post.imageUrl || multiImage) && (
         <div className="absolute inset-0 pointer-events-none" style={{ background: 'rgba(0,0,0,0.62)' }} />
       )}
       <div className="absolute inset-0 pointer-events-none" style={{ background: bgGradient }} />

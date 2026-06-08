@@ -4,6 +4,11 @@ function firstMediaUrl(media) {
   return first?.url || first?.preview_image_url || null;
 }
 
+function allMediaUrls(media) {
+  if (!Array.isArray(media)) return [];
+  return media.map(item => item?.url || item?.preview_image_url).filter(Boolean);
+}
+
 function briefingFor(item) {
   const aiBriefing = item.ai_result?.briefing || {};
   return {
@@ -48,6 +53,7 @@ function mapItemToPost(item) {
     briefing: briefing.summary_detail || item.raw_text || '',
     isCustom,
     cardType: item.card_type || null,
+    imageUrls: allMediaUrls(item.media),
     tweet: isCustom ? {
       author: 'PLICK',
       initials: 'PL',

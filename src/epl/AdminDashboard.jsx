@@ -1832,8 +1832,8 @@ const CARD_TYPE_OPTIONS = [
 ];
 
 function CustomCardModal({ onClose, onSave, busy }) {
-  const [file, setFile] = useState(null);
-  const [previewUrl, setPreviewUrl] = useState('');
+  const [files, setFiles] = useState([]);
+  const [previewUrls, setPreviewUrls] = useState([]);
   const [cardType, setCardType] = useState('schedule');
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
@@ -1843,12 +1843,18 @@ function CustomCardModal({ onClose, onSave, busy }) {
   const [forLabel, setForLabel] = useState('');
   const [againstLabel, setAgainstLabel] = useState('');
 
-  const onPickFile = (f) => {
-    setFile(f);
-    setPreviewUrl(f ? URL.createObjectURL(f) : '');
+  const onPickFiles = (picked) => {
+    const arr = Array.from(picked).slice(0, 5);
+    setFiles(arr);
+    setPreviewUrls(arr.map(f => URL.createObjectURL(f)));
   };
 
-  const canSave = Boolean(file && title.trim() && cardType)
+  const removeFile = (i) => {
+    setFiles(prev => prev.filter((_, idx) => idx !== i));
+    setPreviewUrls(prev => prev.filter((_, idx) => idx !== i));
+  };
+
+  const canSave = Boolean(files.length > 0 && title.trim() && cardType)
     && (!withDebate || (question.trim() && forLabel.trim() && againstLabel.trim()));
 
   return (
@@ -1859,14 +1865,23 @@ function CustomCardModal({ onClose, onSave, busy }) {
         <div className="mb-4 text-lg font-black text-white">콘텐츠 직접 올리기</div>
 
         <label className="mb-3 block">
-          <span className="mb-1 block text-xs font-bold uppercase" style={{ color: '#687086' }}>이미지 *</span>
-          <input type="file" accept="image/png,image/jpeg,image/webp,image/gif"
-            onChange={e => onPickFile(e.target.files?.[0] || null)}
+          <span className="mb-1 block text-xs font-bold uppercase" style={{ color: '#687086' }}>이미지 * (최대 5장)</span>
+          <input type="file" accept="image/png,image/jpeg,image/webp,image/gif" multiple
+            onChange={e => onPickFiles(e.target.files || [])}
             className="w-full text-sm" style={{ color: '#a8b0c7' }} />
         </label>
-        {previewUrl && (
-          <img src={previewUrl} alt="preview" className="mb-3 max-h-60 w-full rounded-md object-contain"
-            style={{ background: '#11141d', border: '1px solid #283040' }} />
+        {previewUrls.length > 0 && (
+          <div className="mb-3 flex gap-2 overflow-x-auto pb-1">
+            {previewUrls.map((url, i) => (
+              <div key={i} className="relative shrink-0">
+                <img src={url} alt={`preview-${i}`} className="h-24 w-24 rounded-md object-cover"
+                  style={{ border: '1px solid #283040' }} />
+                <button onClick={() => removeFile(i)}
+                  className="absolute -right-1 -top-1 flex h-4 w-4 items-center justify-center rounded-full text-xs font-black"
+                  style={{ background: '#e63946', color: '#fff' }}>×</button>
+              </div>
+            ))}
+          </div>
         )}
 
         <label className="mb-3 block">
@@ -1944,7 +1959,7 @@ function CustomCardModal({ onClose, onSave, busy }) {
           </button>
           <button disabled={busy || !canSave}
             onClick={() => onSave({
-              file, card_type: cardType, title: title.trim(), description: description.trim(),
+              files, card_type: cardType, title: title.trim(), description: description.trim(),
               team_tags: teamTags,
               debate_question: withDebate ? question.trim() : null,
               vote_for_label: withDebate ? forLabel.trim() : null,
@@ -2155,24 +2170,25 @@ export default function AdminDashboard() {
     setMessage('');
     setError('');
     try {
-      let imageUrl = form.image_url;
-      if (form.file) {
+      const fileList = form.files || (form.file ? [form.file] : []);
+      if (fileList.length === 0) throw new Error('이미지를 선택해 주세요.');
+
+      const imageUrls = await Promise.all(fileList.map(async (f) => {
         const up = await fetch('/api/admin/upload', {
           method: 'POST',
-          headers: { Authorization: `Bearer ${adminToken}`, 'Content-Type': form.file.type },
-          body: form.file,
+          headers: { Authorization: `Bearer ${adminToken}`, 'Content-Type': f.type },
+          body: f,
         });
         const upData = await readJsonResponse(up);
         if (!up.ok) throw new Error(upData.error || 'Image upload failed');
-        imageUrl = upData.url;
-      }
-      if (!imageUrl) throw new Error('이미지를 선택해 주세요.');
+        return upData.url;
+      }));
 
       const response = await fetch('/api/admin/custom', {
         method: 'POST',
         headers,
         body: JSON.stringify({
-          image_url: imageUrl,
+          image_urls: imageUrls,
           card_type: form.card_type,
           title: form.title,
           description: form.description,
