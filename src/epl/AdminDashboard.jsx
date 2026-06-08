@@ -1,6 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 
 const CARD_NEWS_TAB = 'card_news_workspace';
+const ARTICLE_CARD_MODE = 'article';
+const TODAY_FIXTURES_MODE = 'today_fixtures';
+const TODAY_FIXTURES_TEMPLATE_ID = 'plick_today_fixtures_v1';
+const CARD_WORKSPACE_MODES = [
+  { id: ARTICLE_CARD_MODE, label: '기사 기반' },
+  { id: TODAY_FIXTURES_MODE, label: '오늘의 경기 일정' },
+];
 const STATUS_OPTIONS = ['review', 'published', 'discarded', 'rejected', 'all'];
 const ADMIN_TAB_OPTIONS = [...STATUS_OPTIONS, CARD_NEWS_TAB];
 const BRIEFING_STATUS_OPTIONS = ['OFFICIAL', 'CONFIRMED', 'UPDATE', 'RUMOUR', 'DENIED'];
@@ -23,6 +30,53 @@ const CARD_DETAIL_FONT_SIZE = 40;
 const CARD_DETAIL_LINE_HEIGHT = 60;
 const CARD_DETAIL_EDITOR_MAX_WIDTH = CARD_DETAIL_TEXT_WIDTH * (CARD_PREVIEW_MAX_WIDTH / CARD_PREVIEW_WIDTH);
 const CARD_WORKSPACE_TEXTAREA_HEIGHT = 300;
+const DEFAULT_TODAY_FIXTURES = {
+  eyebrow: 'WORLD CUP 2026 · TODAY',
+  title: '오늘의\n경기 일정',
+  date_label: '6월 12일 (금)',
+  matches: [
+    {
+      time_period: '오전',
+      kickoff_time: '04:00',
+      home_team: '브라질',
+      home_code: 'BRA',
+      away_team: '세네갈',
+      away_code: 'SEN',
+      group_label: 'Group F',
+      venue: '마이애미 · 하드록 스타디움',
+    },
+    {
+      time_period: '오전',
+      kickoff_time: '08:00',
+      home_team: '프랑스',
+      home_code: 'FRA',
+      away_team: '크로아티아',
+      away_code: 'CRO',
+      group_label: 'Group H',
+      venue: '뉴욕 · 메트라이프 스타디움',
+    },
+    {
+      time_period: '오후',
+      kickoff_time: '11:00',
+      home_team: '캐나다',
+      home_code: 'CAN',
+      away_team: '일본',
+      away_code: 'JPN',
+      group_label: 'Group B',
+      venue: '토론토 · BMO 필드',
+    },
+    {
+      time_period: '오후',
+      kickoff_time: '14:00',
+      home_team: '포르투갈',
+      home_code: 'POR',
+      away_team: '모로코',
+      away_code: 'MAR',
+      group_label: 'Group C',
+      venue: 'LA · 소파이 스타디움',
+    },
+  ],
+};
 const STATUS_LABELS = {
   review: '검수',
   published: '발행',
@@ -328,6 +382,57 @@ function formatDuration(startedAt, now = Date.now()) {
 
 function renderJobId() {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function cloneTodayFixturesDefaults() {
+  return {
+    ...DEFAULT_TODAY_FIXTURES,
+    matches: DEFAULT_TODAY_FIXTURES.matches.map(match => ({ ...match })),
+  };
+}
+
+function emptyTodayFixtureMatch() {
+  return {
+    time_period: '오전',
+    kickoff_time: '',
+    home_team: '',
+    home_code: '',
+    away_team: '',
+    away_code: '',
+    group_label: '',
+    venue: '',
+  };
+}
+
+function todayFixturesPayload(value) {
+  return {
+    eyebrow: String(value.eyebrow || '').trim(),
+    title: String(value.title || '').replace(/\r\n/g, '\n').replace(/\r/g, '\n').trim(),
+    date_label: String(value.date_label || '').trim(),
+    matches: (value.matches || []).map(match => ({
+      time_period: String(match.time_period || '').trim(),
+      kickoff_time: String(match.kickoff_time || '').trim(),
+      home_team: String(match.home_team || '').trim(),
+      home_code: String(match.home_code || '').trim().toUpperCase(),
+      away_team: String(match.away_team || '').trim(),
+      away_code: String(match.away_code || '').trim().toUpperCase(),
+      group_label: String(match.group_label || '').trim(),
+      venue: String(match.venue || '').trim(),
+    })),
+  };
+}
+
+function validateTodayFixturesPayload(payload) {
+  if (!payload.date_label) return '날짜를 입력해주세요.';
+  if (!payload.title) return '제목을 입력해주세요.';
+  if (payload.matches.length < 1 || payload.matches.length > 4) return '경기는 1개 이상 4개 이하로 입력해주세요.';
+  const requiredKeys = ['kickoff_time', 'home_team', 'home_code', 'away_team', 'away_code'];
+  for (let index = 0; index < payload.matches.length; index += 1) {
+    const match = payload.matches[index];
+    const missing = requiredKeys.find(key => !match[key]);
+    if (missing) return `${index + 1}번째 경기의 필수 정보를 입력해주세요.`;
+  }
+  return '';
 }
 
 function Metric({ label, value, warn }) {
@@ -1175,7 +1280,214 @@ function CardNewsPreview({ fields, imageSource }) {
   );
 }
 
+function TodayFixturesEditor({ value, onChange, onRender, disabled, rendering }) {
+  const updateField = (name, nextValue) => onChange({ ...value, [name]: nextValue });
+  const updateMatch = (index, name, nextValue) => {
+    const matches = value.matches.map((match, matchIndex) => (
+      matchIndex === index ? { ...match, [name]: nextValue } : match
+    ));
+    onChange({ ...value, matches });
+  };
+  const addMatch = () => {
+    if (value.matches.length >= 4) return;
+    onChange({ ...value, matches: [...value.matches, emptyTodayFixtureMatch()] });
+  };
+  const removeMatch = index => {
+    if (value.matches.length <= 1) return;
+    onChange({ ...value, matches: value.matches.filter((_, matchIndex) => matchIndex !== index) });
+  };
+
+  return (
+    <section className="min-w-0 rounded-md p-4" style={{ background: '#0b0d14', border: '1px solid #202635' }}>
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <div className="text-xs font-bold uppercase" style={{ color: '#687086' }}>manual template</div>
+          <div className="mt-1 text-sm font-bold text-white">오늘의 경기 일정</div>
+        </div>
+        <button
+          type="button"
+          onClick={() => onChange(cloneTodayFixturesDefaults())}
+          className="rounded-md px-3 py-2 text-xs font-bold"
+          style={{ background: '#171923', color: '#cbd3e8', border: '1px solid #2a3040' }}>
+          샘플 복원
+        </button>
+      </div>
+
+      <div className="space-y-3">
+        <label className="block">
+          <span className="mb-1 block text-xs font-bold uppercase" style={{ color: '#687086' }}>eyebrow</span>
+          <input
+            value={value.eyebrow}
+            onChange={event => updateField('eyebrow', event.target.value)}
+            className="w-full rounded-md px-3 py-2 text-sm outline-none"
+            style={{ background: '#11141d', color: '#fff', border: '1px solid #283040' }}
+          />
+        </label>
+        <div className="grid min-w-0 gap-3 md:grid-cols-2">
+          <label className="block min-w-0">
+            <span className="mb-1 block text-xs font-bold uppercase" style={{ color: '#687086' }}>title</span>
+            <textarea
+              value={value.title}
+              onChange={event => updateField('title', event.target.value)}
+              rows={2}
+              className="w-full rounded-md px-3 py-2 text-sm leading-6 outline-none"
+              style={{ background: '#11141d', color: '#fff', border: '1px solid #283040', resize: 'vertical' }}
+            />
+          </label>
+          <label className="block min-w-0">
+            <span className="mb-1 block text-xs font-bold uppercase" style={{ color: '#687086' }}>date label</span>
+            <input
+              value={value.date_label}
+              onChange={event => updateField('date_label', event.target.value)}
+              className="w-full rounded-md px-3 py-2 text-sm outline-none"
+              style={{ background: '#11141d', color: '#fff', border: '1px solid #283040' }}
+            />
+          </label>
+        </div>
+
+        <div className="space-y-3">
+          <div className="flex items-center justify-between gap-3">
+            <span className="text-xs font-bold uppercase" style={{ color: '#687086' }}>matches</span>
+            <button
+              type="button"
+              onClick={addMatch}
+              disabled={value.matches.length >= 4}
+              className="rounded px-2 py-1 text-xs font-bold disabled:opacity-50"
+              style={{ background: '#171923', color: '#cbd3e8', border: '1px solid #2a3040' }}>
+              경기 추가
+            </button>
+          </div>
+
+          {value.matches.map((match, index) => (
+            <div key={index} className="rounded-md p-3" style={{ background: '#080a10', border: '1px solid #202635' }}>
+              <div className="mb-3 flex items-center justify-between gap-3">
+                <div className="text-sm font-black text-white">{index + 1}번째 경기</div>
+                <button
+                  type="button"
+                  onClick={() => removeMatch(index)}
+                  disabled={value.matches.length <= 1}
+                  className="rounded px-2 py-1 text-xs font-bold disabled:opacity-50"
+                  style={{ background: '#351111', color: '#ffb0b0', border: '1px solid #5c2424' }}>
+                  삭제
+                </button>
+              </div>
+              <div className="grid min-w-0 gap-2 md:grid-cols-4">
+                <input value={match.time_period} onChange={event => updateMatch(index, 'time_period', event.target.value)} placeholder="오전" className="rounded-md px-3 py-2 text-sm outline-none" style={{ background: '#11141d', color: '#fff', border: '1px solid #283040' }} />
+                <input value={match.kickoff_time} onChange={event => updateMatch(index, 'kickoff_time', event.target.value)} placeholder="04:00" className="rounded-md px-3 py-2 text-sm outline-none" style={{ background: '#11141d', color: '#fff', border: '1px solid #283040' }} />
+                <input value={match.home_team} onChange={event => updateMatch(index, 'home_team', event.target.value)} placeholder="홈팀" className="rounded-md px-3 py-2 text-sm outline-none" style={{ background: '#11141d', color: '#fff', border: '1px solid #283040' }} />
+                <input value={match.home_code} onChange={event => updateMatch(index, 'home_code', event.target.value)} placeholder="HOME" className="rounded-md px-3 py-2 text-sm uppercase outline-none" style={{ background: '#11141d', color: '#fff', border: '1px solid #283040' }} />
+                <input value={match.away_team} onChange={event => updateMatch(index, 'away_team', event.target.value)} placeholder="원정팀" className="rounded-md px-3 py-2 text-sm outline-none" style={{ background: '#11141d', color: '#fff', border: '1px solid #283040' }} />
+                <input value={match.away_code} onChange={event => updateMatch(index, 'away_code', event.target.value)} placeholder="AWAY" className="rounded-md px-3 py-2 text-sm uppercase outline-none" style={{ background: '#11141d', color: '#fff', border: '1px solid #283040' }} />
+                <input value={match.group_label} onChange={event => updateMatch(index, 'group_label', event.target.value)} placeholder="Group F" className="rounded-md px-3 py-2 text-sm outline-none" style={{ background: '#11141d', color: '#fff', border: '1px solid #283040' }} />
+                <input value={match.venue} onChange={event => updateMatch(index, 'venue', event.target.value)} placeholder="경기장" className="rounded-md px-3 py-2 text-sm outline-none" style={{ background: '#11141d', color: '#fff', border: '1px solid #283040' }} />
+              </div>
+            </div>
+          ))}
+        </div>
+
+        <button
+          type="button"
+          onClick={onRender}
+          disabled={disabled || rendering}
+          className="w-full rounded-md px-4 py-3 text-sm font-black disabled:opacity-50"
+          style={{ background: '#21c17a', color: '#03130c' }}>
+          {rendering ? 'ZIP 생성 중' : '오늘의 경기 일정 ZIP 생성'}
+        </button>
+      </div>
+    </section>
+  );
+}
+
+function TodayFixturesPreview({ value }) {
+  const wrapperRef = useRef(null);
+  const [previewWidth, setPreviewWidth] = useState(360);
+  const scale = previewWidth / CARD_PREVIEW_WIDTH;
+
+  useEffect(() => {
+    const node = wrapperRef.current;
+    if (!node) return undefined;
+    const updateWidth = width => {
+      if (width > 0) setPreviewWidth(Math.min(width, CARD_PREVIEW_MAX_WIDTH));
+    };
+    updateWidth(node.getBoundingClientRect().width);
+    if (typeof ResizeObserver === 'undefined') {
+      const onResize = () => updateWidth(node.getBoundingClientRect().width);
+      window.addEventListener('resize', onResize);
+      return () => window.removeEventListener('resize', onResize);
+    }
+    const observer = new ResizeObserver(entries => {
+      const nextWidth = entries[0]?.contentRect?.width;
+      updateWidth(nextWidth || node.getBoundingClientRect().width);
+    });
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, []);
+
+  const payload = todayFixturesPayload(value);
+
+  return (
+    <aside className="min-w-0 rounded-md p-4" style={{ background: '#0b0d14', border: '1px solid #202635' }}>
+      <div className="mb-4 flex items-center justify-between gap-3">
+        <div>
+          <div className="text-xs font-bold uppercase" style={{ color: '#687086' }}>Live preview</div>
+          <div className="mt-1 text-sm font-bold text-white">오늘의 경기 일정</div>
+        </div>
+        <Badge tone="warn">4:5</Badge>
+      </div>
+      <div ref={wrapperRef} className="mx-auto w-full" style={{ maxWidth: CARD_PREVIEW_MAX_WIDTH }}>
+        <div style={{ position: 'relative', width: '100%', height: CARD_PREVIEW_HEIGHT * scale }}>
+          <div
+            style={{
+              position: 'absolute',
+              left: 0,
+              top: 0,
+              width: CARD_PREVIEW_WIDTH,
+              height: CARD_PREVIEW_HEIGHT,
+              transform: `scale(${scale})`,
+              transformOrigin: 'top left',
+              overflow: 'hidden',
+              color: '#fff',
+              background: 'radial-gradient(circle at 29% -4%, rgba(38,120,72,0.42), rgba(38,120,72,0) 42%), radial-gradient(circle at 0% 82%, rgba(190,208,235,0.18), rgba(190,208,235,0) 39%), radial-gradient(circle at 97% 82%, rgba(190,208,235,0.18), rgba(190,208,235,0) 39%), linear-gradient(180deg,#070b12 0%,#0a0f19 44%,#07140f 100%)',
+              fontFamily: '"Pretendard", "Malgun Gothic", "Apple SD Gothic Neo", sans-serif',
+            }}>
+            <div style={{ position: 'absolute', left: 93, top: 76, width: 410, height: 36, color: '#8bd8a5', fontSize: 30, lineHeight: '36px', whiteSpace: 'nowrap', overflow: 'hidden' }}>
+              {payload.eyebrow}
+            </div>
+            <div style={{ position: 'absolute', left: 72, top: 124, width: 430, height: 208, fontSize: 96, lineHeight: '104px', fontWeight: 900, whiteSpace: 'pre-line', overflow: 'hidden' }}>
+              {payload.title}
+            </div>
+            <div style={{ position: 'absolute', left: 72, top: 340, width: 360, height: 38, fontSize: 31, lineHeight: '38px', fontWeight: 900, whiteSpace: 'nowrap', overflow: 'hidden' }}>
+              {payload.date_label}
+            </div>
+            {payload.matches.map((match, index) => (
+              <div key={index} style={{ position: 'absolute', left: 72, top: 470 + (index * 205), width: 936, height: 150, overflow: 'hidden' }}>
+                <div style={{ position: 'absolute', left: 39, top: 23, width: 170, height: 95 }}>
+                  <div style={{ height: 26, color: 'rgba(255,255,255,0.66)', fontSize: 22, lineHeight: '26px', fontWeight: 900 }}>{match.time_period}</div>
+                  <div style={{ height: 67, fontSize: 56, lineHeight: '67px', fontWeight: 400, whiteSpace: 'nowrap' }}>{match.kickoff_time}</div>
+                </div>
+                <div style={{ position: 'absolute', left: 195, top: 21, width: 680, height: 115 }}>
+                  <div style={{ position: 'absolute', left: 0, top: 0, width: 228, height: 54, fontSize: 40, lineHeight: '48px', fontWeight: 900, textAlign: 'right', whiteSpace: 'nowrap', overflow: 'hidden' }}>{match.home_team}</div>
+                  <div style={{ position: 'absolute', left: 266, top: 8, width: 74, height: 44, border: '1px solid rgba(255,255,255,0.18)', borderRadius: 999, background: 'rgba(255,255,255,0.07)', color: 'rgba(255,255,255,0.86)', fontSize: 24, lineHeight: '42px', textAlign: 'center', overflow: 'hidden' }}>{match.home_code}</div>
+                  <div style={{ position: 'absolute', left: 348, top: 6, width: 50, height: 40, color: 'rgba(255,255,255,0.72)', fontSize: 26, lineHeight: '40px', textAlign: 'center' }}>VS</div>
+                  <div style={{ position: 'absolute', left: 404, top: 8, width: 74, height: 44, border: '1px solid rgba(255,255,255,0.18)', borderRadius: 999, background: 'rgba(255,255,255,0.07)', color: 'rgba(255,255,255,0.86)', fontSize: 24, lineHeight: '42px', textAlign: 'center', overflow: 'hidden' }}>{match.away_code}</div>
+                  <div style={{ position: 'absolute', left: 474, top: 0, width: 206, height: 54, fontSize: 40, lineHeight: '48px', fontWeight: 900, whiteSpace: 'nowrap', overflow: 'hidden' }}>{match.away_team}</div>
+                  <div style={{ position: 'absolute', left: 0, top: 77, width: 680, height: 25, color: 'rgba(255,255,255,0.46)', fontSize: 21, lineHeight: '25px', fontWeight: 900, whiteSpace: 'nowrap', overflow: 'hidden' }}>
+                    {[match.group_label, match.venue].filter(Boolean).join(' · ')}
+                  </div>
+                </div>
+              </div>
+            ))}
+            <div style={{ position: 'absolute', left: -108, top: 1079, width: 1296, height: 1, background: 'linear-gradient(90deg, rgba(120,200,150,0), rgba(120,200,150,0.22), rgba(120,200,150,0))' }} />
+            <div style={{ position: 'absolute', left: 126, top: 1309, width: 230, height: 34, fontSize: 27, lineHeight: '34px', fontWeight: 900 }}>@plick_football</div>
+          </div>
+        </div>
+      </div>
+    </aside>
+  );
+}
+
 function CardNewsWorkspace({ headers, adminToken, seedItem, onNotify }) {
+  const [cardMode, setCardMode] = useState(ARTICLE_CARD_MODE);
   const [publishedItems, setPublishedItems] = useState([]);
   const [selectedId, setSelectedId] = useState(seedItem?.id || '');
   const [fields, setFields] = useState(() => fieldsFromCard(
@@ -1192,6 +1504,7 @@ function CardNewsWorkspace({ headers, adminToken, seedItem, onNotify }) {
   const [renderNow, setRenderNow] = useState(Date.now());
   const [localMessage, setLocalMessage] = useState('');
   const [localTone, setLocalTone] = useState('neutral');
+  const [todayFixtures, setTodayFixtures] = useState(() => cloneTodayFixturesDefaults());
 
   const selectedItem = useMemo(() => {
     const matched = publishedItems.find(item => String(item.id) === String(selectedId));
@@ -1451,6 +1764,71 @@ function CardNewsWorkspace({ headers, adminToken, seedItem, onNotify }) {
     }
   };
 
+  const renderTodayFixtures = async () => {
+    const payload = todayFixturesPayload(todayFixtures);
+    const validationMessage = validateTodayFixturesPayload(payload);
+
+    if (validationMessage) {
+      setNotice('warn', validationMessage);
+      return;
+    }
+    if (isRenderingZip) {
+      setNotice('warn', '이미 카드뉴스 ZIP 생성이 진행 중입니다. 완료 후 다시 시도해주세요.');
+      return;
+    }
+
+    setLocalMessage('');
+    const jobId = renderJobId();
+    const filename = `cardnews-today-fixtures-${payload.date_label.replace(/\s+/g, '-')}.zip`;
+    const startedAt = Date.now();
+    setRenderNow(startedAt);
+    setRenderJobs(prev => [{
+      id: jobId,
+      status: 'running',
+      title: `${payload.date_label} 오늘의 경기 일정`,
+      filename,
+      startedAt,
+      phase: '템플릿 카드 생성 요청 중',
+    }, ...prev].slice(0, 5));
+
+    try {
+      updateRenderJob(jobId, { phase: '일정 카드 이미지 생성 중' });
+      const response = await fetch('/api/admin/card-template-render', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          actor: 'admin-ui',
+          template_id: TODAY_FIXTURES_TEMPLATE_ID,
+          today_fixtures: payload,
+        }),
+      });
+
+      if (!response.ok) {
+        const data = await readJsonResponse(response);
+        throw new Error(data.error || '오늘의 경기 일정 카드 생성에 실패했습니다.');
+      }
+
+      updateRenderJob(jobId, { phase: 'ZIP 다운로드 준비 중' });
+      const blob = await response.blob();
+      downloadBlob(blob, filename);
+      updateRenderJob(jobId, {
+        status: 'success',
+        phase: '다운로드 시작됨',
+        finishedAt: Date.now(),
+        bytes: blob.size,
+      });
+      setNotice('good', `${filename} 다운로드를 시작했습니다.`);
+    } catch (error) {
+      updateRenderJob(jobId, {
+        status: 'error',
+        phase: '생성 실패',
+        finishedAt: Date.now(),
+        error: error.message,
+      });
+      setNotice('bad', error.message);
+    }
+  };
+
   return (
     <div className="min-w-0 space-y-4">
       {localMessage && <Notice tone={localTone}>{localMessage}</Notice>}
@@ -1503,6 +1881,27 @@ function CardNewsWorkspace({ headers, adminToken, seedItem, onNotify }) {
         </div>
       )}
 
+      <div className="flex flex-wrap gap-2 rounded-md p-2" style={{ background: '#080a10', border: '1px solid #202635' }}>
+        {CARD_WORKSPACE_MODES.map(mode => {
+          const active = cardMode === mode.id;
+          return (
+            <button
+              key={mode.id}
+              type="button"
+              onClick={() => setCardMode(mode.id)}
+              className="rounded-md px-3 py-2 text-sm font-bold"
+              style={{
+                background: active ? '#e8edf7' : '#11141d',
+                color: active ? '#05070d' : '#cbd3e8',
+                border: active ? '1px solid #e8edf7' : '1px solid #283040',
+              }}>
+              {mode.label}
+            </button>
+          );
+        })}
+      </div>
+
+      {cardMode === ARTICLE_CARD_MODE ? (
       <div className="grid min-w-0 gap-5 xl:grid-cols-[minmax(0,0.9fr)_minmax(520px,1.1fr)]">
         <section className="min-w-0 rounded-md p-4" style={{ background: '#0b0d14', border: '1px solid #202635' }}>
           <div className="mb-4 flex flex-wrap items-end gap-3">
@@ -1747,6 +2146,18 @@ function CardNewsWorkspace({ headers, adminToken, seedItem, onNotify }) {
 
         <CardNewsPreview fields={fields} imageSource={previewSource} />
       </div>
+      ) : (
+      <div className="grid min-w-0 gap-5 xl:grid-cols-[minmax(0,0.9fr)_minmax(520px,1.1fr)]">
+        <TodayFixturesEditor
+          value={todayFixtures}
+          onChange={setTodayFixtures}
+          onRender={renderTodayFixtures}
+          disabled={!adminToken || busy}
+          rendering={isRenderingZip}
+        />
+        <TodayFixturesPreview value={todayFixtures} />
+      </div>
+      )}
     </div>
   );
 }
