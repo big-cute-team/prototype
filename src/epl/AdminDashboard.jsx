@@ -16,6 +16,12 @@ const TEAM_SUBJECT_COLORS = {
 };
 const CARD_PREVIEW_WIDTH = 1080;
 const CARD_PREVIEW_HEIGHT = 1350;
+const CARD_PREVIEW_MAX_WIDTH = 360;
+const CARD_DETAIL_TEXT_WIDTH = 960;
+const CARD_DETAIL_TEXT_HEIGHT = 600;
+const CARD_DETAIL_FONT_SIZE = 40;
+const CARD_DETAIL_LINE_HEIGHT = 60;
+const CARD_DETAIL_EDITOR_MAX_WIDTH = CARD_DETAIL_TEXT_WIDTH * (CARD_PREVIEW_MAX_WIDTH / CARD_PREVIEW_WIDTH);
 const STATUS_LABELS = {
   review: '검수',
   published: '발행',
@@ -837,8 +843,9 @@ function CardPreviewPage({ type, fields, imageSource }) {
       </div>
       <div
         ref={wrapperRef}
-        className="relative mx-auto w-full max-w-[360px] overflow-hidden rounded-md"
+        className="relative mx-auto w-full overflow-hidden rounded-md"
         style={{
+          maxWidth: CARD_PREVIEW_MAX_WIDTH,
           aspectRatio: '4 / 5',
           background: '#05070d',
           border: '1px solid #2a3040',
@@ -947,11 +954,11 @@ function CardPreviewPage({ type, fields, imageSource }) {
                   left: 60,
                   top: 325,
                   zIndex: 2,
-                  width: 960,
-                  height: 600,
+                  width: CARD_DETAIL_TEXT_WIDTH,
+                  height: CARD_DETAIL_TEXT_HEIGHT,
                   color: '#fff',
-                  fontSize: 40,
-                  lineHeight: '60px',
+                  fontSize: CARD_DETAIL_FONT_SIZE,
+                  lineHeight: `${CARD_DETAIL_LINE_HEIGHT}px`,
                   fontWeight: 500,
                   letterSpacing: 0,
                   textAlign: 'center',
@@ -1004,6 +1011,80 @@ function CardPreviewPage({ type, fields, imageSource }) {
           </div>
         </div>
       </div>
+    </div>
+  );
+}
+
+function CardParagraphEditor({ value, onChange }) {
+  const wrapperRef = useRef(null);
+  const [editorWidth, setEditorWidth] = useState(CARD_DETAIL_EDITOR_MAX_WIDTH);
+  const scale = editorWidth / CARD_DETAIL_TEXT_WIDTH;
+
+  useEffect(() => {
+    const node = wrapperRef.current;
+    if (!node) return undefined;
+
+    const updateWidth = width => {
+      if (width > 0) setEditorWidth(Math.min(width, CARD_DETAIL_EDITOR_MAX_WIDTH));
+    };
+
+    updateWidth(node.getBoundingClientRect().width);
+    if (typeof ResizeObserver === 'undefined') {
+      const onResize = () => updateWidth(node.getBoundingClientRect().width);
+      window.addEventListener('resize', onResize);
+      return () => window.removeEventListener('resize', onResize);
+    }
+
+    const observer = new ResizeObserver(entries => {
+      const nextWidth = entries[0]?.contentRect?.width;
+      updateWidth(nextWidth || node.getBoundingClientRect().width);
+    });
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, []);
+
+  return (
+    <div
+      ref={wrapperRef}
+      className="relative mx-auto w-full overflow-hidden rounded-md"
+      style={{
+        maxWidth: CARD_DETAIL_EDITOR_MAX_WIDTH,
+        height: CARD_DETAIL_TEXT_HEIGHT * scale,
+        background: '#11141d',
+        border: '1px solid #283040',
+      }}>
+      <textarea
+        value={value}
+        onChange={onChange}
+        wrap="soft"
+        placeholder="상세 카드 본문. 줄바꿈으로 문단을 나눌 수 있습니다."
+        className="block outline-none"
+        style={{
+          position: 'absolute',
+          left: 0,
+          top: 0,
+          width: CARD_DETAIL_TEXT_WIDTH,
+          height: CARD_DETAIL_TEXT_HEIGHT,
+          padding: 0,
+          margin: 0,
+          border: 0,
+          resize: 'none',
+          transform: `scale(${scale})`,
+          transformOrigin: 'top left',
+          background: 'transparent',
+          color: '#fff',
+          caretColor: '#fff',
+          fontFamily: '"Pretendard", "Malgun Gothic", "Apple SD Gothic Neo", sans-serif',
+          fontSize: CARD_DETAIL_FONT_SIZE,
+          lineHeight: `${CARD_DETAIL_LINE_HEIGHT}px`,
+          fontWeight: 500,
+          letterSpacing: 0,
+          textAlign: 'center',
+          whiteSpace: 'pre-wrap',
+          wordBreak: 'keep-all',
+          overflowWrap: 'break-word',
+        }}
+      />
     </div>
   );
 }
@@ -1352,13 +1433,9 @@ function CardNewsWorkspace({ headers, adminToken, seedItem, onNotify }) {
             </label>
             <label className="block">
               <span className="mb-1 block text-xs font-bold uppercase" style={{ color: '#687086' }}>paragraphs</span>
-              <textarea
+              <CardParagraphEditor
                 value={fields.paragraphs}
                 onChange={event => updateField('paragraphs', event.target.value)}
-                rows={7}
-                placeholder="상세 카드 본문. 줄바꿈으로 문단을 나눌 수 있습니다."
-                className="w-full rounded-md px-3 py-2 text-sm leading-6 outline-none"
-                style={{ background: '#11141d', color: '#fff', border: '1px solid #283040', textAlign: 'center', whiteSpace: 'pre-wrap' }}
               />
             </label>
             <label className="block">
