@@ -19,6 +19,7 @@ function useWindowWidth() {
 
 const STATUS_CFG = {
   Official: { bg: '#052818', color: '#34d399', dot: '#22c55e' },
+  Confirmed: { bg: '#04263a', color: '#22d3ee', dot: '#06b6d4' },
   Advanced:  { bg: '#2d1000', color: '#fb923c', dot: '#f97316' },
   Talks:     { bg: '#291e00', color: '#fbbf24', dot: '#eab308' },
   Interest:  { bg: '#0d2240', color: '#60a5fa', dot: '#3b82f6' },

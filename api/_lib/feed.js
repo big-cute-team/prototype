@@ -16,10 +16,12 @@ function briefingFor(item) {
 }
 
 function statusLabel(briefingStatus, newsType) {
-  if (briefingStatus === 'OFFICIAL' || briefingStatus === 'CONFIRMED' || newsType === 'official') return 'Official';
+  if (briefingStatus === 'OFFICIAL') return 'Official';
+  if (briefingStatus === 'CONFIRMED') return 'Confirmed';
   if (briefingStatus === 'RUMOUR' || newsType === 'rumour') return 'Rumour';
   if (briefingStatus === 'UPDATE') return 'Talks';
   if (briefingStatus === 'DENIED') return 'Opinion';
+  if (newsType === 'official') return 'Confirmed';
   return 'Opinion';
 }
 

@@ -6,7 +6,7 @@ function fmt(n) {
 }
 
 const STATUS_COLOR = {
-  Official: '#34d399', Advanced: '#fb923c', Talks: '#fbbf24',
+  Official: '#34d399', Confirmed: '#22d3ee', Advanced: '#fb923c', Talks: '#fbbf24',
   Interest: '#60a5fa', Rumour: '#9ca3af', Opinion: '#818cf8', Memory: '#c084fc',
 };
 
