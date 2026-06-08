@@ -215,9 +215,55 @@ function ImageCarousel({ urls }) {
   );
 }
 
+const SCHEDULE_MAX_MATCHES_PER_PAGE = 5;
+
+function splitSchedulePages(days) {
+  const pages = [];
+  let current = [];
+  let count = 0;
+  for (const day of days || []) {
+    const n = (day.matches || []).length;
+    if (count > 0 && count + n > SCHEDULE_MAX_MATCHES_PER_PAGE) {
+      pages.push(current);
+      current = [];
+      count = 0;
+    }
+    current.push(day);
+    count += n;
+  }
+  if (current.length) pages.push(current);
+  return pages.length ? pages : [[]];
+}
+
+function ScheduleMatchList({ days }) {
+  return (
+    <div className="space-y-4">
+      {days.map((day, di) => (
+        <div key={di}>
+          <div className="text-xs font-bold mb-2 pt-1" style={{ color: '#3a3a5a' }}>{day.date}</div>
+          {(day.matches || []).map((m, mi) => (
+            <div key={mi} className="flex items-center py-2.5" style={{ borderBottom: '1px solid #0e0e18' }}>
+              <div className="shrink-0 w-14 text-xs font-black tabular-nums" style={{ color: '#2a3050' }}>{m.time}</div>
+              <div className="flex-1 text-sm font-bold text-white text-right pr-3 truncate">{m.home}</div>
+              <div className="shrink-0 text-xs font-black px-1" style={{ color: '#1e1e38' }}>vs</div>
+              <div className="flex-1 text-sm font-bold text-white pl-3 truncate">{m.away}</div>
+              {m.group && <div className="shrink-0 ml-2 text-xs" style={{ color: '#252540' }}>{m.group}</div>}
+            </div>
+          ))}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function WeeklyScheduleCard({ post, onOpen }) {
   const d = post.cardData;
+  const [page, setPage] = useState(0);
   if (!d) return <CustomImageFeedCard post={post} onOpen={onOpen} />;
+
+  const pages = splitSchedulePages(d.days);
+  const total = pages.length;
+
   return (
     <div className="h-full flex flex-col" style={{ background: '#080810' }}>
       {/* 헤더 */}
@@ -228,30 +274,35 @@ function WeeklyScheduleCard({ post, onOpen }) {
         <div className="font-black text-white leading-tight" style={{ fontSize: '30px', letterSpacing: '-0.5px' }}>
           이번주<br />경기 일정
         </div>
-        <div className="mt-2 text-sm font-medium" style={{ color: '#4a4a6a' }}>{d.period}</div>
+        <div className="mt-2 flex items-center gap-2">
+          <span className="text-sm font-medium" style={{ color: '#4a4a6a' }}>{d.period}</span>
+          {total > 1 && (
+            <div className="flex items-center gap-1 ml-auto">
+              {pages.map((_, i) => (
+                <div key={i} className="rounded-full transition-all"
+                  style={{ width: i === page ? '14px' : '5px', height: '5px', background: i === page ? '#fff' : '#2a2a4a' }} />
+              ))}
+            </div>
+          )}
+        </div>
       </div>
 
       <div className="mx-5 shrink-0" style={{ height: '1px', background: '#141420' }} />
 
       {/* 경기 목록 */}
-      <div className="flex-1 overflow-y-auto px-5 py-3 space-y-4" style={{ scrollbarWidth: 'none' }}>
-        {(d.days || []).map((day, di) => (
-          <div key={di}>
-            <div className="text-xs font-bold mb-2 pt-1" style={{ color: '#3a3a5a' }}>{day.date}</div>
-            {(day.matches || []).map((m, mi) => (
-              <div key={mi} className="flex items-center py-2.5"
-                style={{ borderBottom: '1px solid #0e0e18' }}>
-                <div className="shrink-0 w-14 text-xs font-black tabular-nums" style={{ color: '#2a3050' }}>{m.time}</div>
-                <div className="flex-1 text-sm font-bold text-white text-right pr-3 truncate">{m.home}</div>
-                <div className="shrink-0 text-xs font-black px-1" style={{ color: '#1e1e38' }}>vs</div>
-                <div className="flex-1 text-sm font-bold text-white pl-3 truncate">{m.away}</div>
-                {m.group && (
-                  <div className="shrink-0 ml-2 text-xs" style={{ color: '#252540' }}>{m.group}</div>
-                )}
-              </div>
-            ))}
-          </div>
-        ))}
+      <div className="flex-1 relative overflow-hidden">
+        <div className="absolute inset-0 px-5 py-3 overflow-y-auto" style={{ scrollbarWidth: 'none' }}>
+          <ScheduleMatchList days={pages[page] || []} />
+        </div>
+        {/* 좌우 탭 (멀티 페이지일 때만) */}
+        {total > 1 && page > 0 && (
+          <button className="absolute left-0 top-0 bottom-0 w-1/4 z-10" style={{ background: 'transparent' }}
+            onClick={e => { e.stopPropagation(); setPage(p => Math.max(0, p - 1)); }} />
+        )}
+        {total > 1 && page < total - 1 && (
+          <button className="absolute right-0 top-0 bottom-0 w-1/4 z-10" style={{ background: 'transparent' }}
+            onClick={e => { e.stopPropagation(); setPage(p => Math.min(total - 1, p + 1)); }} />
+        )}
       </div>
 
       <div className="mx-5 shrink-0" style={{ height: '1px', background: '#141420' }} />
@@ -260,9 +311,9 @@ function WeeklyScheduleCard({ post, onOpen }) {
       <div className="px-5 py-3 shrink-0 flex items-center gap-2">
         <span className="text-xs font-black" style={{ color: '#34d399' }}>PLICK</span>
         <span className="text-xs font-bold px-1.5 py-0.5 rounded" style={{ background: '#0d2a1a', color: '#34d399' }}>경기 일정</span>
-        {post.hashtags?.map(h => (
-          <span key={h} className="text-xs" style={{ color: '#1e2a3a' }}>{h}</span>
-        ))}
+        {total > 1 && (
+          <span className="text-xs ml-auto" style={{ color: '#2a2a4a' }}>{page + 1} / {total}</span>
+        )}
       </div>
 
       <ActionBar post={post} onOpen={onOpen} />
