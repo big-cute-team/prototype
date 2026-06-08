@@ -22,6 +22,7 @@ const CARD_DETAIL_TEXT_HEIGHT = 600;
 const CARD_DETAIL_FONT_SIZE = 40;
 const CARD_DETAIL_LINE_HEIGHT = 60;
 const CARD_DETAIL_EDITOR_MAX_WIDTH = CARD_DETAIL_TEXT_WIDTH * (CARD_PREVIEW_MAX_WIDTH / CARD_PREVIEW_WIDTH);
+const CARD_WORKSPACE_TEXTAREA_HEIGHT = 300;
 const STATUS_LABELS = {
   review: '검수',
   published: '발행',
@@ -830,18 +831,28 @@ function cardFromFields(fields) {
 
 function captionTitleForFields(fields) {
   const subject = String(fields.subject || '').replace(/\s+/g, ' ').trim();
-  let headline = String(fields.headline || '').replace(/\s+/g, ' ').trim();
-  if (subject && headline.startsWith(subject)) {
-    headline = headline.slice(subject.length).replace(/^[\s,]+/, '').trim();
-  }
+  const headline = String(fields.headline || '').replace(/\s+/g, ' ').trim();
   return [subject, headline].filter(Boolean).join(' ').trim() || 'EPL 소식';
 }
 
-function composeInstagramCaption(fields, hashtags) {
-  const title = captionTitleForFields(fields);
-  const paragraphs = normalizeParagraphText(fields.paragraphs);
-  const tagLine = String(hashtags || '').trim();
-  return [`🚨${title}`, paragraphs, tagLine, '📸AI'].filter(Boolean).join('\n\n');
+function captionDraftFromFields(fields, hashtags) {
+  return {
+    title: captionTitleForFields(fields),
+    paragraphs: normalizeParagraphText(fields.paragraphs),
+    hashtags: String(hashtags || '').replace(/\s+/g, ' ').trim(),
+    credit: '📸AI',
+  };
+}
+
+function formatInstagramCaptionDraft(draft) {
+  const title = String(draft?.title || '').trim();
+  const titleLine = title ? `🚨${title}` : '';
+  return [
+    titleLine,
+    String(draft?.paragraphs || '').trim(),
+    String(draft?.hashtags || '').trim(),
+    String(draft?.credit || '').trim(),
+  ].filter(Boolean).join('\n\n');
 }
 
 function CardPreviewPage({ type, fields, imageSource }) {
@@ -1069,10 +1080,13 @@ function CardPreviewPage({ type, fields, imageSource }) {
   );
 }
 
-function CardParagraphEditor({ value, onChange }) {
+function CardParagraphEditor({ value, onChange, minHeight = 0 }) {
   const wrapperRef = useRef(null);
   const [editorWidth, setEditorWidth] = useState(CARD_DETAIL_EDITOR_MAX_WIDTH);
   const scale = editorWidth / CARD_DETAIL_TEXT_WIDTH;
+  const naturalHeight = CARD_DETAIL_TEXT_HEIGHT * scale;
+  const editorHeight = Math.max(naturalHeight, minHeight);
+  const textareaHeight = Math.max(CARD_DETAIL_TEXT_HEIGHT, editorHeight / scale);
 
   useEffect(() => {
     const node = wrapperRef.current;
@@ -1103,7 +1117,7 @@ function CardParagraphEditor({ value, onChange }) {
       className="relative mx-auto w-full overflow-hidden rounded-md"
       style={{
         maxWidth: CARD_DETAIL_EDITOR_MAX_WIDTH,
-        height: CARD_DETAIL_TEXT_HEIGHT * scale,
+        height: editorHeight,
         background: '#11141d',
         border: '1px solid #283040',
       }}>
@@ -1118,7 +1132,7 @@ function CardParagraphEditor({ value, onChange }) {
           left: 0,
           top: 0,
           width: CARD_DETAIL_TEXT_WIDTH,
-          height: CARD_DETAIL_TEXT_HEIGHT,
+          height: textareaHeight,
           padding: 0,
           margin: 0,
           border: 0,
@@ -1331,7 +1345,8 @@ function CardNewsWorkspace({ headers, adminToken, seedItem, onNotify }) {
       const data = await readJsonResponse(response);
       if (!response.ok) throw new Error(data.error || '해시태그 생성에 실패했습니다.');
       const hashtags = String(data.hashtags || data.caption || '').trim();
-      setCaption(composeInstagramCaption(fields, hashtags));
+      const captionDraft = captionDraftFromFields(fields, hashtags);
+      setCaption(formatInstagramCaptionDraft(captionDraft));
       setNotice('good', '해시태그를 생성하고 캡션을 조립했습니다.');
     } catch (error) {
       setNotice('bad', error.message);
@@ -1638,6 +1653,7 @@ function CardNewsWorkspace({ headers, adminToken, seedItem, onNotify }) {
                 <CardParagraphEditor
                   value={fields.paragraphs}
                   onChange={event => updateField('paragraphs', event.target.value)}
+                  minHeight={CARD_WORKSPACE_TEXTAREA_HEIGHT}
                 />
               </label>
               <div className="block min-w-0">
@@ -1665,14 +1681,15 @@ function CardNewsWorkspace({ headers, adminToken, seedItem, onNotify }) {
                 <textarea
                   value={caption}
                   onChange={event => setCaption(event.target.value)}
-                  rows={9}
-                  placeholder={`🚨subject headline\n\nparagraphs\n\n#AI해시태그\n\n📸AI`}
+                  rows={12}
                   className="w-full rounded-md px-3 py-2 text-sm leading-6 outline-none"
                   style={{
-                    minHeight: CARD_DETAIL_TEXT_HEIGHT * (CARD_DETAIL_EDITOR_MAX_WIDTH / CARD_DETAIL_TEXT_WIDTH),
+                    minHeight: CARD_WORKSPACE_TEXTAREA_HEIGHT,
+                    height: CARD_WORKSPACE_TEXTAREA_HEIGHT,
                     background: '#11141d',
                     color: '#fff',
                     border: '1px solid #283040',
+                    resize: 'vertical',
                     whiteSpace: 'pre-wrap',
                   }}
                 />
