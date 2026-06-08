@@ -1,10 +1,21 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 
 const CARD_NEWS_TAB = 'card_news_workspace';
 const STATUS_OPTIONS = ['review', 'published', 'discarded', 'rejected', 'all'];
 const ADMIN_TAB_OPTIONS = [...STATUS_OPTIONS, CARD_NEWS_TAB];
 const BRIEFING_STATUS_OPTIONS = ['OFFICIAL', 'CONFIRMED', 'UPDATE', 'RUMOUR', 'DENIED'];
 const TEAM_OPTIONS = ['ARS', 'CHE', 'LIV', 'MCI', 'MUN', 'TOT'];
+const DEFAULT_SUBJECT_COLOR = '#FFFFFF';
+const TEAM_SUBJECT_COLORS = {
+  ARS: '#EF0107',
+  CHE: '#001489',
+  LIV: '#FB0009',
+  MCI: '#6CADDF',
+  MUN: '#FE0000',
+  TOT: '#FFFFFF',
+};
+const CARD_PREVIEW_WIDTH = 1080;
+const CARD_PREVIEW_HEIGHT = 1350;
 const STATUS_LABELS = {
   review: '검수',
   published: '발행',
@@ -117,6 +128,33 @@ function firstMediaUrl(media) {
   return first?.url || first?.preview_image_url || '';
 }
 
+function normalizeSubjectColor(value, fallback = DEFAULT_SUBJECT_COLOR) {
+  const clean = String(value || fallback || DEFAULT_SUBJECT_COLOR).trim();
+  return /^#[0-9a-fA-F]{6}$/.test(clean) ? clean.toUpperCase() : fallback;
+}
+
+function teamTagsForItem(item) {
+  if (!item) return [];
+  const briefing = briefingFor(item);
+  const aiTags = item.ai_result?.briefing?.tags;
+  const rawTags = Array.isArray(item.team_tags) && item.team_tags.length > 0
+    ? item.team_tags
+    : Array.isArray(briefing.tags) && briefing.tags.length > 0
+      ? briefing.tags
+      : Array.isArray(aiTags)
+        ? aiTags
+      : [];
+  return rawTags
+    .map(tag => String(tag || '').trim().toUpperCase())
+    .filter(tag => TEAM_OPTIONS.includes(tag));
+}
+
+function defaultSubjectColorForItem(item) {
+  const tags = teamTagsForItem(item);
+  if (tags.length !== 1) return DEFAULT_SUBJECT_COLOR;
+  return TEAM_SUBJECT_COLORS[tags[0]] || DEFAULT_SUBJECT_COLOR;
+}
+
 function normalizeBriefingStatus(status, newsType) {
   const value = String(status || newsType || '').trim().toUpperCase();
   if (BRIEFING_STATUS_OPTIONS.includes(value)) return value;
@@ -146,12 +184,13 @@ function detailParagraphsFor(value) {
 
 function cardNewsDefaultFor(item) {
   const briefing = briefingFor(item);
-  const tags = Array.isArray(briefing.tags) ? briefing.tags : [];
+  const tags = teamTagsForItem(item);
   const source = String(item.raw_author_name || item.raw_author_handle || 'source').replace(/^@/, '').trim() || 'source';
 
   return {
     cover: {
       subject: compactText(tags[0] || briefing.status || 'EPL', 30, 'EPL'),
+      subject_color: defaultSubjectColorForItem(item),
       headline: compactText(briefing.title || item.raw_text, 60, 'EPL 업데이트'),
       summary: compactText(briefing.summary_short || item.raw_text, 140, '발행된 EPL 기사입니다.'),
     },
@@ -648,15 +687,17 @@ function CardNewsModal({ item, headers, onClose, onNotify }) {
 
 const EMPTY_CARD_FIELDS = {
   subject: '',
+  subject_color: DEFAULT_SUBJECT_COLOR,
   headline: '',
   summary: '',
   paragraphs: '',
   source: '',
 };
 
-function fieldsFromCard(card) {
+function fieldsFromCard(card, fallbackSubjectColor = DEFAULT_SUBJECT_COLOR) {
   return {
     subject: card?.cover?.subject || '',
+    subject_color: normalizeSubjectColor(card?.cover?.subject_color, fallbackSubjectColor),
     headline: card?.cover?.headline || '',
     summary: card?.cover?.summary || '',
     paragraphs: card?.detail?.paragraphs || '',
@@ -668,6 +709,7 @@ function cardFromFields(fields) {
   return {
     cover: {
       subject: String(fields.subject || '').trim(),
+      subject_color: normalizeSubjectColor(fields.subject_color),
       headline: String(fields.headline || '').trim(),
       summary: String(fields.summary || '').trim(),
     },
@@ -679,12 +721,42 @@ function cardFromFields(fields) {
 }
 
 function CardPreviewPage({ type, fields, imageSource }) {
+  const wrapperRef = useRef(null);
+  const [previewWidth, setPreviewWidth] = useState(360);
   const isCover = type === 'cover';
-  const paragraphs = String(fields.paragraphs || '')
-    .split(/\n{2,}|\n/)
-    .map(line => line.trim())
-    .filter(Boolean)
-    .slice(0, 4);
+  const scale = previewWidth / CARD_PREVIEW_WIDTH;
+  const subjectColor = normalizeSubjectColor(fields.subject_color);
+  const cleanSubject = String(fields.subject || 'EPL').trim();
+  let cleanHeadline = String(fields.headline || '카드뉴스 제목을 입력하세요').replace(/\s+/g, ' ').trim();
+  if (cleanSubject && cleanHeadline.startsWith(cleanSubject)) {
+    cleanHeadline = cleanHeadline.slice(cleanSubject.length).replace(/^[\s,]+/, '').trim();
+  }
+  const coverSummary = String(fields.summary || '요약을 입력하면 커버 하단에 표시됩니다.').replace(/\s+/g, ' ').trim();
+  const detailText = String(fields.paragraphs || '본문 문단을 입력하면 상세 카드에 표시됩니다.').trim();
+  const sourceText = String(fields.source || 'source').replace(/^@+/, '').trim() || 'source';
+
+  useEffect(() => {
+    const node = wrapperRef.current;
+    if (!node) return undefined;
+
+    const updateWidth = width => {
+      if (width > 0) setPreviewWidth(width);
+    };
+
+    updateWidth(node.getBoundingClientRect().width);
+    if (typeof ResizeObserver === 'undefined') {
+      const onResize = () => updateWidth(node.getBoundingClientRect().width);
+      window.addEventListener('resize', onResize);
+      return () => window.removeEventListener('resize', onResize);
+    }
+
+    const observer = new ResizeObserver(entries => {
+      const nextWidth = entries[0]?.contentRect?.width;
+      updateWidth(nextWidth || node.getBoundingClientRect().width);
+    });
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, []);
 
   return (
     <div className="min-w-0">
@@ -693,6 +765,7 @@ function CardPreviewPage({ type, fields, imageSource }) {
         <span>{isCover ? 'cover' : 'detail'}</span>
       </div>
       <div
+        ref={wrapperRef}
         className="relative mx-auto w-full max-w-[360px] overflow-hidden rounded-md"
         style={{
           aspectRatio: '4 / 5',
@@ -700,53 +773,165 @@ function CardPreviewPage({ type, fields, imageSource }) {
           border: '1px solid #2a3040',
           boxShadow: '0 18px 50px rgba(0,0,0,0.34)',
         }}>
-        {imageSource ? (
-          <img
-            src={imageSource}
-            alt=""
-            className="absolute inset-0 h-full w-full object-cover"
+        <div
+          style={{
+            position: 'absolute',
+            left: 0,
+            top: 0,
+            width: CARD_PREVIEW_WIDTH,
+            height: CARD_PREVIEW_HEIGHT,
+            transform: `scale(${scale})`,
+            transformOrigin: 'top left',
+            overflow: 'hidden',
+            color: '#fff',
+            fontFamily: '"Pretendard", "Malgun Gothic", "Apple SD Gothic Neo", sans-serif',
+            background: '#050505',
+          }}>
+          {imageSource ? (
+            <img
+              src={imageSource}
+              alt=""
+              style={{
+                position: 'absolute',
+                left: -74,
+                top: 0,
+                width: 1227,
+                height: 1350,
+                objectFit: 'cover',
+                objectPosition: 'center center',
+                display: 'block',
+              }}
+            />
+          ) : (
+            <div
+              style={{
+                position: 'absolute',
+                left: -74,
+                top: 0,
+                width: 1227,
+                height: 1350,
+                background: 'linear-gradient(145deg, #182233, #07101b 56%, #280f16)',
+              }}
+            />
+          )}
+          <div
+            style={{
+              position: 'absolute',
+              inset: 0,
+              zIndex: 1,
+              background: isCover
+                ? 'linear-gradient(to bottom, rgba(0,0,0,0) 0%, rgba(0,0,0,0) 39.9%, rgba(0,0,0,1) 75.5%, rgba(0,0,0,1) 100%)'
+                : 'linear-gradient(to bottom, rgba(0,0,0,0.5) 0%, rgba(0,0,0,1) 100%)',
+            }}
           />
-        ) : (
-          <div className="absolute inset-0" style={{ background: 'linear-gradient(145deg, #182233, #07101b 56%, #280f16)' }} />
-        )}
-        <div className="absolute inset-0" style={{ background: isCover ? 'linear-gradient(180deg, rgba(0,0,0,0.14), rgba(0,0,0,0.82))' : 'rgba(0,0,0,0.72)' }} />
-        <div className="absolute left-5 top-5 rounded px-2 py-1 text-[11px] font-black uppercase tracking-normal"
-          style={{ background: '#e11d48', color: '#fff' }}>
-          PLick
+          {isCover ? (
+            <>
+              <h1
+                style={{
+                  position: 'absolute',
+                  left: 60,
+                  top: 898,
+                  zIndex: 2,
+                  width: 960,
+                  height: 200,
+                  margin: 0,
+                  color: '#fff',
+                  fontSize: 84,
+                  lineHeight: 'normal',
+                  fontWeight: 900,
+                  letterSpacing: 0,
+                  wordBreak: 'keep-all',
+                  overflowWrap: 'break-word',
+                  overflow: 'hidden',
+                }}>
+                <span style={{ color: subjectColor }}>{cleanSubject}</span>
+                {cleanHeadline && <><br />{cleanHeadline}</>}
+              </h1>
+              <p
+                style={{
+                  position: 'absolute',
+                  left: 60,
+                  top: 1122,
+                  zIndex: 2,
+                  width: 826,
+                  height: 144,
+                  margin: 0,
+                  color: '#fff',
+                  fontSize: 40,
+                  lineHeight: 'normal',
+                  fontWeight: 500,
+                  letterSpacing: 0,
+                  wordBreak: 'keep-all',
+                  overflowWrap: 'break-word',
+                  overflow: 'hidden',
+                }}>
+                {coverSummary}
+              </p>
+            </>
+          ) : (
+            <>
+              <div
+                style={{
+                  position: 'absolute',
+                  left: 60,
+                  top: 325,
+                  zIndex: 2,
+                  width: 960,
+                  height: 600,
+                  color: '#fff',
+                  fontSize: 40,
+                  lineHeight: '60px',
+                  fontWeight: 500,
+                  letterSpacing: 0,
+                  textAlign: 'center',
+                  whiteSpace: 'pre-wrap',
+                  wordBreak: 'keep-all',
+                  overflowWrap: 'break-word',
+                  overflow: 'hidden',
+                }}>
+                {detailText}
+              </div>
+              <div
+                style={{
+                  position: 'absolute',
+                  left: 60,
+                  top: 965,
+                  zIndex: 2,
+                  width: 960,
+                  height: 60,
+                  margin: 0,
+                  color: '#fff',
+                  fontSize: 32,
+                  lineHeight: '60px',
+                  fontWeight: 500,
+                  letterSpacing: 0,
+                  textAlign: 'right',
+                  whiteSpace: 'nowrap',
+                  overflow: 'hidden',
+                }}>
+                @{sourceText}
+              </div>
+            </>
+          )}
+          <div
+            style={{
+              position: 'absolute',
+              left: 912,
+              top: 1268,
+              zIndex: 3,
+              width: 145,
+              height: 60,
+              color: '#fff',
+              fontFamily: '"Protest Guerrilla", Impact, sans-serif',
+              fontSize: 60,
+              lineHeight: '60px',
+              fontWeight: 400,
+              letterSpacing: 0,
+              whiteSpace: 'nowrap',
+            }}>
+            <span style={{ color: isCover ? '#d21404' : '#ec3e41' }}>PL</span>ick
+          </div>
         </div>
-        {isCover ? (
-          <div className="absolute inset-x-0 bottom-0 p-5">
-            <div className="mb-3 inline-flex max-w-full rounded px-2 py-1 text-xs font-black uppercase"
-              style={{ background: '#ffffff', color: '#0b0d14' }}>
-              <span className="truncate">{fields.subject || 'EPL'}</span>
-            </div>
-            <div className="max-h-[136px] overflow-hidden break-words text-[29px] font-black leading-[1.06] text-white"
-              style={{ overflowWrap: 'anywhere' }}>
-              {fields.headline || '카드뉴스 제목을 입력하세요'}
-            </div>
-            <div className="mt-4 max-h-[72px] overflow-hidden break-words text-sm font-semibold leading-6"
-              style={{ color: '#dbe4f3', overflowWrap: 'anywhere' }}>
-              {fields.summary || '요약을 입력하면 커버 하단에 표시됩니다.'}
-            </div>
-          </div>
-        ) : (
-          <div className="absolute inset-x-0 bottom-0 top-14 flex flex-col justify-between p-5">
-            <div className="space-y-3 overflow-hidden">
-              {(paragraphs.length > 0 ? paragraphs : ['본문 문단을 입력하면 상세 카드에 표시됩니다.']).map((line, index) => (
-                <p key={index}
-                  className="break-words text-[15px] font-semibold leading-6 text-white"
-                  style={{ overflowWrap: 'anywhere' }}>
-                  {line}
-                </p>
-              ))}
-            </div>
-            <div className="mt-4 flex items-center justify-between gap-3 border-t pt-3 text-xs font-bold"
-              style={{ borderColor: 'rgba(255,255,255,0.2)', color: '#b8c4d8' }}>
-              <span className="min-w-0 truncate">source</span>
-              <span className="min-w-0 truncate text-right">{fields.source || '-'}</span>
-            </div>
-          </div>
-        )}
       </div>
     </div>
   );
@@ -773,7 +958,10 @@ function CardNewsPreview({ fields, imageSource }) {
 function CardNewsWorkspace({ headers, adminToken, seedItem, onNotify }) {
   const [publishedItems, setPublishedItems] = useState([]);
   const [selectedId, setSelectedId] = useState(seedItem?.id || '');
-  const [fields, setFields] = useState(() => fieldsFromCard(seedItem ? cardNewsDefaultFor(seedItem) : { cover: {}, detail: {} }));
+  const [fields, setFields] = useState(() => fieldsFromCard(
+    seedItem ? cardNewsDefaultFor(seedItem) : { cover: {}, detail: {} },
+    seedItem ? defaultSubjectColorForItem(seedItem) : DEFAULT_SUBJECT_COLOR,
+  ));
   const [imageUrl, setImageUrl] = useState(seedItem ? firstMediaUrl(seedItem.media) : '');
   const [imageFile, setImageFile] = useState(null);
   const [imagePreviewUrl, setImagePreviewUrl] = useState('');
@@ -788,6 +976,9 @@ function CardNewsWorkspace({ headers, adminToken, seedItem, onNotify }) {
     return null;
   }, [publishedItems, seedItem, selectedId]);
 
+  const selectedTeamTags = useMemo(() => teamTagsForItem(selectedItem), [selectedItem]);
+  const autoSubjectColor = selectedItem ? defaultSubjectColorForItem(selectedItem) : DEFAULT_SUBJECT_COLOR;
+  const currentSubjectColor = normalizeSubjectColor(fields.subject_color);
   const previewSource = imagePreviewUrl || imageUrl.trim();
 
   const setNotice = (tone, text) => {
@@ -798,12 +989,12 @@ function CardNewsWorkspace({ headers, adminToken, seedItem, onNotify }) {
 
   const applyItemDefaults = item => {
     if (!item) {
-      setFields(EMPTY_CARD_FIELDS);
+      setFields({ ...EMPTY_CARD_FIELDS });
       setImageUrl('');
       setImageFile(null);
       return;
     }
-    setFields(fieldsFromCard(cardNewsDefaultFor(item)));
+    setFields(fieldsFromCard(cardNewsDefaultFor(item), defaultSubjectColorForItem(item)));
     setImageUrl(firstMediaUrl(item.media));
     setImageFile(null);
     setLocalMessage('');
@@ -880,7 +1071,7 @@ function CardNewsWorkspace({ headers, adminToken, seedItem, onNotify }) {
       });
       const data = await readJsonResponse(response);
       if (!response.ok) throw new Error(data.error || '카드뉴스 초안 생성에 실패했습니다.');
-      setFields(fieldsFromCard(data.card));
+      setFields(fieldsFromCard(data.card, defaultSubjectColorForItem(selectedItem)));
       setNotice('good', '카드뉴스 초안을 가져왔습니다. 왼쪽에서 바로 수정할 수 있습니다.');
     } catch (error) {
       setNotice('bad', error.message);
@@ -1007,6 +1198,65 @@ function CardNewsWorkspace({ headers, adminToken, seedItem, onNotify }) {
                 style={{ background: '#11141d', color: '#fff', border: '1px solid #283040' }}
               />
             </label>
+            <div className="min-w-0">
+              <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
+                <span className="block text-xs font-bold uppercase" style={{ color: '#687086' }}>subject color</span>
+                <span className="text-xs" style={{ color: '#8791aa' }}>
+                  {selectedTeamTags.length === 1
+                    ? `자동: ${selectedTeamTags[0]}`
+                    : selectedTeamTags.length > 1
+                      ? '자동: WHITE'
+                      : '자동: WHITE'}
+                </span>
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => updateField('subject_color', autoSubjectColor)}
+                  className="rounded-md px-3 py-2 text-xs font-black"
+                  style={{
+                    background: currentSubjectColor === autoSubjectColor ? '#e8edf7' : '#11141d',
+                    color: currentSubjectColor === autoSubjectColor ? '#05070d' : '#cbd3e8',
+                    border: '1px solid #283040',
+                  }}>
+                  AUTO
+                </button>
+                {TEAM_OPTIONS.map(team => {
+                  const teamColor = TEAM_SUBJECT_COLORS[team];
+                  const active = currentSubjectColor === teamColor;
+                  const isWhite = teamColor === '#FFFFFF';
+                  return (
+                    <button
+                      key={team}
+                      type="button"
+                      onClick={() => updateField('subject_color', teamColor)}
+                      className="inline-flex items-center gap-2 rounded-md px-2.5 py-2 text-xs font-black"
+                      style={{
+                        background: active ? '#e8edf7' : '#11141d',
+                        color: active ? '#05070d' : '#cbd3e8',
+                        border: active ? '1px solid #e8edf7' : '1px solid #283040',
+                      }}>
+                      <span
+                        className="inline-block h-3.5 w-3.5 rounded-full"
+                        style={{
+                          background: teamColor,
+                          border: isWhite ? '1px solid #5b6475' : '1px solid rgba(255,255,255,0.2)',
+                        }}
+                      />
+                      {team}
+                    </button>
+                  );
+                })}
+                <input
+                  type="color"
+                  aria-label="subject color"
+                  value={currentSubjectColor.toLowerCase()}
+                  onChange={event => updateField('subject_color', normalizeSubjectColor(event.target.value))}
+                  className="h-9 w-12 cursor-pointer rounded-md p-1"
+                  style={{ background: '#11141d', border: '1px solid #283040' }}
+                />
+              </div>
+            </div>
             <label className="block">
               <span className="mb-1 block text-xs font-bold uppercase" style={{ color: '#687086' }}>headline</span>
               <textarea
