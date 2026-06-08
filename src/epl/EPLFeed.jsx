@@ -256,7 +256,7 @@ function ScheduleMatchList({ days }) {
   );
 }
 
-function WeeklyScheduleCard({ post, onOpen }) {
+function WeeklyScheduleCard({ post, onOpen, onGoToMatches }) {
   const d = post.cardData;
   const [page, setPage] = useState(0);
   if (!d) return <CustomImageFeedCard post={post} onOpen={onOpen} />;
@@ -311,7 +311,14 @@ function WeeklyScheduleCard({ post, onOpen }) {
       <div className="px-5 py-3 shrink-0 flex items-center gap-2">
         <span className="text-xs font-black" style={{ color: '#34d399' }}>PLICK</span>
         <span className="text-xs font-bold px-1.5 py-0.5 rounded" style={{ background: '#0d2a1a', color: '#34d399' }}>경기 일정</span>
-        {total > 1 && (
+        {onGoToMatches && (
+          <button onClick={(e) => { e.stopPropagation(); onGoToMatches(); }}
+            className="ml-auto text-xs font-bold px-2 py-1 rounded-lg"
+            style={{ background: '#11141d', color: '#60a5fa', border: '1px solid #1e3a5f' }}>
+            경기 전체 보기 →
+          </button>
+        )}
+        {total > 1 && !onGoToMatches && (
           <span className="text-xs ml-auto" style={{ color: '#2a2a4a' }}>{page + 1} / {total}</span>
         )}
       </div>
@@ -364,8 +371,8 @@ function CustomImageFeedCard({ post, onOpen }) {
   );
 }
 
-function FeedCard({ post, selectedTeam, onOpen, vote }) {
-  if (post.isCustom && post.cardData) return <WeeklyScheduleCard post={post} onOpen={onOpen} />;
+function FeedCard({ post, selectedTeam, onOpen, vote, onGoToMatches }) {
+  if (post.isCustom && post.cardData) return <WeeklyScheduleCard post={post} onOpen={onOpen} onGoToMatches={onGoToMatches} />;
   if (post.isCustom) return <CustomImageFeedCard post={post} onOpen={onOpen} />;
 
   const isDebate = post.type === 'debate' || post.type === 'today_debate' || post.type === 'hot_debate';
@@ -486,7 +493,7 @@ function FeedCard({ post, selectedTeam, onOpen, vote }) {
 }
 
 /* ─── Feed tab ─── */
-function FeedView({ posts, selectedTeam, onOpen, onIndexChange, votes, onRead }) {
+function FeedView({ posts, selectedTeam, onOpen, onIndexChange, votes, onRead, onGoToMatches }) {
   const scrollRef = useRef(null);
   const readTimerRef = useRef(null);
 
@@ -521,7 +528,7 @@ function FeedView({ posts, selectedTeam, onOpen, onIndexChange, votes, onRead })
       style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
       {posts.map((post) => (
         <div key={post.id} className="snap-start" style={{ height: '100%' }}>
-          <FeedCard post={post} selectedTeam={selectedTeam} onOpen={() => onOpen(post)} vote={votes?.[post.id]} />
+          <FeedCard post={post} selectedTeam={selectedTeam} onOpen={() => onOpen(post)} vote={votes?.[post.id]} onGoToMatches={onGoToMatches} />
         </div>
       ))}
     </div>
@@ -883,12 +890,141 @@ function MyView({ selectedTeam, votes, posts, onOpen }) {
   );
 }
 
+/* ─── 경기 탭 ─── */
+const KST_OFFSET_MS = 9 * 60 * 60 * 1000;
+function matchDateKey(iso) {
+  const k = new Date(new Date(iso).getTime() + KST_OFFSET_MS);
+  return `${k.getUTCFullYear()}-${k.getUTCMonth()}-${k.getUTCDate()}`;
+}
+function matchDateLabel(iso) {
+  const k = new Date(new Date(iso).getTime() + KST_OFFSET_MS);
+  const dow = ['일', '월', '화', '수', '목', '금', '토'][k.getUTCDay()];
+  return `${k.getUTCMonth() + 1}월 ${k.getUTCDate()}일 (${dow})`;
+}
+function matchTimeLabel(iso) {
+  const k = new Date(new Date(iso).getTime() + KST_OFFSET_MS);
+  return `${String(k.getUTCHours()).padStart(2, '0')}:${String(k.getUTCMinutes()).padStart(2, '0')}`;
+}
+function isToday(iso) {
+  return matchDateKey(iso) === matchDateKey(new Date().toISOString());
+}
+
+function MatchStatusBadge({ status }) {
+  if (status === 'live') return (
+    <span className="text-xs font-black px-1.5 py-0.5 rounded flex items-center gap-1"
+      style={{ background: '#2a0a0a', color: '#f87171' }}>
+      <span className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ background: '#f87171' }} />LIVE
+    </span>
+  );
+  if (status === 'finished') return (
+    <span className="text-xs font-bold px-1.5 py-0.5 rounded" style={{ background: '#14141e', color: '#4a4a6a' }}>종료</span>
+  );
+  return null;
+}
+
+function MatchRow({ m }) {
+  const finished = m.status === 'finished' || m.status === 'live';
+  return (
+    <div className="flex items-center py-3" style={{ borderBottom: '1px solid #0e0e18' }}>
+      <div className="shrink-0 w-12 flex flex-col items-start">
+        {finished ? <MatchStatusBadge status={m.status} /> : (
+          <span className="text-xs font-black tabular-nums" style={{ color: '#2a3050' }}>{matchTimeLabel(m.kickoff_at)}</span>
+        )}
+      </div>
+      <div className="flex-1 flex items-center justify-end gap-1.5 pr-2 min-w-0">
+        <span className="text-sm font-bold text-white truncate">{m.home_team}</span>
+        {m.home_flag && <span className="text-base shrink-0">{m.home_flag}</span>}
+      </div>
+      <div className="shrink-0 px-1 text-center" style={{ minWidth: '44px' }}>
+        {finished && m.home_score != null ? (
+          <span className="text-sm font-black text-white tabular-nums">{m.home_score} : {m.away_score}</span>
+        ) : (
+          <span className="text-xs font-black" style={{ color: '#1e1e38' }}>vs</span>
+        )}
+      </div>
+      <div className="flex-1 flex items-center gap-1.5 pl-2 min-w-0">
+        {m.away_flag && <span className="text-base shrink-0">{m.away_flag}</span>}
+        <span className="text-sm font-bold text-white truncate">{m.away_team}</span>
+      </div>
+      {m.group_name && <span className="shrink-0 ml-2 text-xs w-8 text-right" style={{ color: '#252540' }}>{m.group_name}</span>}
+    </div>
+  );
+}
+
+function MatchView() {
+  const [matches, setMatches] = useState(null);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    let alive = true;
+    fetch('/api/matches?range=week')
+      .then(r => r.json())
+      .then(d => { if (alive) setMatches(Array.isArray(d.matches) ? d.matches : []); })
+      .catch(() => { if (alive) { setError('경기 정보를 불러오지 못했습니다.'); setMatches([]); } });
+    return () => { alive = false; };
+  }, []);
+
+  if (matches === null) {
+    return <div className="h-full flex items-center justify-center text-sm" style={{ color: '#3a3a5a' }}>불러오는 중…</div>;
+  }
+  if (matches.length === 0) {
+    return (
+      <div className="h-full flex flex-col items-center justify-center px-6">
+        <div className="text-4xl mb-3">⚽</div>
+        <div className="text-sm text-white mb-1">{error || '이번주 등록된 경기가 없습니다'}</div>
+        <div className="text-xs" style={{ color: '#3a3a5a' }}>경기가 등록되면 여기에 표시됩니다</div>
+      </div>
+    );
+  }
+
+  const todayMatches = matches.filter(m => isToday(m.kickoff_at));
+  // 날짜별 그룹
+  const groups = [];
+  const map = {};
+  for (const m of matches) {
+    const key = matchDateKey(m.kickoff_at);
+    if (!map[key]) { map[key] = { label: matchDateLabel(m.kickoff_at), items: [] }; groups.push(map[key]); }
+    map[key].items.push(m);
+  }
+
+  return (
+    <div className="h-full overflow-y-auto pb-6" style={{ scrollbarWidth: 'none' }}>
+      <div className="px-5 pt-6 pb-3">
+        <h1 className="font-black text-white" style={{ fontSize: '26px', letterSpacing: '-0.5px' }}>경기</h1>
+        <div className="text-xs mt-1" style={{ color: '#4a4a6a' }}>이번주 일정 · 결과</div>
+      </div>
+
+      {todayMatches.length > 0 && (
+        <div className="px-5 mb-5">
+          <div className="text-xs font-black tracking-widest mb-2" style={{ color: '#34d399' }}>오늘의 경기</div>
+          <div className="rounded-2xl px-4 py-1" style={{ background: '#0b0d14', border: '1px solid #16301f' }}>
+            {todayMatches.map(m => <MatchRow key={m.id} m={m} />)}
+          </div>
+        </div>
+      )}
+
+      <div className="px-5">
+        <div className="text-xs font-black tracking-widest mb-2" style={{ color: '#3a3a5a' }}>이번주 경기</div>
+        <div className="rounded-2xl px-4 py-2 space-y-3" style={{ background: '#0b0d14', border: '1px solid #141420' }}>
+          {groups.map((g, i) => (
+            <div key={i}>
+              <div className="text-xs font-bold pt-1 pb-0.5" style={{ color: '#3a3a5a' }}>{g.label}</div>
+              {g.items.map(m => <MatchRow key={m.id} m={m} />)}
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /* ─── Bottom nav ─── */
 function BottomNav({ activeTab, onChange, selectedTeam }) {
   const tc = selectedTeam?.primaryColor || '#fff';
   const items = [
     { id: 'feed',   icon: '☰', label: '피드' },
     { id: 'hot',    icon: '⚡', label: 'HOT' },
+    { id: 'match',  icon: '⚽', label: '경기' },
     { id: 'search', icon: '⌕', label: '검색' },
     { id: 'my',     icon: '◐', label: 'MY' },
   ];
@@ -970,11 +1106,13 @@ export default function EPLFeed({ selectedTeam }) {
             onIndexChange={setCurrentIndex}
             votes={votes}
             onRead={markRead}
+            onGoToMatches={() => setActiveTab('match')}
           />
         )}
         {activeTab === 'hot' && (
           <HotView posts={posts} onOpen={(post) => { markRead(post.id); setPanelPost(post); }} />
         )}
+        {activeTab === 'match' && <MatchView />}
         {activeTab === 'search' && <SearchView />}
         {activeTab === 'my' && (
           <MyView

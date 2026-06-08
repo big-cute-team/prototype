@@ -50,6 +50,51 @@ function isDebateType(post) {
 }
 
 /* ─── Sidebar ─── */
+function DesktopTodayMatches() {
+  const [matches, setMatches] = useState(null);
+  useEffect(() => {
+    let alive = true;
+    fetch('/api/matches?range=today')
+      .then(r => r.json())
+      .then(d => { if (alive) setMatches(Array.isArray(d.matches) ? d.matches : []); })
+      .catch(() => { if (alive) setMatches([]); });
+    return () => { alive = false; };
+  }, []);
+
+  if (!matches || matches.length === 0) return null;
+
+  const timeLabel = (iso) => {
+    const k = new Date(new Date(iso).getTime() + 9 * 60 * 60 * 1000);
+    return `${String(k.getUTCHours()).padStart(2, '0')}:${String(k.getUTCMinutes()).padStart(2, '0')}`;
+  };
+
+  return (
+    <div className="px-4 py-4 shrink-0" style={{ borderBottom: '1px solid #141420' }}>
+      <div className="text-xs font-bold mb-2.5 flex items-center gap-1.5" style={{ color: '#34d399', letterSpacing: '0.06em' }}>
+        <span>⚽</span> 오늘의 경기
+      </div>
+      <div className="space-y-1">
+        {matches.map(m => {
+          const done = m.status === 'finished' || m.status === 'live';
+          return (
+            <div key={m.id} className="flex items-center gap-2 px-2 py-1.5 rounded-lg text-xs"
+              style={{ background: '#0b0d14', border: '1px solid #141420' }}>
+              <span className="w-9 shrink-0 font-black tabular-nums" style={{ color: m.status === 'live' ? '#f87171' : '#2a3050' }}>
+                {m.status === 'live' ? 'LIVE' : done ? '종료' : timeLabel(m.kickoff_at)}
+              </span>
+              <span className="flex-1 text-right text-white truncate">{m.home_flag} {m.home_team}</span>
+              <span className="shrink-0 font-black" style={{ color: m.home_score != null ? '#fff' : '#1e1e38' }}>
+                {m.home_score != null ? `${m.home_score}:${m.away_score}` : 'vs'}
+              </span>
+              <span className="flex-1 text-white truncate">{m.away_team} {m.away_flag}</span>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 function Sidebar({ selectedTeam, clubFilter, onClubFilterChange, posts, selectedPost, onSelectPost, collapsed }) {
   const tc = selectedTeam?.primaryColor || '#3b82f6';
   const hotPosts = useMemo(() => posts.filter(isDebateType).slice(0, 8), [posts]);
@@ -147,6 +192,8 @@ function Sidebar({ selectedTeam, clubFilter, onClubFilterChange, posts, selected
               </button>
             )}
           </div>
+
+          <DesktopTodayMatches />
 
           {/* 지금 뜨는 토론 */}
           <div className="flex-1 overflow-y-auto" style={{ scrollbarWidth: 'none' }}>

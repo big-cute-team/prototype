@@ -1958,6 +1958,149 @@ function WeeklyScheduleModal({ onClose, onSave, busy }) {
   );
 }
 
+function fmtKickoff(iso) {
+  const k = new Date(new Date(iso).getTime() + 9 * 60 * 60 * 1000);
+  const dow = ['일', '월', '화', '수', '목', '금', '토'][k.getUTCDay()];
+  return `${k.getUTCMonth() + 1}/${k.getUTCDate()}(${dow}) ${String(k.getUTCHours()).padStart(2, '0')}:${String(k.getUTCMinutes()).padStart(2, '0')}`;
+}
+
+function MatchManagerModal({ adminToken, headers, onClose, onMessage }) {
+  const [matches, setMatches] = useState(null);
+  const [busy, setBusy] = useState(false);
+  // 입력 폼
+  const [competition, setCompetition] = useState('월드컵 2026 · 조별리그');
+  const [date, setDate] = useState('');       // yyyy-mm-dd
+  const [time, setTime] = useState('');       // hh:mm
+  const [home, setHome] = useState('');
+  const [homeFlag, setHomeFlag] = useState('');
+  const [away, setAway] = useState('');
+  const [awayFlag, setAwayFlag] = useState('');
+  const [group, setGroup] = useState('');
+  const [homeScore, setHomeScore] = useState('');
+  const [awayScore, setAwayScore] = useState('');
+
+  const load = async () => {
+    try {
+      const res = await fetch('/api/admin/matches', { headers });
+      const data = await res.json();
+      setMatches(Array.isArray(data.matches) ? data.matches : []);
+    } catch { setMatches([]); }
+  };
+  useEffect(() => { load(); /* eslint-disable-next-line */ }, []);
+
+  // KST 날짜+시간 → UTC ISO
+  const toIso = () => {
+    if (!date || !time) return null;
+    const [y, mo, d] = date.split('-').map(Number);
+    const [h, mi] = time.split(':').map(Number);
+    return new Date(Date.UTC(y, mo - 1, d, h, mi) - 9 * 60 * 60 * 1000).toISOString();
+  };
+
+  const canAdd = date && time && home.trim() && away.trim();
+
+  const addMatch = async () => {
+    setBusy(true);
+    try {
+      const res = await fetch('/api/admin/matches', {
+        method: 'POST', headers,
+        body: JSON.stringify({
+          competition, kickoff_at: toIso(),
+          home_team: home.trim(), away_team: away.trim(),
+          home_flag: homeFlag.trim() || null, away_flag: awayFlag.trim() || null,
+          group_name: group.trim() || null,
+          home_score: homeScore === '' ? null : Number(homeScore),
+          away_score: awayScore === '' ? null : Number(awayScore),
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || '경기 추가 실패');
+      setHome(''); setAway(''); setHomeFlag(''); setAwayFlag(''); setGroup(''); setHomeScore(''); setAwayScore('');
+      await load();
+      onMessage('good', '경기가 추가됐습니다.');
+    } catch (e) { onMessage('bad', e.message); } finally { setBusy(false); }
+  };
+
+  const removeMatch = async (id) => {
+    setBusy(true);
+    try {
+      const res = await fetch(`/api/admin/matches?id=${encodeURIComponent(id)}`, { method: 'DELETE', headers });
+      if (!res.ok) { const d = await res.json(); throw new Error(d.error || '삭제 실패'); }
+      await load();
+    } catch (e) { onMessage('bad', e.message); } finally { setBusy(false); }
+  };
+
+  const inputCls = 'rounded px-2 py-1 text-xs outline-none';
+  const inputStyle = { background: '#11141d', color: '#fff', border: '1px solid #283040' };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      style={{ background: 'rgba(0,0,0,0.75)' }}
+      onClick={e => e.target === e.currentTarget && onClose()}>
+      <div className="max-h-[90vh] w-full max-w-2xl min-w-0 overflow-auto rounded-xl p-5"
+        style={{ background: '#0f1118', border: '1px solid #2a3040' }}>
+        <div className="mb-4 flex items-center justify-between">
+          <span className="text-base font-black text-white">경기 관리</span>
+          <button onClick={onClose} style={{ color: '#687086' }}>✕</button>
+        </div>
+
+        {/* 입력 폼 */}
+        <div className="mb-4 rounded-lg p-3 space-y-2" style={{ background: '#080a10', border: '1px solid #1c2230' }}>
+          <input value={competition} onChange={e => setCompetition(e.target.value)}
+            placeholder="대회명" className={`w-full ${inputCls}`} style={inputStyle} />
+          <div className="flex gap-2">
+            <input type="date" value={date} onChange={e => setDate(e.target.value)}
+              className={`flex-1 ${inputCls}`} style={inputStyle} />
+            <input type="time" value={time} onChange={e => setTime(e.target.value)}
+              className={`flex-1 ${inputCls}`} style={inputStyle} />
+            <input value={group} onChange={e => setGroup(e.target.value)}
+              placeholder="조 (F조)" className={`w-20 ${inputCls}`} style={inputStyle} />
+          </div>
+          <div className="flex items-center gap-1.5">
+            <input value={homeFlag} onChange={e => setHomeFlag(e.target.value)} placeholder="🇰🇷" className={`w-12 text-center ${inputCls}`} style={inputStyle} />
+            <input value={home} onChange={e => setHome(e.target.value)} placeholder="홈팀" className={`flex-1 ${inputCls}`} style={inputStyle} />
+            <input value={homeScore} onChange={e => setHomeScore(e.target.value)} placeholder="-" className={`w-10 text-center ${inputCls}`} style={inputStyle} />
+            <span className="text-xs" style={{ color: '#4a4a6a' }}>:</span>
+            <input value={awayScore} onChange={e => setAwayScore(e.target.value)} placeholder="-" className={`w-10 text-center ${inputCls}`} style={inputStyle} />
+            <input value={away} onChange={e => setAway(e.target.value)} placeholder="원정팀" className={`flex-1 ${inputCls}`} style={inputStyle} />
+            <input value={awayFlag} onChange={e => setAwayFlag(e.target.value)} placeholder="🇨🇿" className={`w-12 text-center ${inputCls}`} style={inputStyle} />
+          </div>
+          <div className="flex justify-end">
+            <button disabled={busy || !canAdd} onClick={addMatch}
+              className="rounded px-3 py-1.5 text-xs font-bold disabled:opacity-40"
+              style={{ background: '#0d2a1a', color: '#34d399' }}>+ 경기 추가</button>
+          </div>
+          <div className="text-xs" style={{ color: '#3a3a5a' }}>스코어 입력 시 자동으로 '종료' 처리됩니다.</div>
+        </div>
+
+        {/* 등록된 경기 목록 */}
+        <div className="text-xs font-bold uppercase mb-2" style={{ color: '#687086' }}>
+          등록된 경기 {matches ? `(${matches.length})` : ''}
+        </div>
+        <div className="space-y-1">
+          {matches === null ? (
+            <div className="text-xs py-4 text-center" style={{ color: '#3a3a5a' }}>불러오는 중…</div>
+          ) : matches.length === 0 ? (
+            <div className="text-xs py-4 text-center" style={{ color: '#3a3a5a' }}>등록된 경기가 없습니다</div>
+          ) : matches.map(m => (
+            <div key={m.id} className="flex items-center gap-2 rounded px-3 py-2 text-xs"
+              style={{ background: '#0b0d14', border: '1px solid #141420' }}>
+              <span className="w-28 shrink-0" style={{ color: '#687086' }}>{fmtKickoff(m.kickoff_at)}</span>
+              <span className="flex-1 text-right text-white truncate">{m.home_flag} {m.home_team}</span>
+              <span className="shrink-0 font-black" style={{ color: m.home_score != null ? '#fff' : '#1e1e38' }}>
+                {m.home_score != null ? `${m.home_score}:${m.away_score}` : 'vs'}
+              </span>
+              <span className="flex-1 text-white truncate">{m.away_team} {m.away_flag}</span>
+              {m.group_name && <span className="w-8 shrink-0 text-right" style={{ color: '#252540' }}>{m.group_name}</span>}
+              <button disabled={busy} onClick={() => removeMatch(m.id)}
+                className="shrink-0 px-1.5 rounded" style={{ color: '#f87171' }}>×</button>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function CustomCardModal({ onClose, onSave, busy }) {
   const [files, setFiles] = useState([]);
   const [previewUrls, setPreviewUrls] = useState([]);
@@ -2118,6 +2261,7 @@ export default function AdminDashboard() {
   const [cardNewsSeed, setCardNewsSeed] = useState(null);
   const [customModal, setCustomModal] = useState(false);
   const [scheduleModal, setScheduleModal] = useState(false);
+  const [matchModal, setMatchModal] = useState(false);
   const [newIds, setNewIds] = useState(new Set());
   const isInitialLoading = Boolean(adminToken && busy && !loaded && !error);
 
@@ -2427,6 +2571,14 @@ export default function AdminDashboard() {
           onSave={scheduleCreate}
         />
       )}
+      {matchModal && (
+        <MatchManagerModal
+          adminToken={adminToken}
+          headers={headers}
+          onClose={() => setMatchModal(false)}
+          onMessage={(tone, msg) => { setMessageTone(tone); setMessage(msg); }}
+        />
+      )}
       <div className="mx-auto w-full max-w-7xl px-5 py-6" style={{ maxWidth: '100vw' }}>
         <header className="flex min-w-0 flex-col gap-4 border-b pb-5 lg:flex-row lg:items-end"
           style={{ borderColor: '#1c2230' }}>
@@ -2468,10 +2620,10 @@ export default function AdminDashboard() {
               style={{ background: '#1f6f4a', color: '#fff' }}>
               직접 올리기
             </button>
-            <button onClick={() => setScheduleModal(true)} disabled={busy || !adminToken}
+            <button onClick={() => setMatchModal(true)} disabled={busy || !adminToken}
               className="rounded-md px-4 py-2 text-sm font-bold disabled:opacity-50"
               style={{ background: '#1a2a4a', color: '#60a5fa', border: '1px solid #1e3a5f' }}>
-              이번주 일정
+              경기 관리
             </button>
           </div>
         </header>
