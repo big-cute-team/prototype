@@ -18,9 +18,11 @@ const CARD_PREVIEW_WIDTH = 1080;
 const CARD_PREVIEW_HEIGHT = 1350;
 const CARD_PREVIEW_MAX_WIDTH = 360;
 const CARD_DETAIL_TEXT_WIDTH = 960;
-const CARD_DETAIL_TEXT_HEIGHT = 600;
+const CARD_DETAIL_TEXT_TOP = 180;
+const CARD_DETAIL_TEXT_HEIGHT = 900;
 const CARD_DETAIL_FONT_SIZE = 40;
 const CARD_DETAIL_LINE_HEIGHT = 60;
+const CARD_DETAIL_SOURCE_TOP = 1110;
 const CARD_DETAIL_EDITOR_MAX_WIDTH = CARD_DETAIL_TEXT_WIDTH * (CARD_PREVIEW_MAX_WIDTH / CARD_PREVIEW_WIDTH);
 const CARD_WORKSPACE_TEXTAREA_HEIGHT = 300;
 const STATUS_LABELS = {
@@ -1016,7 +1018,7 @@ function CardPreviewPage({ type, fields, imageSource }) {
                 style={{
                   position: 'absolute',
                   left: 60,
-                  top: 325,
+                  top: CARD_DETAIL_TEXT_TOP,
                   zIndex: 2,
                   width: CARD_DETAIL_TEXT_WIDTH,
                   height: CARD_DETAIL_TEXT_HEIGHT,
@@ -1044,7 +1046,7 @@ function CardPreviewPage({ type, fields, imageSource }) {
                 style={{
                   position: 'absolute',
                   left: 60,
-                  top: 965,
+                  top: CARD_DETAIL_SOURCE_TOP,
                   zIndex: 2,
                   width: 960,
                   height: 60,
