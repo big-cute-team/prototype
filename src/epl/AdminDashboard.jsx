@@ -214,33 +214,9 @@ function normalizeParagraphText(value) {
   return blocks.join('\n\n');
 }
 
-function splitSentences(value) {
-  const clean = String(value || '').replace(/\s+/g, ' ').trim();
-  if (!clean) return [];
-  const matches = clean.match(/[^.!?。！？]+[.!?。！？]+(?=\s|$)|[^.!?。！？]+$/g) || [clean];
-  return matches.map(sentence => sentence.trim()).filter(Boolean);
-}
-
 function detailParagraphsFor(value) {
   const normalized = normalizeParagraphText(value);
-  if (!normalized) return '발행된 기사 내용을 바탕으로 카드뉴스 본문을 입력하세요.';
-
-  const existingParagraphs = normalized.split('\n\n').filter(Boolean);
-  if (existingParagraphs.length > 1) {
-    if (existingParagraphs.length <= 4) return existingParagraphs.join('\n\n');
-    return [...existingParagraphs.slice(0, 3), existingParagraphs.slice(3).join(' ')].join('\n\n');
-  }
-
-  const sentences = splitSentences(normalized);
-  if (sentences.length <= 1) return normalized;
-  if (sentences.length <= 4) return sentences.join('\n\n');
-
-  const paragraphs = sentences.slice(0, 3);
-  const remaining = sentences.slice(3).join(' ').trim();
-  if (remaining) {
-    paragraphs.push(remaining);
-  }
-  return paragraphs.join('\n\n');
+  return normalized || '발행된 기사 내용을 바탕으로 카드뉴스 본문을 입력하세요.';
 }
 
 function cardNewsDefaultFor(item) {
@@ -793,7 +769,7 @@ function CardPreviewPage({ type, fields, imageSource }) {
     cleanHeadline = cleanHeadline.slice(cleanSubject.length).replace(/^[\s,]+/, '').trim();
   }
   const coverSummary = String(fields.summary || '요약을 입력하면 커버 하단에 표시됩니다.').replace(/\s+/g, ' ').trim();
-  const detailText = String(fields.paragraphs || '본문 문단을 입력하면 상세 카드에 표시됩니다.').trim();
+  const detailText = normalizeParagraphText(fields.paragraphs) || '본문 문단을 입력하면 상세 카드에 표시됩니다.';
   const sourceText = String(fields.source || 'source').replace(/^@+/, '').trim() || 'source';
 
   useEffect(() => {
@@ -1348,7 +1324,7 @@ function CardNewsWorkspace({ headers, adminToken, seedItem, onNotify }) {
                 rows={7}
                 placeholder="상세 카드 본문. 줄바꿈으로 문단을 나눌 수 있습니다."
                 className="w-full rounded-md px-3 py-2 text-sm leading-6 outline-none"
-                style={{ background: '#11141d', color: '#fff', border: '1px solid #283040' }}
+                style={{ background: '#11141d', color: '#fff', border: '1px solid #283040', textAlign: 'center', whiteSpace: 'pre-wrap' }}
               />
             </label>
             <label className="block">
