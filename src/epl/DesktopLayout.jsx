@@ -17,8 +17,17 @@ function useWindowWidth() {
   return w;
 }
 
+const CARD_TYPE_LABEL = {
+  schedule: '경기 일정',
+  today: '오늘의 경기',
+  result: '경기 결과',
+  standings: '순위표',
+  lineup: '라인업',
+};
+
 const STATUS_CFG = {
   Official: { bg: '#052818', color: '#34d399', dot: '#22c55e' },
+  Confirmed: { bg: '#04263a', color: '#22d3ee', dot: '#06b6d4' },
   Advanced:  { bg: '#2d1000', color: '#fb923c', dot: '#f97316' },
   Talks:     { bg: '#291e00', color: '#fbbf24', dot: '#eab308' },
   Interest:  { bg: '#0d2240', color: '#60a5fa', dot: '#3b82f6' },
@@ -41,6 +50,51 @@ function isDebateType(post) {
 }
 
 /* ─── Sidebar ─── */
+function DesktopTodayMatches() {
+  const [matches, setMatches] = useState(null);
+  useEffect(() => {
+    let alive = true;
+    fetch('/api/matches?range=today')
+      .then(r => r.json())
+      .then(d => { if (alive) setMatches(Array.isArray(d.matches) ? d.matches : []); })
+      .catch(() => { if (alive) setMatches([]); });
+    return () => { alive = false; };
+  }, []);
+
+  if (!matches || matches.length === 0) return null;
+
+  const timeLabel = (iso) => {
+    const k = new Date(new Date(iso).getTime() + 9 * 60 * 60 * 1000);
+    return `${String(k.getUTCHours()).padStart(2, '0')}:${String(k.getUTCMinutes()).padStart(2, '0')}`;
+  };
+
+  return (
+    <div className="px-4 py-4 shrink-0" style={{ borderBottom: '1px solid #141420' }}>
+      <div className="text-xs font-bold mb-2.5 flex items-center gap-1.5" style={{ color: '#34d399', letterSpacing: '0.06em' }}>
+        <span>⚽</span> 오늘의 경기
+      </div>
+      <div className="space-y-1">
+        {matches.map(m => {
+          const done = m.status === 'finished' || m.status === 'live';
+          return (
+            <div key={m.id} className="flex items-center gap-2 px-2 py-1.5 rounded-lg text-xs"
+              style={{ background: '#0b0d14', border: '1px solid #141420' }}>
+              <span className="w-9 shrink-0 font-black tabular-nums" style={{ color: m.status === 'live' ? '#f87171' : '#2a3050' }}>
+                {m.status === 'live' ? 'LIVE' : done ? '종료' : timeLabel(m.kickoff_at)}
+              </span>
+              <span className="flex-1 text-right text-white truncate">{m.home_flag} {m.home_team}</span>
+              <span className="shrink-0 font-black" style={{ color: m.home_score != null ? '#fff' : '#1e1e38' }}>
+                {m.home_score != null ? `${m.home_score}:${m.away_score}` : 'vs'}
+              </span>
+              <span className="flex-1 text-white truncate">{m.away_team} {m.away_flag}</span>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 function Sidebar({ selectedTeam, clubFilter, onClubFilterChange, posts, selectedPost, onSelectPost, collapsed }) {
   const tc = selectedTeam?.primaryColor || '#3b82f6';
   const hotPosts = useMemo(() => posts.filter(isDebateType).slice(0, 8), [posts]);
@@ -139,6 +193,8 @@ function Sidebar({ selectedTeam, clubFilter, onClubFilterChange, posts, selected
             )}
           </div>
 
+          <DesktopTodayMatches />
+
           {/* 지금 뜨는 토론 */}
           <div className="flex-1 overflow-y-auto" style={{ scrollbarWidth: 'none' }}>
             <div className="px-4 pt-3 pb-1 shrink-0">
@@ -201,7 +257,55 @@ function Sidebar({ selectedTeam, clubFilter, onClubFilterChange, posts, selected
 }
 
 /* ─── Desktop feed card (가로형) ─── */
+function DesktopScheduleCard({ post, selected, onSelect }) {
+  const d = post.cardData;
+  return (
+    <div onClick={onSelect} className="rounded-2xl overflow-hidden cursor-pointer"
+      style={{
+        background: '#0a0a14',
+        border: selected ? '1.5px solid #3b82f6' : '1.5px solid #141420',
+        boxShadow: selected ? '0 0 0 3px #3b82f615' : 'none',
+      }}>
+      {/* 헤더 */}
+      <div className="px-5 pt-4 pb-3 flex items-start justify-between gap-4">
+        <div>
+          <div className="text-xs font-bold mb-1" style={{ color: '#3a3a5a' }}>{d?.competition}</div>
+          <div className="font-black text-white" style={{ fontSize: '16px' }}>이번주 경기 일정</div>
+          <div className="text-xs mt-0.5" style={{ color: '#4a4a6a' }}>{d?.period}</div>
+        </div>
+        <div className="flex items-center gap-1.5 shrink-0">
+          <span className="text-xs font-black" style={{ color: '#34d399' }}>PLICK</span>
+          <span className="text-xs font-bold px-1.5 py-0.5 rounded" style={{ background: '#0d2a1a', color: '#34d399' }}>경기 일정</span>
+        </div>
+      </div>
+
+      <div className="mx-5" style={{ height: '1px', background: '#141420' }} />
+
+      {/* 경기 테이블 */}
+      <div className="px-5 py-3">
+        {(d?.days || []).map((day, di) => (
+          <div key={di} className={di > 0 ? 'mt-3' : ''}>
+            <div className="text-xs font-bold mb-1.5" style={{ color: '#3a3a5a' }}>{day.date}</div>
+            {(day.matches || []).map((m, mi) => (
+              <div key={mi} className="flex items-center py-1.5 gap-3"
+                style={{ borderBottom: '1px solid #0d0d16' }}>
+                <span className="text-xs font-black tabular-nums w-12 shrink-0" style={{ color: '#252540' }}>{m.time}</span>
+                <span className="flex-1 text-sm font-bold text-white text-right truncate">{m.home}</span>
+                <span className="text-xs font-black shrink-0" style={{ color: '#1a1a30' }}>vs</span>
+                <span className="flex-1 text-sm font-bold text-white truncate">{m.away}</span>
+                {m.group && <span className="text-xs shrink-0" style={{ color: '#1e2030' }}>{m.group}</span>}
+              </div>
+            ))}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function DesktopFeedCard({ post, selected, onSelect, vote, fillHeight = false }) {
+  if (post.isCustom && post.cardData) return <DesktopScheduleCard post={post} selected={selected} onSelect={onSelect} />;
+
   const isDebate = isDebateType(post);
   const isToday = post.type === 'today_debate';
   const accent = isToday ? '#fbbf24' : '#e63946';
@@ -282,10 +386,17 @@ function DesktopFeedCard({ post, selected, onSelect, vote, fillHeight = false })
                 {post.tweet.initials}
               </div>
               <span className="text-xs truncate" style={{ color: '#6b6f88' }}>{post.tweet.author}</span>
-              <span className="text-xs font-bold px-1.5 py-0.5 rounded shrink-0"
-                style={{ background: '#2a1f00', color: '#f4a100' }}>
-                T{post.tweet.tier}
-              </span>
+              {post.isCustom ? (
+                <span className="text-xs font-bold px-1.5 py-0.5 rounded shrink-0"
+                  style={{ background: '#0d2a1a', color: '#34d399' }}>
+                  {CARD_TYPE_LABEL[post.cardType] || '콘텐츠'}
+                </span>
+              ) : (
+                <span className="text-xs font-bold px-1.5 py-0.5 rounded shrink-0"
+                  style={{ background: '#2a1f00', color: '#f4a100' }}>
+                  {post.tweet.specialist ? '★ 전문기자' : `T${post.tweet.tier}`}
+                </span>
+              )}
               <span className="text-xs ml-auto shrink-0" style={{ color: '#3a3a5a' }}>{post.tweet.timeAgo}</span>
             </div>
           )}

@@ -143,8 +143,8 @@ GOOD (tweet has rich info → more sentences, each adds a new fact):
 [STATUS CLASSIFICATION]
 ═══════════════════════════════════════
 
-OFFICIAL   → Club official announcement, player confirmation on official channels
-CONFIRMED  → T1 journalist uses definitive language ("Done deal", "HERE WE GO", "signed")
+OFFICIAL   → ONLY when the tweet carries an EXPLICIT official-announcement signal: the word "OFFICIAL", a club's official statement, an official-channel announcement, "confirmed by the club", or an OFFICIAL marker/emoji (✅ OFFICIAL, 🚨 OFFICIAL). If there is NO explicit official marker, NEVER use OFFICIAL — use CONFIRMED instead.
+CONFIRMED  → T1 journalist uses definitive done-deal language ("Done deal", "HERE WE GO", "signed", "completed") WITHOUT an explicit official-announcement marker. This is the default for done-deal reporting.
 UPDATE     → New development on a story that was ALREADY reported before (e.g. re-request, bid update, negotiation progress, stance change)
 RUMOUR     → First report of interest, contact, request, or possibility — even if formal (a player's first transfer request is still RUMOUR)
 DENIED     → Denial, collapse, rejection

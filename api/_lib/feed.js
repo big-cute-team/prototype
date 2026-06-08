@@ -4,6 +4,11 @@ function firstMediaUrl(media) {
   return first?.url || first?.preview_image_url || null;
 }
 
+function allMediaUrls(media) {
+  if (!Array.isArray(media)) return [];
+  return media.map(item => item?.url || item?.preview_image_url).filter(Boolean);
+}
+
 function briefingFor(item) {
   const aiBriefing = item.ai_result?.briefing || {};
   return {
@@ -16,10 +21,12 @@ function briefingFor(item) {
 }
 
 function statusLabel(briefingStatus, newsType) {
-  if (briefingStatus === 'OFFICIAL' || briefingStatus === 'CONFIRMED' || newsType === 'official') return 'Official';
+  if (briefingStatus === 'OFFICIAL') return 'Official';
+  if (briefingStatus === 'CONFIRMED') return 'Confirmed';
   if (briefingStatus === 'RUMOUR' || newsType === 'rumour') return 'Rumour';
   if (briefingStatus === 'UPDATE') return 'Talks';
   if (briefingStatus === 'DENIED') return 'Opinion';
+  if (newsType === 'official') return 'Confirmed';
   return 'Opinion';
 }
 
@@ -36,6 +43,7 @@ function mapItemToPost(item) {
   const handle = item.raw_author_handle || item.source_handle || 'x';
 
   const isDebate = Boolean(item.debate_question);
+  const isCustom = Boolean(item.is_custom);
 
   return {
     id: `live-${item.id}`,
@@ -43,16 +51,28 @@ function mapItemToPost(item) {
     title: briefing.title || item.raw_text?.slice(0, 80) || 'EPL 업데이트',
     summary: briefing.summary_short || item.raw_text || '',
     briefing: briefing.summary_detail || item.raw_text || '',
-    tweet: {
+    isCustom,
+    cardType: item.card_type || null,
+    cardData: item.card_data || null,
+    imageUrls: allMediaUrls(item.media),
+    tweet: isCustom ? {
+      author: 'PLICK',
+      initials: 'PL',
+      handle: '@plick_football',
+      timeAgo: item.raw_created_at ? new Date(item.raw_created_at).toLocaleString('ko-KR') : '',
+      text: '',
+    } : {
       author: item.raw_author_name || handle,
       initials: initials(handle),
       handle: `@${String(handle).replace(/^@/, '')}`,
       tier: item.source_tier || 2,
+      specialist: Boolean(item.specialist_match),
       timeAgo: item.raw_created_at ? new Date(item.raw_created_at).toLocaleString('ko-KR') : '',
       text: item.raw_text || '',
     },
     imageUrl: firstMediaUrl(item.media),
     club: team,
+    specialistMatch: Boolean(item.specialist_match),
     status: statusLabel(briefing.status, item.news_type),
     hashtags: (teamTags || []).map(code => `#${code}`),
     reactions: metrics.like_count || 0,

@@ -81,6 +81,8 @@ async function fetchUserPosts(source) {
     author_id: tweet.author_id,
     author_handle: String(source.handle || '').replace(/^@/, ''),
     author_name: source.name || null,
+    specialty_team: source.specialty_team || null,
+    source_tier: source.tier || 2,
     public_metrics: tweet.public_metrics || {},
     referenced_tweets: tweet.referenced_tweets || [],
     media: mediaForTweet(tweet, payload.includes),

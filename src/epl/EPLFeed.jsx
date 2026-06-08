@@ -46,8 +46,17 @@ function LiveTicker() {
   );
 }
 
+const CARD_TYPE_LABEL = {
+  schedule: '경기 일정',
+  today: '오늘의 경기',
+  result: '경기 결과',
+  standings: '순위표',
+  lineup: '라인업',
+};
+
 const STATUS_CFG = {
   Official: { bg: '#052818', color: '#34d399', dot: '#22c55e' },
+  Confirmed: { bg: '#04263a', color: '#22d3ee', dot: '#06b6d4' },
   Advanced:  { bg: '#2d1000', color: '#fb923c', dot: '#f97316' },
   Talks:     { bg: '#291e00', color: '#fbbf24', dot: '#eab308' },
   Interest:  { bg: '#0d2240', color: '#60a5fa', dot: '#3b82f6' },
@@ -181,7 +190,191 @@ function VoteBarMini({ post, voted }) {
   );
 }
 
-function FeedCard({ post, selectedTeam, onOpen, vote }) {
+function ImageCarousel({ urls }) {
+  const [idx, setIdx] = useState(0);
+  if (!urls || urls.length === 0) return null;
+  if (urls.length === 1) return (
+    <img src={urls[0]} alt="" className="absolute inset-0 w-full h-full object-cover object-top" />
+  );
+  return (
+    <div className="absolute inset-0">
+      <img src={urls[idx]} alt="" className="absolute inset-0 w-full h-full object-cover object-top" />
+      {/* 좌우 탭 영역 */}
+      <button className="absolute left-0 top-0 bottom-0 w-1/3 z-10" style={{ background: 'transparent' }}
+        onClick={e => { e.stopPropagation(); setIdx(i => Math.max(0, i - 1)); }} />
+      <button className="absolute right-0 top-0 bottom-0 w-1/3 z-10" style={{ background: 'transparent' }}
+        onClick={e => { e.stopPropagation(); setIdx(i => Math.min(urls.length - 1, i + 1)); }} />
+      {/* 점 인디케이터 */}
+      <div className="absolute top-3 left-0 right-0 flex justify-center gap-1 z-10 pointer-events-none">
+        {urls.map((_, i) => (
+          <div key={i} className="h-1.5 rounded-full transition-all"
+            style={{ width: i === idx ? '16px' : '6px', background: i === idx ? '#fff' : 'rgba(255,255,255,0.4)' }} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+const SCHEDULE_MAX_MATCHES_PER_PAGE = 5;
+
+function splitSchedulePages(days) {
+  const pages = [];
+  let current = [];
+  let count = 0;
+  for (const day of days || []) {
+    const n = (day.matches || []).length;
+    if (count > 0 && count + n > SCHEDULE_MAX_MATCHES_PER_PAGE) {
+      pages.push(current);
+      current = [];
+      count = 0;
+    }
+    current.push(day);
+    count += n;
+  }
+  if (current.length) pages.push(current);
+  return pages.length ? pages : [[]];
+}
+
+function ScheduleMatchList({ days }) {
+  return (
+    <div className="space-y-4">
+      {days.map((day, di) => (
+        <div key={di}>
+          <div className="text-xs font-bold mb-2 pt-1" style={{ color: '#3a3a5a' }}>{day.date}</div>
+          {(day.matches || []).map((m, mi) => (
+            <div key={mi} className="flex items-center py-2.5" style={{ borderBottom: '1px solid #0e0e18' }}>
+              <div className="shrink-0 w-14 text-xs font-black tabular-nums" style={{ color: '#2a3050' }}>{m.time}</div>
+              <div className="flex-1 text-sm font-bold text-white text-right pr-3 truncate">{m.home}</div>
+              <div className="shrink-0 text-xs font-black px-1" style={{ color: '#1e1e38' }}>vs</div>
+              <div className="flex-1 text-sm font-bold text-white pl-3 truncate">{m.away}</div>
+              {m.group && <div className="shrink-0 ml-2 text-xs" style={{ color: '#252540' }}>{m.group}</div>}
+            </div>
+          ))}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function WeeklyScheduleCard({ post, onOpen, onGoToMatches }) {
+  const d = post.cardData;
+  const [page, setPage] = useState(0);
+  if (!d) return <CustomImageFeedCard post={post} onOpen={onOpen} />;
+
+  const pages = splitSchedulePages(d.days);
+  const total = pages.length;
+
+  return (
+    <div className="h-full flex flex-col" style={{ background: '#080810' }}>
+      {/* 헤더 */}
+      <div className="px-5 pt-6 pb-4 shrink-0">
+        <div className="text-xs font-bold tracking-widest mb-2" style={{ color: '#3a3a5a' }}>
+          {d.competition || 'SCHEDULE'}
+        </div>
+        <div className="font-black text-white leading-tight" style={{ fontSize: '30px', letterSpacing: '-0.5px' }}>
+          이번주<br />경기 일정
+        </div>
+        <div className="mt-2 flex items-center gap-2">
+          <span className="text-sm font-medium" style={{ color: '#4a4a6a' }}>{d.period}</span>
+          {total > 1 && (
+            <div className="flex items-center gap-1 ml-auto">
+              {pages.map((_, i) => (
+                <div key={i} className="rounded-full transition-all"
+                  style={{ width: i === page ? '14px' : '5px', height: '5px', background: i === page ? '#fff' : '#2a2a4a' }} />
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+
+      <div className="mx-5 shrink-0" style={{ height: '1px', background: '#141420' }} />
+
+      {/* 경기 목록 */}
+      <div className="flex-1 relative overflow-hidden">
+        <div className="absolute inset-0 px-5 py-3 overflow-y-auto" style={{ scrollbarWidth: 'none' }}>
+          <ScheduleMatchList days={pages[page] || []} />
+        </div>
+        {/* 좌우 탭 (멀티 페이지일 때만) */}
+        {total > 1 && page > 0 && (
+          <button className="absolute left-0 top-0 bottom-0 w-1/4 z-10" style={{ background: 'transparent' }}
+            onClick={e => { e.stopPropagation(); setPage(p => Math.max(0, p - 1)); }} />
+        )}
+        {total > 1 && page < total - 1 && (
+          <button className="absolute right-0 top-0 bottom-0 w-1/4 z-10" style={{ background: 'transparent' }}
+            onClick={e => { e.stopPropagation(); setPage(p => Math.min(total - 1, p + 1)); }} />
+        )}
+      </div>
+
+      <div className="mx-5 shrink-0" style={{ height: '1px', background: '#141420' }} />
+
+      {/* 푸터 */}
+      <div className="px-5 py-3 shrink-0 flex items-center gap-2">
+        <span className="text-xs font-black" style={{ color: '#34d399' }}>PLICK</span>
+        <span className="text-xs font-bold px-1.5 py-0.5 rounded" style={{ background: '#0d2a1a', color: '#34d399' }}>경기 일정</span>
+        {onGoToMatches && (
+          <button onClick={(e) => { e.stopPropagation(); onGoToMatches(); }}
+            className="ml-auto text-xs font-bold px-2 py-1 rounded-lg"
+            style={{ background: '#11141d', color: '#60a5fa', border: '1px solid #1e3a5f' }}>
+            경기 전체 보기 →
+          </button>
+        )}
+        {total > 1 && !onGoToMatches && (
+          <span className="text-xs ml-auto" style={{ color: '#2a2a4a' }}>{page + 1} / {total}</span>
+        )}
+      </div>
+
+      <ActionBar post={post} onOpen={onOpen} />
+    </div>
+  );
+}
+
+function CustomImageFeedCard({ post, onOpen }) {
+  const multiImage = post.imageUrls && post.imageUrls.length > 1;
+  const urls = post.imageUrls && post.imageUrls.length > 0 ? post.imageUrls : (post.imageUrl ? [post.imageUrl] : []);
+
+  return (
+    <div className="h-full relative overflow-hidden" style={{ background: '#000' }}>
+      {/* 이미지 — 오버레이 없이 선명하게 */}
+      {urls.length > 1 ? (
+        <ImageCarousel urls={urls} />
+      ) : urls.length === 1 ? (
+        <img src={urls[0]} alt="" className="absolute inset-0 w-full h-full object-cover object-top" />
+      ) : null}
+
+      {/* 하단 그라디언트 (텍스트 가독성용) */}
+      <div className="absolute bottom-0 left-0 right-0 pointer-events-none"
+        style={{ height: '130px', background: 'linear-gradient(to top, rgba(0,0,0,0.88) 0%, transparent 100%)' }} />
+
+      <ActionBar post={post} onOpen={onOpen} />
+
+      {/* 하단 메타 */}
+      <div className="absolute bottom-0 left-0 px-5 pb-3 z-10" style={{ right: '68px' }}>
+        <div className="flex gap-2 mb-2 flex-wrap">
+          <span className="text-xs font-bold px-1.5 py-0.5 rounded"
+            style={{ background: '#0d2a1a', color: '#34d399' }}>
+            {CARD_TYPE_LABEL[post.cardType] || '콘텐츠'}
+          </span>
+          {post.club && <Badge type="club" value={post.club} />}
+        </div>
+        <h2 className="font-black text-white leading-tight mb-1" style={{ fontSize: '22px', letterSpacing: '-0.3px' }}>
+          {post.title}
+        </h2>
+        {post.summary && (
+          <p className="text-sm" style={{ color: 'rgba(255,255,255,0.55)' }}>{post.summary}</p>
+        )}
+        <div className="flex items-center gap-1.5 mt-1.5">
+          <span className="text-xs font-bold" style={{ color: '#34d399' }}>PLICK</span>
+          <span className="text-xs" style={{ color: '#3a3a5a' }}>· {post.tweet?.timeAgo}</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function FeedCard({ post, selectedTeam, onOpen, vote, onGoToMatches }) {
+  if (post.isCustom && post.cardData) return <WeeklyScheduleCard post={post} onOpen={onOpen} onGoToMatches={onGoToMatches} />;
+  if (post.isCustom) return <CustomImageFeedCard post={post} onOpen={onOpen} />;
+
   const isDebate = post.type === 'debate' || post.type === 'today_debate' || post.type === 'hot_debate';
   const isToday = post.type === 'today_debate';
   const isSentimental = post.type === 'sentimental';
@@ -257,7 +450,13 @@ function FeedCard({ post, selectedTeam, onOpen, vote }) {
         {post.tweet && (
           <div className="flex items-center gap-1.5 mt-2">
             <span className="text-xs font-semibold" style={{ color: '#4a4a6a' }}>{post.tweet.author}</span>
-            <span className="text-xs font-bold px-1.5 py-0.5 rounded" style={{ background: '#2a1f00', color: '#f4a100' }}>T{post.tweet.tier}</span>
+            {post.isCustom ? (
+              <span className="text-xs font-bold px-1.5 py-0.5 rounded" style={{ background: '#0d2a1a', color: '#34d399' }}>{CARD_TYPE_LABEL[post.cardType] || '콘텐츠'}</span>
+            ) : post.tweet.specialist ? (
+              <span className="text-xs font-bold px-1.5 py-0.5 rounded" style={{ background: '#2a1f00', color: '#f4a100' }}>★ 전문기자</span>
+            ) : (
+              <span className="text-xs font-bold px-1.5 py-0.5 rounded" style={{ background: '#2a1f00', color: '#f4a100' }}>T{post.tweet.tier}</span>
+            )}
             <span className="text-xs" style={{ color: '#3a3a5a' }}>· {post.tweet.timeAgo}</span>
           </div>
         )}
@@ -294,7 +493,7 @@ function FeedCard({ post, selectedTeam, onOpen, vote }) {
 }
 
 /* ─── Feed tab ─── */
-function FeedView({ posts, selectedTeam, onOpen, onIndexChange, votes, onRead }) {
+function FeedView({ posts, selectedTeam, onOpen, onIndexChange, votes, onRead, onGoToMatches }) {
   const scrollRef = useRef(null);
   const readTimerRef = useRef(null);
 
@@ -329,7 +528,7 @@ function FeedView({ posts, selectedTeam, onOpen, onIndexChange, votes, onRead })
       style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
       {posts.map((post) => (
         <div key={post.id} className="snap-start" style={{ height: '100%' }}>
-          <FeedCard post={post} selectedTeam={selectedTeam} onOpen={() => onOpen(post)} vote={votes?.[post.id]} />
+          <FeedCard post={post} selectedTeam={selectedTeam} onOpen={() => onOpen(post)} vote={votes?.[post.id]} onGoToMatches={onGoToMatches} />
         </div>
       ))}
     </div>
@@ -691,12 +890,141 @@ function MyView({ selectedTeam, votes, posts, onOpen }) {
   );
 }
 
+/* ─── 경기 탭 ─── */
+const KST_OFFSET_MS = 9 * 60 * 60 * 1000;
+function matchDateKey(iso) {
+  const k = new Date(new Date(iso).getTime() + KST_OFFSET_MS);
+  return `${k.getUTCFullYear()}-${k.getUTCMonth()}-${k.getUTCDate()}`;
+}
+function matchDateLabel(iso) {
+  const k = new Date(new Date(iso).getTime() + KST_OFFSET_MS);
+  const dow = ['일', '월', '화', '수', '목', '금', '토'][k.getUTCDay()];
+  return `${k.getUTCMonth() + 1}월 ${k.getUTCDate()}일 (${dow})`;
+}
+function matchTimeLabel(iso) {
+  const k = new Date(new Date(iso).getTime() + KST_OFFSET_MS);
+  return `${String(k.getUTCHours()).padStart(2, '0')}:${String(k.getUTCMinutes()).padStart(2, '0')}`;
+}
+function isToday(iso) {
+  return matchDateKey(iso) === matchDateKey(new Date().toISOString());
+}
+
+function MatchStatusBadge({ status }) {
+  if (status === 'live') return (
+    <span className="text-xs font-black px-1.5 py-0.5 rounded flex items-center gap-1"
+      style={{ background: '#2a0a0a', color: '#f87171' }}>
+      <span className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ background: '#f87171' }} />LIVE
+    </span>
+  );
+  if (status === 'finished') return (
+    <span className="text-xs font-bold px-1.5 py-0.5 rounded" style={{ background: '#14141e', color: '#4a4a6a' }}>종료</span>
+  );
+  return null;
+}
+
+function MatchRow({ m }) {
+  const finished = m.status === 'finished' || m.status === 'live';
+  return (
+    <div className="flex items-center py-3" style={{ borderBottom: '1px solid #0e0e18' }}>
+      <div className="shrink-0 w-12 flex flex-col items-start">
+        {finished ? <MatchStatusBadge status={m.status} /> : (
+          <span className="text-xs font-black tabular-nums" style={{ color: '#2a3050' }}>{matchTimeLabel(m.kickoff_at)}</span>
+        )}
+      </div>
+      <div className="flex-1 flex items-center justify-end gap-1.5 pr-2 min-w-0">
+        <span className="text-sm font-bold text-white truncate">{m.home_team}</span>
+        {m.home_flag && <span className="text-base shrink-0">{m.home_flag}</span>}
+      </div>
+      <div className="shrink-0 px-1 text-center" style={{ minWidth: '44px' }}>
+        {finished && m.home_score != null ? (
+          <span className="text-sm font-black text-white tabular-nums">{m.home_score} : {m.away_score}</span>
+        ) : (
+          <span className="text-xs font-black" style={{ color: '#1e1e38' }}>vs</span>
+        )}
+      </div>
+      <div className="flex-1 flex items-center gap-1.5 pl-2 min-w-0">
+        {m.away_flag && <span className="text-base shrink-0">{m.away_flag}</span>}
+        <span className="text-sm font-bold text-white truncate">{m.away_team}</span>
+      </div>
+      {m.group_name && <span className="shrink-0 ml-2 text-xs w-8 text-right" style={{ color: '#252540' }}>{m.group_name}</span>}
+    </div>
+  );
+}
+
+function MatchView() {
+  const [matches, setMatches] = useState(null);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    let alive = true;
+    fetch('/api/matches?range=week')
+      .then(r => r.json())
+      .then(d => { if (alive) setMatches(Array.isArray(d.matches) ? d.matches : []); })
+      .catch(() => { if (alive) { setError('경기 정보를 불러오지 못했습니다.'); setMatches([]); } });
+    return () => { alive = false; };
+  }, []);
+
+  if (matches === null) {
+    return <div className="h-full flex items-center justify-center text-sm" style={{ color: '#3a3a5a' }}>불러오는 중…</div>;
+  }
+  if (matches.length === 0) {
+    return (
+      <div className="h-full flex flex-col items-center justify-center px-6">
+        <div className="text-4xl mb-3">⚽</div>
+        <div className="text-sm text-white mb-1">{error || '이번주 등록된 경기가 없습니다'}</div>
+        <div className="text-xs" style={{ color: '#3a3a5a' }}>경기가 등록되면 여기에 표시됩니다</div>
+      </div>
+    );
+  }
+
+  const todayMatches = matches.filter(m => isToday(m.kickoff_at));
+  // 날짜별 그룹
+  const groups = [];
+  const map = {};
+  for (const m of matches) {
+    const key = matchDateKey(m.kickoff_at);
+    if (!map[key]) { map[key] = { label: matchDateLabel(m.kickoff_at), items: [] }; groups.push(map[key]); }
+    map[key].items.push(m);
+  }
+
+  return (
+    <div className="h-full overflow-y-auto pb-6" style={{ scrollbarWidth: 'none' }}>
+      <div className="px-5 pt-6 pb-3">
+        <h1 className="font-black text-white" style={{ fontSize: '26px', letterSpacing: '-0.5px' }}>경기</h1>
+        <div className="text-xs mt-1" style={{ color: '#4a4a6a' }}>이번주 일정 · 결과</div>
+      </div>
+
+      {todayMatches.length > 0 && (
+        <div className="px-5 mb-5">
+          <div className="text-xs font-black tracking-widest mb-2" style={{ color: '#34d399' }}>오늘의 경기</div>
+          <div className="rounded-2xl px-4 py-1" style={{ background: '#0b0d14', border: '1px solid #16301f' }}>
+            {todayMatches.map(m => <MatchRow key={m.id} m={m} />)}
+          </div>
+        </div>
+      )}
+
+      <div className="px-5">
+        <div className="text-xs font-black tracking-widest mb-2" style={{ color: '#3a3a5a' }}>이번주 경기</div>
+        <div className="rounded-2xl px-4 py-2 space-y-3" style={{ background: '#0b0d14', border: '1px solid #141420' }}>
+          {groups.map((g, i) => (
+            <div key={i}>
+              <div className="text-xs font-bold pt-1 pb-0.5" style={{ color: '#3a3a5a' }}>{g.label}</div>
+              {g.items.map(m => <MatchRow key={m.id} m={m} />)}
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /* ─── Bottom nav ─── */
 function BottomNav({ activeTab, onChange, selectedTeam }) {
   const tc = selectedTeam?.primaryColor || '#fff';
   const items = [
     { id: 'feed',   icon: '☰', label: '피드' },
     { id: 'hot',    icon: '⚡', label: 'HOT' },
+    { id: 'match',  icon: '⚽', label: '경기' },
     { id: 'search', icon: '⌕', label: '검색' },
     { id: 'my',     icon: '◐', label: 'MY' },
   ];
@@ -778,11 +1106,13 @@ export default function EPLFeed({ selectedTeam }) {
             onIndexChange={setCurrentIndex}
             votes={votes}
             onRead={markRead}
+            onGoToMatches={() => setActiveTab('match')}
           />
         )}
         {activeTab === 'hot' && (
           <HotView posts={posts} onOpen={(post) => { markRead(post.id); setPanelPost(post); }} />
         )}
+        {activeTab === 'match' && <MatchView />}
         {activeTab === 'search' && <SearchView />}
         {activeTab === 'my' && (
           <MyView
