@@ -1,0 +1,19 @@
+{
+  "template_id": "plick_transfer_v1",
+  "width": 1080,
+  "height": 1350,
+  "safe_area": {
+    "top": 180,
+    "bottom": 180
+  },
+  "pages": [
+    {
+      "page": 1,
+      "filename": "1p.png"
+    },
+    {
+      "page": 2,
+      "filename": "2p.png"
+    }
+  ]
+}
