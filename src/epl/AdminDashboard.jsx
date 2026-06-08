@@ -1981,7 +1981,7 @@ function MatchManagerModal({ adminToken, headers, onClose, onMessage }) {
 
   const load = async () => {
     try {
-      const res = await fetch('/api/admin/matches', { headers });
+      const res = await fetch('/api/matches?range=all', { headers });
       const data = await res.json();
       setMatches(Array.isArray(data.matches) ? data.matches : []);
     } catch { setMatches([]); }
@@ -2001,7 +2001,7 @@ function MatchManagerModal({ adminToken, headers, onClose, onMessage }) {
   const addMatch = async () => {
     setBusy(true);
     try {
-      const res = await fetch('/api/admin/matches', {
+      const res = await fetch('/api/matches', {
         method: 'POST', headers,
         body: JSON.stringify({
           competition, kickoff_at: toIso(),
@@ -2023,7 +2023,7 @@ function MatchManagerModal({ adminToken, headers, onClose, onMessage }) {
   const removeMatch = async (id) => {
     setBusy(true);
     try {
-      const res = await fetch(`/api/admin/matches?id=${encodeURIComponent(id)}`, { method: 'DELETE', headers });
+      const res = await fetch(`/api/matches?id=${encodeURIComponent(id)}`, { method: 'DELETE', headers });
       if (!res.ok) { const d = await res.json(); throw new Error(d.error || '삭제 실패'); }
       await load();
     } catch (e) { onMessage('bad', e.message); } finally { setBusy(false); }
