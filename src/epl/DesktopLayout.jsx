@@ -210,7 +210,55 @@ function Sidebar({ selectedTeam, clubFilter, onClubFilterChange, posts, selected
 }
 
 /* ─── Desktop feed card (가로형) ─── */
+function DesktopScheduleCard({ post, selected, onSelect }) {
+  const d = post.cardData;
+  return (
+    <div onClick={onSelect} className="rounded-2xl overflow-hidden cursor-pointer"
+      style={{
+        background: '#0a0a14',
+        border: selected ? '1.5px solid #3b82f6' : '1.5px solid #141420',
+        boxShadow: selected ? '0 0 0 3px #3b82f615' : 'none',
+      }}>
+      {/* 헤더 */}
+      <div className="px-5 pt-4 pb-3 flex items-start justify-between gap-4">
+        <div>
+          <div className="text-xs font-bold mb-1" style={{ color: '#3a3a5a' }}>{d?.competition}</div>
+          <div className="font-black text-white" style={{ fontSize: '16px' }}>이번주 경기 일정</div>
+          <div className="text-xs mt-0.5" style={{ color: '#4a4a6a' }}>{d?.period}</div>
+        </div>
+        <div className="flex items-center gap-1.5 shrink-0">
+          <span className="text-xs font-black" style={{ color: '#34d399' }}>PLICK</span>
+          <span className="text-xs font-bold px-1.5 py-0.5 rounded" style={{ background: '#0d2a1a', color: '#34d399' }}>경기 일정</span>
+        </div>
+      </div>
+
+      <div className="mx-5" style={{ height: '1px', background: '#141420' }} />
+
+      {/* 경기 테이블 */}
+      <div className="px-5 py-3">
+        {(d?.days || []).map((day, di) => (
+          <div key={di} className={di > 0 ? 'mt-3' : ''}>
+            <div className="text-xs font-bold mb-1.5" style={{ color: '#3a3a5a' }}>{day.date}</div>
+            {(day.matches || []).map((m, mi) => (
+              <div key={mi} className="flex items-center py-1.5 gap-3"
+                style={{ borderBottom: '1px solid #0d0d16' }}>
+                <span className="text-xs font-black tabular-nums w-12 shrink-0" style={{ color: '#252540' }}>{m.time}</span>
+                <span className="flex-1 text-sm font-bold text-white text-right truncate">{m.home}</span>
+                <span className="text-xs font-black shrink-0" style={{ color: '#1a1a30' }}>vs</span>
+                <span className="flex-1 text-sm font-bold text-white truncate">{m.away}</span>
+                {m.group && <span className="text-xs shrink-0" style={{ color: '#1e2030' }}>{m.group}</span>}
+              </div>
+            ))}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function DesktopFeedCard({ post, selected, onSelect, vote, fillHeight = false }) {
+  if (post.isCustom && post.cardData) return <DesktopScheduleCard post={post} selected={selected} onSelect={onSelect} />;
+
   const isDebate = isDebateType(post);
   const isToday = post.type === 'today_debate';
   const accent = isToday ? '#fbbf24' : '#e63946';
