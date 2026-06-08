@@ -46,6 +46,14 @@ function LiveTicker() {
   );
 }
 
+const CARD_TYPE_LABEL = {
+  schedule: '경기 일정',
+  today: '오늘의 경기',
+  result: '경기 결과',
+  standings: '순위표',
+  lineup: '라인업',
+};
+
 const STATUS_CFG = {
   Official: { bg: '#052818', color: '#34d399', dot: '#22c55e' },
   Confirmed: { bg: '#04263a', color: '#22d3ee', dot: '#06b6d4' },
@@ -258,7 +266,9 @@ function FeedCard({ post, selectedTeam, onOpen, vote }) {
         {post.tweet && (
           <div className="flex items-center gap-1.5 mt-2">
             <span className="text-xs font-semibold" style={{ color: '#4a4a6a' }}>{post.tweet.author}</span>
-            {post.tweet.specialist ? (
+            {post.isCustom ? (
+              <span className="text-xs font-bold px-1.5 py-0.5 rounded" style={{ background: '#0d2a1a', color: '#34d399' }}>{CARD_TYPE_LABEL[post.cardType] || '콘텐츠'}</span>
+            ) : post.tweet.specialist ? (
               <span className="text-xs font-bold px-1.5 py-0.5 rounded" style={{ background: '#2a1f00', color: '#f4a100' }}>★ 전문기자</span>
             ) : (
               <span className="text-xs font-bold px-1.5 py-0.5 rounded" style={{ background: '#2a1f00', color: '#f4a100' }}>T{post.tweet.tier}</span>

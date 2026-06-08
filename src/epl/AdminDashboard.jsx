@@ -1823,6 +1823,143 @@ function DebateModal({ item, onClose, onSave, busy }) {
   );
 }
 
+const CARD_TYPE_OPTIONS = [
+  { value: 'schedule', label: '경기 일정' },
+  { value: 'today', label: '오늘의 경기' },
+  { value: 'result', label: '경기 결과' },
+  { value: 'standings', label: '조별리그 순위' },
+  { value: 'lineup', label: '선발 라인업' },
+];
+
+function CustomCardModal({ onClose, onSave, busy }) {
+  const [file, setFile] = useState(null);
+  const [previewUrl, setPreviewUrl] = useState('');
+  const [cardType, setCardType] = useState('schedule');
+  const [title, setTitle] = useState('');
+  const [description, setDescription] = useState('');
+  const [teamTags, setTeamTags] = useState([]);
+  const [withDebate, setWithDebate] = useState(false);
+  const [question, setQuestion] = useState('');
+  const [forLabel, setForLabel] = useState('');
+  const [againstLabel, setAgainstLabel] = useState('');
+
+  const onPickFile = (f) => {
+    setFile(f);
+    setPreviewUrl(f ? URL.createObjectURL(f) : '');
+  };
+
+  const canSave = Boolean(file && title.trim() && cardType)
+    && (!withDebate || (question.trim() && forLabel.trim() && againstLabel.trim()));
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      style={{ background: 'rgba(0,0,0,0.7)' }}
+      onClick={e => e.target === e.currentTarget && onClose()}>
+      <div className="max-h-[90vh] w-full max-w-lg min-w-0 overflow-auto rounded-xl p-6" style={{ background: '#0f1118', border: '1px solid #2a3040' }}>
+        <div className="mb-4 text-lg font-black text-white">콘텐츠 직접 올리기</div>
+
+        <label className="mb-3 block">
+          <span className="mb-1 block text-xs font-bold uppercase" style={{ color: '#687086' }}>이미지 *</span>
+          <input type="file" accept="image/png,image/jpeg,image/webp,image/gif"
+            onChange={e => onPickFile(e.target.files?.[0] || null)}
+            className="w-full text-sm" style={{ color: '#a8b0c7' }} />
+        </label>
+        {previewUrl && (
+          <img src={previewUrl} alt="preview" className="mb-3 max-h-60 w-full rounded-md object-contain"
+            style={{ background: '#11141d', border: '1px solid #283040' }} />
+        )}
+
+        <label className="mb-3 block">
+          <span className="mb-1 block text-xs font-bold uppercase" style={{ color: '#687086' }}>유형 *</span>
+          <select value={cardType} onChange={e => setCardType(e.target.value)}
+            className="w-full rounded-md px-3 py-2 text-sm font-bold outline-none"
+            style={{ background: '#11141d', color: '#fff', border: '1px solid #283040' }}>
+            {CARD_TYPE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+          </select>
+        </label>
+
+        <label className="mb-3 block">
+          <span className="mb-1 block text-xs font-bold uppercase" style={{ color: '#687086' }}>제목 *</span>
+          <input value={title} onChange={e => setTitle(e.target.value)}
+            placeholder="예: 이번주 경기 일정"
+            className="w-full rounded-md px-3 py-2 text-sm outline-none"
+            style={{ background: '#11141d', color: '#fff', border: '1px solid #283040' }} />
+        </label>
+
+        <label className="mb-3 block">
+          <span className="mb-1 block text-xs font-bold uppercase" style={{ color: '#687086' }}>설명</span>
+          <textarea value={description} onChange={e => setDescription(e.target.value)} rows={3}
+            placeholder="카드 설명/캡션"
+            className="w-full rounded-md px-3 py-2 text-sm leading-6 outline-none"
+            style={{ background: '#11141d', color: '#fff', border: '1px solid #283040' }} />
+        </label>
+
+        <div className="mb-3">
+          <span className="mb-1 block text-xs font-bold uppercase" style={{ color: '#687086' }}>팀 태그</span>
+          <div className="flex flex-wrap gap-1.5">
+            {TEAM_OPTIONS.map(team => {
+              const active = teamTags.includes(team);
+              return (
+                <button key={team} type="button"
+                  onClick={() => setTeamTags(active ? teamTags.filter(t => t !== team) : [...teamTags, team])}
+                  className="rounded px-2.5 py-1 text-xs font-black"
+                  style={{
+                    background: active ? '#1e3a5f' : '#11141d',
+                    color: active ? '#60a5fa' : '#4a5568',
+                    border: active ? '1px solid #3b82f6' : '1px solid #283040',
+                  }}>
+                  {team}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        <label className="mb-3 flex items-center gap-2">
+          <input type="checkbox" checked={withDebate} onChange={e => setWithDebate(e.target.checked)} />
+          <span className="text-sm font-bold" style={{ color: '#cbd3e8' }}>논쟁 추가</span>
+        </label>
+        {withDebate && (
+          <div className="mb-3 space-y-3 rounded-md p-3" style={{ background: '#0b0d14', border: '1px solid #202635' }}>
+            <input value={question} onChange={e => setQuestion(e.target.value)}
+              placeholder="논쟁 질문 *"
+              className="w-full rounded-md px-3 py-2 text-sm outline-none"
+              style={{ background: '#11141d', color: '#fff', border: '1px solid #283040' }} />
+            <div className="grid grid-cols-2 gap-3">
+              <input value={forLabel} onChange={e => setForLabel(e.target.value)} placeholder="선택지 A *"
+                className="w-full rounded-md px-3 py-2 text-sm outline-none"
+                style={{ background: '#11141d', color: '#fff', border: '1px solid #283040' }} />
+              <input value={againstLabel} onChange={e => setAgainstLabel(e.target.value)} placeholder="선택지 B *"
+                className="w-full rounded-md px-3 py-2 text-sm outline-none"
+                style={{ background: '#11141d', color: '#fff', border: '1px solid #283040' }} />
+            </div>
+          </div>
+        )}
+
+        <div className="flex justify-end gap-2">
+          <button onClick={onClose}
+            className="rounded-md px-4 py-2 text-sm font-bold"
+            style={{ background: '#171923', color: '#a8b0c7', border: '1px solid #2a3040' }}>
+            취소
+          </button>
+          <button disabled={busy || !canSave}
+            onClick={() => onSave({
+              file, card_type: cardType, title: title.trim(), description: description.trim(),
+              team_tags: teamTags,
+              debate_question: withDebate ? question.trim() : null,
+              vote_for_label: withDebate ? forLabel.trim() : null,
+              vote_against_label: withDebate ? againstLabel.trim() : null,
+            })}
+            className="rounded-md px-4 py-2 text-sm font-bold disabled:opacity-50"
+            style={{ background: '#1f6f4a', color: '#fff' }}>
+            발행
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function AdminDashboard() {
   const [adminToken, setAdminToken] = useState(() => localStorage.getItem('epl_admin_token') || '');
   const [cronSecret, setCronSecret] = useState(() => localStorage.getItem('epl_cron_secret') || '');
@@ -1837,6 +1974,7 @@ export default function AdminDashboard() {
   const [loaded, setLoaded] = useState(false);
   const [debateModal, setDebateModal] = useState(null);
   const [cardNewsSeed, setCardNewsSeed] = useState(null);
+  const [customModal, setCustomModal] = useState(false);
   const [newIds, setNewIds] = useState(new Set());
   const isInitialLoading = Boolean(adminToken && busy && !loaded && !error);
 
@@ -2012,6 +2150,53 @@ export default function AdminDashboard() {
     }
   };
 
+  const customCreate = async (form) => {
+    setBusy(true);
+    setMessage('');
+    setError('');
+    try {
+      let imageUrl = form.image_url;
+      if (form.file) {
+        const up = await fetch('/api/admin/upload', {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${adminToken}`, 'Content-Type': form.file.type },
+          body: form.file,
+        });
+        const upData = await readJsonResponse(up);
+        if (!up.ok) throw new Error(upData.error || 'Image upload failed');
+        imageUrl = upData.url;
+      }
+      if (!imageUrl) throw new Error('이미지를 선택해 주세요.');
+
+      const response = await fetch('/api/admin/custom', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          image_url: imageUrl,
+          card_type: form.card_type,
+          title: form.title,
+          description: form.description,
+          team_tags: form.team_tags,
+          debate_question: form.debate_question || null,
+          vote_for_label: form.vote_for_label || null,
+          vote_against_label: form.vote_against_label || null,
+          actor: 'admin-ui',
+        }),
+      });
+      const data = await readJsonResponse(response);
+      if (!response.ok) throw new Error(data.error || 'Custom card create failed');
+      setCustomModal(false);
+      setMessageTone('good');
+      setMessage('커스텀 카드가 발행됐습니다.');
+      await loadItems({ preserveMessage: true });
+    } catch (error) {
+      setMessageTone('bad');
+      setMessage(error.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const runCollection = async () => {
     if (!cronSecret) {
       setMessageTone('warn');
@@ -2053,6 +2238,13 @@ export default function AdminDashboard() {
           onSave={data => debateAction(debateModal, data)}
         />
       )}
+      {customModal && (
+        <CustomCardModal
+          busy={busy}
+          onClose={() => setCustomModal(false)}
+          onSave={customCreate}
+        />
+      )}
       <div className="mx-auto w-full max-w-7xl px-5 py-6" style={{ maxWidth: '100vw' }}>
         <header className="flex min-w-0 flex-col gap-4 border-b pb-5 lg:flex-row lg:items-end"
           style={{ borderColor: '#1c2230' }}>
@@ -2088,6 +2280,11 @@ export default function AdminDashboard() {
               className="rounded-md px-4 py-2 text-sm font-bold disabled:opacity-50"
               style={{ background: '#2557ff', color: '#fff' }}>
               Run collection
+            </button>
+            <button onClick={() => setCustomModal(true)} disabled={busy || !adminToken}
+              className="rounded-md px-4 py-2 text-sm font-bold disabled:opacity-50"
+              style={{ background: '#1f6f4a', color: '#fff' }}>
+              직접 올리기
             </button>
           </div>
         </header>

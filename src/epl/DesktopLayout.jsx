@@ -17,6 +17,14 @@ function useWindowWidth() {
   return w;
 }
 
+const CARD_TYPE_LABEL = {
+  schedule: '경기 일정',
+  today: '오늘의 경기',
+  result: '경기 결과',
+  standings: '순위표',
+  lineup: '라인업',
+};
+
 const STATUS_CFG = {
   Official: { bg: '#052818', color: '#34d399', dot: '#22c55e' },
   Confirmed: { bg: '#04263a', color: '#22d3ee', dot: '#06b6d4' },
@@ -283,10 +291,17 @@ function DesktopFeedCard({ post, selected, onSelect, vote, fillHeight = false })
                 {post.tweet.initials}
               </div>
               <span className="text-xs truncate" style={{ color: '#6b6f88' }}>{post.tweet.author}</span>
-              <span className="text-xs font-bold px-1.5 py-0.5 rounded shrink-0"
-                style={{ background: '#2a1f00', color: '#f4a100' }}>
-                {post.tweet.specialist ? '★ 전문기자' : `T${post.tweet.tier}`}
-              </span>
+              {post.isCustom ? (
+                <span className="text-xs font-bold px-1.5 py-0.5 rounded shrink-0"
+                  style={{ background: '#0d2a1a', color: '#34d399' }}>
+                  {CARD_TYPE_LABEL[post.cardType] || '콘텐츠'}
+                </span>
+              ) : (
+                <span className="text-xs font-bold px-1.5 py-0.5 rounded shrink-0"
+                  style={{ background: '#2a1f00', color: '#f4a100' }}>
+                  {post.tweet.specialist ? '★ 전문기자' : `T${post.tweet.tier}`}
+                </span>
+              )}
               <span className="text-xs ml-auto shrink-0" style={{ color: '#3a3a5a' }}>{post.tweet.timeAgo}</span>
             </div>
           )}

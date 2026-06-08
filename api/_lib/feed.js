@@ -38,6 +38,7 @@ function mapItemToPost(item) {
   const handle = item.raw_author_handle || item.source_handle || 'x';
 
   const isDebate = Boolean(item.debate_question);
+  const isCustom = Boolean(item.is_custom);
 
   return {
     id: `live-${item.id}`,
@@ -45,7 +46,15 @@ function mapItemToPost(item) {
     title: briefing.title || item.raw_text?.slice(0, 80) || 'EPL 업데이트',
     summary: briefing.summary_short || item.raw_text || '',
     briefing: briefing.summary_detail || item.raw_text || '',
-    tweet: {
+    isCustom,
+    cardType: item.card_type || null,
+    tweet: isCustom ? {
+      author: 'PLICK',
+      initials: 'PL',
+      handle: '@plick_football',
+      timeAgo: item.raw_created_at ? new Date(item.raw_created_at).toLocaleString('ko-KR') : '',
+      text: '',
+    } : {
       author: item.raw_author_name || handle,
       initials: initials(handle),
       handle: `@${String(handle).replace(/^@/, '')}`,
