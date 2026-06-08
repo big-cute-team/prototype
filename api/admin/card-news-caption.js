@@ -13,6 +13,18 @@ const REQUIRED_HASHTAGS = [
   '#빅6',
   '#Football',
 ];
+const DISCOVERY_HASHTAGS = [
+  '#축구',
+  '#축구소식',
+  '#축구스타그램',
+  '#축구팬',
+  '#해외축구소식',
+  '#EPL뉴스',
+  '#프리미어리그뉴스',
+  '#PremierLeague',
+];
+const BASE_HASHTAGS = [...REQUIRED_HASHTAGS, ...DISCOVERY_HASHTAGS];
+const MAX_HASHTAG_COUNT = 26;
 
 function openAiBaseUrl() {
   return String(process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1').replace(/\/$/, '');
@@ -55,14 +67,26 @@ function normalizeHashtags(value) {
     .map(tag => tag.replace(/[^\p{L}\p{N}_#]/gu, ''))
     .filter(tag => tag.length > 1);
 
+  const baseKeys = new Set(BASE_HASHTAGS.map(tag => tag.toLowerCase()));
+  const articleTagLimit = Math.max(0, MAX_HASHTAG_COUNT - BASE_HASHTAGS.length);
+  const articleTags = [];
+  for (const tag of tags) {
+    const key = tag.toLowerCase();
+    if (baseKeys.has(key)) continue;
+    if (!articleTags.some(existing => existing.toLowerCase() === key)) {
+      articleTags.push(tag);
+    }
+    if (articleTags.length >= articleTagLimit) break;
+  }
+
   const deduped = [];
-  for (const tag of [...tags, ...REQUIRED_HASHTAGS]) {
+  for (const tag of [...articleTags, ...BASE_HASHTAGS]) {
     const key = tag.toLowerCase();
     if (!deduped.some(existing => existing.toLowerCase() === key)) {
       deduped.push(tag);
     }
   }
-  return deduped.slice(0, 22).join(' ');
+  return deduped.slice(0, MAX_HASHTAG_COUNT).join(' ');
 }
 
 function buildSystemPrompt() {
@@ -70,10 +94,11 @@ function buildSystemPrompt() {
     'You generate Instagram hashtags only for Korean PLick football news.',
     'Return JSON only: {"hashtags":"#tag1 #tag2 ..."}',
     'Use the provided subject, headline, summary, and paragraphs only.',
-    'Add relevant Korean club/player/person/news-topic hashtags when obvious.',
+    'Generate 4 to 8 article-specific hashtags for clubs, players, people, topics, and news keywords.',
+    'Prefer Korean discovery-friendly tags, and include common English club/person abbreviations only when useful.',
+    'Do not include generic base hashtags; the server appends broad football discovery tags automatically.',
     'Do not write a caption, sentence, explanation, emoji, or source handle.',
-    `Always include these base tags: ${REQUIRED_HASHTAGS.join(' ')}`,
-    'Keep the final hashtag string concise, around 12 to 20 tags.',
+    'Keep the hashtag string concise.',
   ].join('\n');
 }
 
