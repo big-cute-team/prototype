@@ -298,6 +298,17 @@ function downloadBlob(blob, filename) {
   URL.revokeObjectURL(url);
 }
 
+function formatDuration(startedAt, now = Date.now()) {
+  const totalSeconds = Math.max(0, Math.floor((now - startedAt) / 1000));
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return `${minutes}:${String(seconds).padStart(2, '0')}`;
+}
+
+function renderJobId() {
+  return `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
 function Metric({ label, value, warn }) {
   return (
     <div className="min-h-[74px] min-w-0 rounded-md px-4 py-3"
@@ -1125,6 +1136,8 @@ function CardNewsWorkspace({ headers, adminToken, seedItem, onNotify }) {
   const [imageFile, setImageFile] = useState(null);
   const [imagePreviewUrl, setImagePreviewUrl] = useState('');
   const [busy, setBusy] = useState(false);
+  const [renderJobs, setRenderJobs] = useState([]);
+  const [renderNow, setRenderNow] = useState(Date.now());
   const [localMessage, setLocalMessage] = useState('');
   const [localTone, setLocalTone] = useState('neutral');
 
@@ -1139,6 +1152,8 @@ function CardNewsWorkspace({ headers, adminToken, seedItem, onNotify }) {
   const autoSubjectColor = selectedItem ? defaultSubjectColorForItem(selectedItem) : DEFAULT_SUBJECT_COLOR;
   const currentSubjectColor = normalizeSubjectColor(fields.subject_color);
   const previewSource = imagePreviewUrl || imageUrl.trim();
+  const activeRenderJobs = renderJobs.filter(job => job.status === 'running');
+  const isRenderingZip = activeRenderJobs.length > 0;
 
   const setNotice = (tone, text) => {
     setLocalTone(tone);
@@ -1211,8 +1226,18 @@ function CardNewsWorkspace({ headers, adminToken, seedItem, onNotify }) {
     return () => URL.revokeObjectURL(url);
   }, [imageFile]);
 
+  useEffect(() => {
+    if (activeRenderJobs.length === 0) return undefined;
+    const timer = window.setInterval(() => setRenderNow(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, [activeRenderJobs.length]);
+
   const updateField = (name, value) => {
     setFields(prev => ({ ...prev, [name]: value }));
+  };
+
+  const updateRenderJob = (jobId, patch) => {
+    setRenderJobs(prev => prev.map(job => (job.id === jobId ? { ...job, ...patch } : job)).slice(0, 5));
   };
 
   const generateDraft = async () => {
@@ -1240,35 +1265,56 @@ function CardNewsWorkspace({ headers, adminToken, seedItem, onNotify }) {
   };
 
   const renderCardNews = async () => {
-    if (!selectedItem) {
+    const item = selectedItem;
+    const file = imageFile;
+    const imageUrlValue = imageUrl.trim();
+    const card = cardFromFields(fields);
+
+    if (!item) {
       setNotice('warn', '먼저 발행된 기사를 선택해주세요.');
       return;
     }
-    if (!imageFile && !imageUrl.trim()) {
+    if (isRenderingZip) {
+      setNotice('warn', '이미 카드뉴스 ZIP 생성이 진행 중입니다. 완료 후 다시 시도해주세요.');
+      return;
+    }
+    if (!file && !imageUrlValue) {
       setNotice('warn', '이미지 파일을 업로드하거나 이미지 URL을 입력해주세요.');
       return;
     }
-    if (!fields.headline.trim() || !fields.summary.trim() || !fields.paragraphs.trim()) {
+    if (!card.cover.headline || !card.cover.summary || !card.detail.paragraphs) {
       setNotice('warn', 'headline, summary, paragraphs는 비워둘 수 없습니다.');
       return;
     }
 
-    setBusy(true);
     setLocalMessage('');
+    const jobId = renderJobId();
+    const filename = `cardnews-${item.raw_post_id || item.id}.zip`;
+    const startedAt = Date.now();
+    setRenderNow(startedAt);
+    setRenderJobs(prev => [{
+      id: jobId,
+      status: 'running',
+      title: compactText(item.title_ko || item.raw_text, 72, '발행 기사'),
+      filename,
+      startedAt,
+      phase: file ? '이미지 읽는 중' : '카드 생성 요청 중',
+    }, ...prev].slice(0, 5));
     try {
       const body = {
-        id: selectedItem.id,
+        id: item.id,
         actor: 'admin-ui',
-        card: cardFromFields(fields),
+        card,
       };
 
-      if (imageFile) {
-        body.image_data_url = await fileToDataUrl(imageFile);
-        body.image_name = imageFile.name;
+      if (file) {
+        body.image_data_url = await fileToDataUrl(file);
+        body.image_name = file.name;
       } else {
-        body.image_url = imageUrl.trim();
+        body.image_url = imageUrlValue;
       }
 
+      updateRenderJob(jobId, { phase: '카드 이미지 생성 중' });
       const response = await fetch('/api/admin/card-news-render', {
         method: 'POST',
         headers,
@@ -1280,19 +1326,78 @@ function CardNewsWorkspace({ headers, adminToken, seedItem, onNotify }) {
         throw new Error(data.error || '카드뉴스 렌더링에 실패했습니다.');
       }
 
+      updateRenderJob(jobId, { phase: 'ZIP 다운로드 준비 중' });
       const blob = await response.blob();
-      downloadBlob(blob, `cardnews-${selectedItem.raw_post_id || selectedItem.id}.zip`);
-      setNotice('good', '카드뉴스 ZIP을 생성했습니다.');
+      downloadBlob(blob, filename);
+      updateRenderJob(jobId, {
+        status: 'success',
+        phase: '다운로드 시작됨',
+        finishedAt: Date.now(),
+        bytes: blob.size,
+      });
+      setNotice('good', `${filename} 다운로드를 시작했습니다.`);
     } catch (error) {
+      updateRenderJob(jobId, {
+        status: 'error',
+        phase: '생성 실패',
+        finishedAt: Date.now(),
+        error: error.message,
+      });
       setNotice('bad', error.message);
-    } finally {
-      setBusy(false);
     }
   };
 
   return (
     <div className="min-w-0 space-y-4">
       {localMessage && <Notice tone={localTone}>{localMessage}</Notice>}
+
+      {renderJobs.length > 0 && (
+        <div className="space-y-2 rounded-md p-3" style={{ background: '#080a10', border: '1px solid #202635' }} aria-live="polite">
+          <div className="flex items-center justify-between gap-3">
+            <div className="text-xs font-bold uppercase" style={{ color: '#687086' }}>ZIP jobs</div>
+            <div className="text-xs font-bold" style={{ color: isRenderingZip ? '#ffd166' : '#8791aa' }}>
+              {isRenderingZip ? '생성 중' : '대기 작업 없음'}
+            </div>
+          </div>
+          {renderJobs.map(job => {
+            const isRunning = job.status === 'running';
+            const isSuccess = job.status === 'success';
+            const statusColor = isRunning ? '#ffd166' : isSuccess ? '#48d99a' : '#ff8f8f';
+            return (
+              <div key={job.id} className="min-w-0 rounded px-3 py-2 text-sm" style={{ background: '#11141d', border: '1px solid #283040' }}>
+                <div className="flex min-w-0 items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="flex min-w-0 items-center gap-2">
+                      <span
+                        className={isRunning ? 'inline-block h-2.5 w-2.5 shrink-0 rounded-full animate-pulse' : 'inline-block h-2.5 w-2.5 shrink-0 rounded-full'}
+                        style={{ background: statusColor }}
+                      />
+                      <span className="min-w-0 break-words font-bold text-white" style={{ overflowWrap: 'anywhere' }}>{job.title}</span>
+                    </div>
+                    <div className="mt-1 break-words text-xs" style={{ color: '#8791aa', overflowWrap: 'anywhere' }}>
+                      {job.filename} · {job.phase} · {formatDuration(job.startedAt, isRunning ? renderNow : (job.finishedAt || renderNow))}
+                    </div>
+                    {job.error && (
+                      <div className="mt-1 break-words text-xs" style={{ color: '#ff8f8f', overflowWrap: 'anywhere' }}>
+                        {job.error}
+                      </div>
+                    )}
+                  </div>
+                  {!isRunning && (
+                    <button
+                      type="button"
+                      onClick={() => setRenderJobs(prev => prev.filter(row => row.id !== job.id))}
+                      className="shrink-0 rounded px-2 py-1 text-xs font-bold"
+                      style={{ background: '#171923', color: '#a8b0c7', border: '1px solid #2a3040' }}>
+                      닫기
+                    </button>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
 
       <div className="grid min-w-0 gap-5 xl:grid-cols-[minmax(0,0.9fr)_minmax(520px,1.1fr)]">
         <section className="min-w-0 rounded-md p-4" style={{ background: '#0b0d14', border: '1px solid #202635' }}>
@@ -1487,10 +1592,10 @@ function CardNewsWorkspace({ headers, adminToken, seedItem, onNotify }) {
             <button
               type="button"
               onClick={renderCardNews}
-              disabled={!adminToken || !selectedItem || busy}
+              disabled={!adminToken || !selectedItem || busy || isRenderingZip}
               className="w-full rounded-md px-4 py-3 text-sm font-black disabled:opacity-50"
               style={{ background: '#21c17a', color: '#03130c' }}>
-              카드뉴스 ZIP 생성
+              {isRenderingZip ? 'ZIP 생성 중' : '카드뉴스 ZIP 생성'}
             </button>
           </div>
         </section>
