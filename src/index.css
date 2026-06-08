@@ -2,6 +2,22 @@
 @tailwind components;
 @tailwind utilities;
 
+@font-face {
+  font-family: 'Pretendard';
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url('./epl/assets/PretendardVariable.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Bebas Neue';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('./epl/assets/BebasNeue-Regular.ttf') format('truetype');
+}
+
 @keyframes liveTicker {
   from { transform: translateX(0); }
   to   { transform: translateX(-50%); }
