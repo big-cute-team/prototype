@@ -196,6 +196,84 @@ function DesktopTodayMatches() {
   );
 }
 
+const MATCH_KST = 9 * 60 * 60 * 1000;
+function mDateKey(iso) { const k = new Date(new Date(iso).getTime() + MATCH_KST); return `${k.getUTCFullYear()}-${k.getUTCMonth()}-${k.getUTCDate()}`; }
+function mDateLabel(iso) { const k = new Date(new Date(iso).getTime() + MATCH_KST); const d = ['일','월','화','수','목','금','토'][k.getUTCDay()]; return `${k.getUTCMonth()+1}월 ${k.getUTCDate()}일 (${d})`; }
+function mTime(iso) { const k = new Date(new Date(iso).getTime() + MATCH_KST); return `${String(k.getUTCHours()).padStart(2,'0')}:${String(k.getUTCMinutes()).padStart(2,'0')}`; }
+
+function DesktopMatchListRow({ m, onOpen }) {
+  const done = m.status === 'finished' || m.status === 'live';
+  const featured = m.is_featured && m.prediction_question;
+  return (
+    <button onClick={() => onOpen(m)}
+      className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-left hover:opacity-80"
+      style={{ background: '#0b0d14', border: `1px solid ${featured ? '#3a2e06' : '#141420'}` }}>
+      <span className="w-12 shrink-0 text-xs font-black tabular-nums" style={{ color: m.status === 'live' ? '#f87171' : '#2a3050' }}>
+        {m.status === 'live' ? 'LIVE' : done ? '종료' : mTime(m.kickoff_at)}
+      </span>
+      <span className="flex-1 text-right text-sm font-bold text-white truncate">{m.home_team} {m.home_flag}</span>
+      <span className="shrink-0 px-2 font-black text-sm" style={{ color: m.home_score != null ? '#fff' : '#1e1e38' }}>
+        {m.home_score != null ? `${m.home_score} : ${m.away_score}` : 'vs'}
+      </span>
+      <span className="flex-1 text-sm font-bold text-white truncate">{m.away_flag} {m.away_team}</span>
+      {featured ? <span className="shrink-0 text-xs font-black px-1.5 py-0.5 rounded" style={{ background: '#2a2206', color: '#fbbf24' }}>예측</span>
+        : m.group_name ? <span className="shrink-0 w-8 text-right text-xs" style={{ color: '#252540' }}>{m.group_name}</span> : null}
+    </button>
+  );
+}
+
+function DesktopMatchView() {
+  const [matches, setMatches] = useState(null);
+  const [roomMatch, setRoomMatch] = useState(null);
+
+  useEffect(() => {
+    let alive = true;
+    fetch('/api/matches?range=week').then(r => r.json())
+      .then(d => { if (alive) setMatches(Array.isArray(d.matches) ? d.matches : []); })
+      .catch(() => { if (alive) setMatches([]); });
+    return () => { alive = false; };
+  }, []);
+
+  if (matches === null) return <div className="h-full flex items-center justify-center text-sm" style={{ color: '#3a3a5a' }}>불러오는 중…</div>;
+  if (matches.length === 0) return (
+    <div className="h-full flex flex-col items-center justify-center" style={{ color: '#3a3a5a' }}>
+      <div className="text-4xl mb-3">⚽</div><div className="text-sm">이번주 등록된 경기가 없습니다</div>
+    </div>
+  );
+
+  const todayKey = mDateKey(new Date().toISOString());
+  const today = matches.filter(m => mDateKey(m.kickoff_at) === todayKey);
+  const groups = []; const map = {};
+  for (const m of matches) { const k = mDateKey(m.kickoff_at); if (!map[k]) { map[k] = { label: mDateLabel(m.kickoff_at), items: [] }; groups.push(map[k]); } map[k].items.push(m); }
+
+  return (
+    <div className="h-full overflow-y-auto px-6 py-6" style={{ scrollbarWidth: 'none' }}>
+      {roomMatch && <DesktopMatchRoomModal match={roomMatch} onClose={() => setRoomMatch(null)} />}
+      <div className="max-w-2xl mx-auto">
+        <h1 className="font-black text-white mb-1" style={{ fontSize: '24px' }}>경기</h1>
+        <div className="text-xs mb-5" style={{ color: '#4a4a6a' }}>이번주 일정 · 결과</div>
+
+        {today.length > 0 && (
+          <div className="mb-6">
+            <div className="text-xs font-black tracking-widest mb-2" style={{ color: '#34d399' }}>오늘의 경기</div>
+            <div className="space-y-2">{today.map(m => <DesktopMatchListRow key={m.id} m={m} onOpen={setRoomMatch} />)}</div>
+          </div>
+        )}
+
+        <div className="text-xs font-black tracking-widest mb-2" style={{ color: '#3a3a5a' }}>이번주 경기</div>
+        <div className="space-y-4">
+          {groups.map((g, i) => (
+            <div key={i}>
+              <div className="text-xs font-bold mb-1.5" style={{ color: '#3a3a5a' }}>{g.label}</div>
+              <div className="space-y-2">{g.items.map(m => <DesktopMatchListRow key={m.id} m={m} onOpen={setRoomMatch} />)}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function Sidebar({ selectedTeam, clubFilter, onClubFilterChange, posts, selectedPost, onSelectPost, collapsed }) {
   const tc = selectedTeam?.primaryColor || '#3b82f6';
   const hotPosts = useMemo(() => posts.filter(isDebateType).slice(0, 8), [posts]);
@@ -1099,6 +1177,7 @@ export default function DesktopLayout({ selectedTeam }) {
   const [selectedPost, setSelectedPost] = useState(null);
   const [votes, setVotes] = useState({});
   const [clubFilter, setClubFilter] = useState([]);
+  const [view, setView] = useState('feed'); // 'feed' | 'match'
 
   const filteredPosts = useMemo(() => {
     if (clubFilter.length === 0) return posts;
@@ -1129,29 +1208,39 @@ export default function DesktopLayout({ selectedTeam }) {
         collapsed={sidebarCollapsed}
       />
 
-      {/* 센터: 55% 카드 / 45% 댓글 */}
+      {/* 센터 */}
       <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
-        <div style={{ flex: 55, minHeight: 0, overflow: 'hidden' }}>
-          <CardCarousel
-            posts={filteredPosts}
-            selectedPost={selectedPost}
-            onSelect={setSelectedPost}
-            votes={votes}
-          />
+        {/* 상단 탭 */}
+        <div className="flex items-center gap-1 px-4 py-2 shrink-0" style={{ borderBottom: '1px solid #141420' }}>
+          {[{ id: 'feed', label: '피드' }, { id: 'match', label: '경기' }].map(t => (
+            <button key={t.id} onClick={() => setView(t.id)}
+              className="px-4 py-1.5 rounded-lg text-sm font-bold"
+              style={{ background: view === t.id ? '#1a1a2a' : 'transparent', color: view === t.id ? '#fff' : '#4a4a6a' }}>
+              {t.label}
+            </button>
+          ))}
         </div>
-        <div style={{ flex: 45, minHeight: 0, overflow: 'hidden', borderTop: '1px solid #141420' }}>
-          <CommentsSection post={selectedPost} />
-        </div>
+
+        {view === 'match' ? (
+          <div style={{ flex: 1, minHeight: 0 }}><DesktopMatchView /></div>
+        ) : (
+          <>
+            <div style={{ flex: 55, minHeight: 0, overflow: 'hidden' }}>
+              <CardCarousel posts={filteredPosts} selectedPost={selectedPost} onSelect={setSelectedPost} votes={votes} />
+            </div>
+            <div style={{ flex: 45, minHeight: 0, overflow: 'hidden', borderTop: '1px solid #141420' }}>
+              <CommentsSection post={selectedPost} />
+            </div>
+          </>
+        )}
       </div>
 
-      {/* 우측: 투표 + AI 여론 */}
-      <div style={{ width: '340px', flexShrink: 0, display: 'flex', flexDirection: 'column', borderLeft: '1px solid #141420' }}>
-        <VotePanel
-          post={selectedPost}
-          vote={votes[selectedPost?.id]}
-          onVote={handleVote}
-        />
-      </div>
+      {/* 우측: 피드 모드에서만 */}
+      {view === 'feed' && (
+        <div style={{ width: '340px', flexShrink: 0, display: 'flex', flexDirection: 'column', borderLeft: '1px solid #141420' }}>
+          <VotePanel post={selectedPost} vote={votes[selectedPost?.id]} onVote={handleVote} />
+        </div>
+      )}
     </div>
   );
 }
