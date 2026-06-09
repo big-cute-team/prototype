@@ -1,7 +1,7 @@
 const { requireToken } = require('./_lib/auth');
 const { recordAudit } = require('./_lib/audit');
 const { handleError, json, parseJsonBody } = require('./_lib/http');
-const { insert, select, supabaseFetch } = require('./_lib/supabase');
+const { eq, insert, patch, select, supabaseFetch } = require('./_lib/supabase');
 
 const KST_OFFSET_MS = 9 * 60 * 60 * 1000;
 const STATUSES = ['scheduled', 'live', 'finished'];
@@ -71,15 +71,62 @@ module.exports = async function handler(req, res) {
       return;
     }
 
-    // 쓰기 작업은 어드민 토큰 필요
     if (req.method === 'POST') {
-      requireToken(req, 'ADMIN_TOKEN', 'admin');
       const body = await parseJsonBody(req);
+
+      // 승부예측 투표 (공개, 토큰 불필요)
+      if (body.action === 'vote') {
+        if (!body.id) throw Object.assign(new Error('id is required'), { statusCode: 400 });
+        if (!['for', 'against'].includes(body.choice)) {
+          throw Object.assign(new Error("choice must be 'for' or 'against'"), { statusCode: 400 });
+        }
+        await supabaseFetch('rpc/increment_match_vote', {
+          method: 'POST',
+          body: { p_match_id: body.id, p_choice: body.choice },
+        });
+        const rows = await select('matches', `select=prediction_for_count,prediction_against_count&${eq('id', body.id)}&limit=1`);
+        json(res, 200, { ok: true, counts: rows[0] || null });
+        return;
+      }
+
+      // 경기 생성 (어드민)
+      requireToken(req, 'ADMIN_TOKEN', 'admin');
       const list = Array.isArray(body) ? body : Array.isArray(body.matches) ? body.matches : [body];
       const rows = list.map(normalizeMatch);
       const inserted = await insert('matches', rows);
       await recordAudit('admin_matches_create', { count: inserted.length, actor: 'admin-ui' });
       json(res, 200, { ok: true, matches: inserted });
+      return;
+    }
+
+    // 경기 부분 수정 (어드민) — 예측 설정 / 스코어 / 상태
+    if (req.method === 'PATCH') {
+      requireToken(req, 'ADMIN_TOKEN', 'admin');
+      const body = await parseJsonBody(req);
+      const id = body.id || req.query?.id;
+      if (!id) throw Object.assign(new Error('id is required'), { statusCode: 400 });
+
+      const updates = { updated_at: new Date().toISOString() };
+      if ('prediction_question' in body) updates.prediction_question = body.prediction_question || null;
+      if ('prediction_for_label' in body) updates.prediction_for_label = body.prediction_for_label || null;
+      if ('prediction_against_label' in body) updates.prediction_against_label = body.prediction_against_label || null;
+      if ('is_featured' in body) updates.is_featured = Boolean(body.is_featured);
+      if ('competition' in body) updates.competition = body.competition || null;
+      if ('group_name' in body) updates.group_name = body.group_name || null;
+
+      const hasScore = body.home_score !== undefined && body.home_score !== null && body.home_score !== ''
+        && body.away_score !== undefined && body.away_score !== null && body.away_score !== '';
+      if ('home_score' in body) updates.home_score = hasScore ? Number(body.home_score) : null;
+      if ('away_score' in body) updates.away_score = hasScore ? Number(body.away_score) : null;
+      if (body.status && ['scheduled', 'live', 'finished'].includes(body.status)) {
+        updates.status = body.status;
+      } else if (hasScore) {
+        updates.status = 'finished';
+      }
+
+      const updated = await patch('matches', eq('id', id), updates);
+      await recordAudit('admin_matches_update', { match_id: id, actor: 'admin-ui' });
+      json(res, 200, { ok: true, match: updated[0] });
       return;
     }
 

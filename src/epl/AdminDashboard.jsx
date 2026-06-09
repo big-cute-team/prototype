@@ -2031,6 +2031,20 @@ function MatchManagerModal({ adminToken, headers, onClose, onMessage }) {
     } catch (e) { onMessage('bad', e.message); } finally { setBusy(false); }
   };
 
+  const patchMatch = async (id, updates) => {
+    setBusy(true);
+    try {
+      const res = await fetch('/api/matches', {
+        method: 'PATCH', headers,
+        body: JSON.stringify({ id, ...updates }),
+      });
+      const d = await res.json();
+      if (!res.ok) throw new Error(d.error || '수정 실패');
+      await load();
+      onMessage('good', '경기가 수정됐습니다.');
+    } catch (e) { onMessage('bad', e.message); } finally { setBusy(false); }
+  };
+
   const inputCls = 'rounded px-2 py-1 text-xs outline-none';
   const inputStyle = { background: '#11141d', color: '#fff', border: '1px solid #283040' };
 
@@ -2084,21 +2098,80 @@ function MatchManagerModal({ adminToken, headers, onClose, onMessage }) {
           ) : matches.length === 0 ? (
             <div className="text-xs py-4 text-center" style={{ color: '#3a3a5a' }}>등록된 경기가 없습니다</div>
           ) : matches.map(m => (
-            <div key={m.id} className="flex items-center gap-2 rounded px-3 py-2 text-xs"
-              style={{ background: '#0b0d14', border: '1px solid #141420' }}>
-              <span className="w-28 shrink-0" style={{ color: '#687086' }}>{fmtKickoff(m.kickoff_at)}</span>
-              <span className="flex-1 text-right text-white truncate">{m.home_flag} {m.home_team}</span>
-              <span className="shrink-0 font-black" style={{ color: m.home_score != null ? '#fff' : '#1e1e38' }}>
-                {m.home_score != null ? `${m.home_score}:${m.away_score}` : 'vs'}
-              </span>
-              <span className="flex-1 text-white truncate">{m.away_team} {m.away_flag}</span>
-              {m.group_name && <span className="w-8 shrink-0 text-right" style={{ color: '#252540' }}>{m.group_name}</span>}
-              <button disabled={busy} onClick={() => removeMatch(m.id)}
-                className="shrink-0 px-1.5 rounded" style={{ color: '#f87171' }}>×</button>
-            </div>
+            <MatchAdminRow key={m.id} m={m} busy={busy}
+              onRemove={() => removeMatch(m.id)}
+              onPatch={(updates) => patchMatch(m.id, updates)} />
           ))}
         </div>
       </div>
+    </div>
+  );
+}
+
+function MatchAdminRow({ m, busy, onRemove, onPatch }) {
+  const [open, setOpen] = useState(false);
+  const [q, setQ] = useState(m.prediction_question || '');
+  const [forL, setForL] = useState(m.prediction_for_label || '');
+  const [againstL, setAgainstL] = useState(m.prediction_against_label || '');
+  const [featured, setFeatured] = useState(Boolean(m.is_featured));
+  const [hs, setHs] = useState(m.home_score ?? '');
+  const [as, setAs] = useState(m.away_score ?? '');
+
+  const inputCls = 'rounded px-2 py-1 text-xs outline-none';
+  const inputStyle = { background: '#11141d', color: '#fff', border: '1px solid #283040' };
+
+  const save = () => onPatch({
+    prediction_question: q.trim() || null,
+    prediction_for_label: forL.trim() || null,
+    prediction_against_label: againstL.trim() || null,
+    is_featured: featured,
+    home_score: hs === '' ? null : hs,
+    away_score: as === '' ? null : as,
+  });
+
+  return (
+    <div className="rounded" style={{ background: '#0b0d14', border: '1px solid #141420' }}>
+      <div className="flex items-center gap-2 px-3 py-2 text-xs">
+        <span className="w-28 shrink-0" style={{ color: '#687086' }}>{fmtKickoff(m.kickoff_at)}</span>
+        <span className="flex-1 text-right text-white truncate">{m.home_flag} {m.home_team}</span>
+        <span className="shrink-0 font-black" style={{ color: m.home_score != null ? '#fff' : '#1e1e38' }}>
+          {m.home_score != null ? `${m.home_score}:${m.away_score}` : 'vs'}
+        </span>
+        <span className="flex-1 text-white truncate">{m.away_team} {m.away_flag}</span>
+        {m.is_featured && m.prediction_question && (
+          <span className="shrink-0 px-1 rounded text-xs font-black" style={{ background: '#2a2206', color: '#fbbf24' }}>예측</span>
+        )}
+        <button onClick={() => setOpen(o => !o)} className="shrink-0 px-1.5 rounded" style={{ color: '#60a5fa' }}>
+          {open ? '▲' : '설정'}
+        </button>
+        <button disabled={busy} onClick={onRemove} className="shrink-0 px-1.5 rounded" style={{ color: '#f87171' }}>×</button>
+      </div>
+
+      {open && (
+        <div className="px-3 pb-3 pt-1 space-y-2" style={{ borderTop: '1px solid #141420' }}>
+          <div className="flex items-center gap-2">
+            <span className="text-xs" style={{ color: '#687086' }}>스코어</span>
+            <input value={hs} onChange={e => setHs(e.target.value)} placeholder="-" className={`w-12 text-center ${inputCls}`} style={inputStyle} />
+            <span className="text-xs" style={{ color: '#4a4a6a' }}>:</span>
+            <input value={as} onChange={e => setAs(e.target.value)} placeholder="-" className={`w-12 text-center ${inputCls}`} style={inputStyle} />
+            <label className="ml-auto flex items-center gap-1.5 text-xs" style={{ color: '#fbbf24' }}>
+              <input type="checkbox" checked={featured} onChange={e => setFeatured(e.target.checked)} />
+              예측 노출(featured)
+            </label>
+          </div>
+          <input value={q} onChange={e => setQ(e.target.value)} placeholder="승부예측 질문 (예: 대한민국 승리?)"
+            className={`w-full ${inputCls}`} style={inputStyle} />
+          <div className="flex gap-2">
+            <input value={forL} onChange={e => setForL(e.target.value)} placeholder="선택지 A (예: 한국 승)" className={`flex-1 ${inputCls}`} style={inputStyle} />
+            <input value={againstL} onChange={e => setAgainstL(e.target.value)} placeholder="선택지 B (예: 비김/패)" className={`flex-1 ${inputCls}`} style={inputStyle} />
+          </div>
+          <div className="flex justify-end">
+            <button disabled={busy} onClick={save}
+              className="rounded px-3 py-1.5 text-xs font-bold disabled:opacity-40"
+              style={{ background: '#1f6f4a', color: '#fff' }}>저장</button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

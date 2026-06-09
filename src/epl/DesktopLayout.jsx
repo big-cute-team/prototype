@@ -50,8 +50,105 @@ function isDebateType(post) {
 }
 
 /* ─── Sidebar ─── */
+function DesktopMatchRoomModal({ match, onClose }) {
+  const [m, setM] = useState(match);
+  const [vote, setVote] = useState(() => localStorage.getItem(`reax_match_vote_${match.id}`) || null);
+  const [busy, setBusy] = useState(false);
+
+  const finished = m.status === 'finished' || m.status === 'live';
+  const hasPrediction = Boolean(m.prediction_question);
+  const forCount = m.prediction_for_count || 0;
+  const againstCount = m.prediction_against_count || 0;
+  const total = forCount + againstCount;
+  const forPct = total ? Math.round((forCount / total) * 100) : 50;
+  const againstPct = 100 - forPct;
+  const timeLabel = (iso) => {
+    const k = new Date(new Date(iso).getTime() + 9 * 60 * 60 * 1000);
+    return `${String(k.getUTCHours()).padStart(2, '0')}:${String(k.getUTCMinutes()).padStart(2, '0')}`;
+  };
+
+  const castVote = async (choice) => {
+    if (vote || busy) return;
+    setBusy(true);
+    setVote(choice);
+    setM(prev => ({
+      ...prev,
+      prediction_for_count: (prev.prediction_for_count || 0) + (choice === 'for' ? 1 : 0),
+      prediction_against_count: (prev.prediction_against_count || 0) + (choice === 'against' ? 1 : 0),
+    }));
+    localStorage.setItem(`reax_match_vote_${m.id}`, choice);
+    try {
+      const res = await fetch('/api/matches', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'vote', id: m.id, choice }),
+      });
+      const data = await res.json();
+      if (data.counts) setM(prev => ({ ...prev, ...data.counts }));
+    } catch { /* keep optimistic */ } finally { setBusy(false); }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.75)' }}
+      onClick={e => e.target === e.currentTarget && onClose()}>
+      <div className="w-full max-w-md rounded-2xl p-6" style={{ background: '#0b0d14', border: '1px solid #1e1e2e' }}>
+        <div className="flex items-center justify-between mb-4">
+          <span className="text-xs font-bold" style={{ color: '#4a4a6a' }}>{m.competition || '경기'} {m.group_name || ''}</span>
+          <button onClick={onClose} style={{ color: '#687086' }}>✕</button>
+        </div>
+        <div className="flex items-center justify-around py-4">
+          <div className="flex flex-col items-center gap-1 flex-1 min-w-0">
+            <span className="text-3xl">{m.home_flag || '🏳️'}</span>
+            <span className="text-sm font-bold text-white text-center truncate w-full">{m.home_team}</span>
+          </div>
+          <div className="shrink-0 px-2 text-center">
+            {finished && m.home_score != null
+              ? <span className="text-2xl font-black text-white">{m.home_score} : {m.away_score}</span>
+              : <div><div className="text-base font-black" style={{ color: '#3a3a5a' }}>VS</div><div className="text-xs mt-0.5" style={{ color: '#4a4a6a' }}>{timeLabel(m.kickoff_at)}</div></div>}
+          </div>
+          <div className="flex flex-col items-center gap-1 flex-1 min-w-0">
+            <span className="text-3xl">{m.away_flag || '🏳️'}</span>
+            <span className="text-sm font-bold text-white text-center truncate w-full">{m.away_team}</span>
+          </div>
+        </div>
+
+        {hasPrediction ? (
+          <div className="mt-3 pt-4" style={{ borderTop: '1px solid #141420' }}>
+            <div className="text-xs font-black tracking-widest mb-2" style={{ color: '#fbbf24' }}>승부예측</div>
+            <h3 className="text-sm font-bold text-white mb-3">{m.prediction_question}</h3>
+            {!vote ? (
+              <div className="flex gap-2">
+                <button onClick={() => castVote('for')} disabled={busy}
+                  className="flex-1 py-3 rounded-xl font-black text-sm" style={{ background: 'linear-gradient(135deg,#1d4ed8,#3b82f6)', color: '#fff' }}>{m.prediction_for_label}</button>
+                <button onClick={() => castVote('against')} disabled={busy}
+                  className="flex-1 py-3 rounded-xl font-black text-sm" style={{ background: 'linear-gradient(135deg,#991b1b,#e63946)', color: '#fff' }}>{m.prediction_against_label}</button>
+              </div>
+            ) : (
+              <div>
+                <div className="flex items-end justify-between mb-2">
+                  <div><div className="text-xl font-black" style={{ color: '#3b82f6' }}>{forPct}%</div><div className="text-xs" style={{ color: vote === 'for' ? '#60a5fa' : '#4a4a6a' }}>{m.prediction_for_label}</div></div>
+                  <span className="text-xs" style={{ color: '#4a4a6a' }}>{total}명</span>
+                  <div className="text-right"><div className="text-xl font-black" style={{ color: '#e63946' }}>{againstPct}%</div><div className="text-xs" style={{ color: vote === 'against' ? '#f87171' : '#4a4a6a' }}>{m.prediction_against_label}</div></div>
+                </div>
+                <div className="flex h-2 rounded-full overflow-hidden" style={{ background: '#1a1a2a' }}>
+                  <div style={{ width: `${forPct}%`, background: '#3b82f6' }} />
+                  <div style={{ width: `${againstPct}%`, background: '#e63946' }} />
+                </div>
+              </div>
+            )}
+          </div>
+        ) : (
+          <div className="mt-3 pt-4 text-center text-xs" style={{ borderTop: '1px solid #141420', color: '#4a4a6a' }}>
+            아직 예측이 준비되지 않은 경기입니다
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function DesktopTodayMatches() {
   const [matches, setMatches] = useState(null);
+  const [roomMatch, setRoomMatch] = useState(null);
   useEffect(() => {
     let alive = true;
     fetch('/api/matches?range=today')
@@ -70,15 +167,18 @@ function DesktopTodayMatches() {
 
   return (
     <div className="px-4 py-4 shrink-0" style={{ borderBottom: '1px solid #141420' }}>
+      {roomMatch && <DesktopMatchRoomModal match={roomMatch} onClose={() => setRoomMatch(null)} />}
       <div className="text-xs font-bold mb-2.5 flex items-center gap-1.5" style={{ color: '#34d399', letterSpacing: '0.06em' }}>
         <span>⚽</span> 오늘의 경기
       </div>
       <div className="space-y-1">
         {matches.map(m => {
           const done = m.status === 'finished' || m.status === 'live';
+          const featured = m.is_featured && m.prediction_question;
           return (
-            <div key={m.id} className="flex items-center gap-2 px-2 py-1.5 rounded-lg text-xs"
-              style={{ background: '#0b0d14', border: '1px solid #141420' }}>
+            <button key={m.id} onClick={() => setRoomMatch(m)}
+              className="w-full flex items-center gap-2 px-2 py-1.5 rounded-lg text-xs text-left hover:opacity-80"
+              style={{ background: '#0b0d14', border: `1px solid ${featured ? '#3a2e06' : '#141420'}` }}>
               <span className="w-9 shrink-0 font-black tabular-nums" style={{ color: m.status === 'live' ? '#f87171' : '#2a3050' }}>
                 {m.status === 'live' ? 'LIVE' : done ? '종료' : timeLabel(m.kickoff_at)}
               </span>
@@ -87,7 +187,8 @@ function DesktopTodayMatches() {
                 {m.home_score != null ? `${m.home_score}:${m.away_score}` : 'vs'}
               </span>
               <span className="flex-1 text-white truncate">{m.away_team} {m.away_flag}</span>
-            </div>
+              {featured && <span className="shrink-0 text-xs font-black px-1 rounded" style={{ background: '#2a2206', color: '#fbbf24' }}>예측</span>}
+            </button>
           );
         })}
       </div>
