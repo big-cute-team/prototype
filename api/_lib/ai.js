@@ -320,14 +320,20 @@ function fallbackClassify(post, aliases) {
 }
 
 function enforcePolicy(result, post, aliases = []) {
-  const localEvidenceTeams = uniqueTargetTeams(matchTeams(post.text, aliases));
+  const evidenceTeams = uniqueTargetTeams(matchTeams(post.text, aliases));
   const modelTeams = uniqueTargetTeams([...(result.teams || []), ...((result.briefing && result.briefing.tags) || [])]);
+  // 전문 기자: 글에 어떤 Big6도 안 잡혔으면 담당 팀으로 fallback 귀속
+  const specialty = uniqueTargetTeams([post.specialty_team])[0] || null;
+  const specialistFallback = Boolean(specialty) && evidenceTeams.length === 0 && modelTeams.length === 0;
+  const localEvidenceTeams = specialistFallback ? [specialty] : evidenceTeams;
   const modelClaimsTarget = normalizeBoolean(result.is_target_relevant, false) || modelTeams.length > 0;
   const confirmedTarget = localEvidenceTeams.length > 0;
   const hasPossibleTarget = confirmedTarget || modelClaimsTarget;
   const teams = confirmedTarget
     ? uniqueTargetTeams([...localEvidenceTeams, ...modelTeams])
     : modelTeams;
+  // 전문 기자가 자기 담당 팀 글 → specialist match (공신력 상)
+  const specialistMatch = Boolean(specialty && teams.includes(specialty));
   const confidence = normalizeConfidence(result.confidence);
   const briefing = normalizeBriefing(result, teams, post);
   const evidence = Array.isArray(result.evidence) ? result.evidence.filter(Boolean).map(String) : [];
@@ -362,6 +368,7 @@ function enforcePolicy(result, post, aliases = []) {
     requires_visual_context: requiresVisualContext,
     is_journalist_opinion: journalistOpinion,
     team_resolution: teamResolution,
+    specialist_match: specialistMatch,
     review_reason: reason || koreanReviewReason,
     briefing: {
       ...koreanGuard.briefing,

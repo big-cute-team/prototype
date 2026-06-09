@@ -48,6 +48,8 @@ async function saveItem(source, post, aiResult) {
     news_type: legacyNewsTypeFromBriefingStatus(briefing.status, aiResult.decision),
     status,
     confidence: aiResult.confidence,
+    source_tier: source.tier || 2,
+    specialist_match: aiResult.specialist_match || false,
     review_reason: aiResult.review_reason || null,
     title_ko: briefing.title,
     summary_short_ko: briefing.summary_short,

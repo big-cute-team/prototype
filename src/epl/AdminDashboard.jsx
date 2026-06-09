@@ -24,12 +24,26 @@ const TEAM_SUBJECT_COLORS = {
 const CARD_PREVIEW_WIDTH = 1080;
 const CARD_PREVIEW_HEIGHT = 1350;
 const CARD_PREVIEW_MAX_WIDTH = 360;
+const CARD_COVER_SUMMARY_WIDTH = 826;
+const CARD_COVER_SUMMARY_FONT_SIZE = 40;
+const CARD_PREVIEW_SCALE = CARD_PREVIEW_MAX_WIDTH / CARD_PREVIEW_WIDTH;
+const CARD_COVER_SUMMARY_EDITOR_TEXT_WIDTH = CARD_COVER_SUMMARY_WIDTH * CARD_PREVIEW_SCALE;
+const CARD_COVER_SUMMARY_EDITOR_FONT_SIZE = CARD_COVER_SUMMARY_FONT_SIZE * CARD_PREVIEW_SCALE;
+const CARD_COVER_SUMMARY_EDITOR_MIN_HEIGHT = 136;
+const CARD_TEXTAREA_PADDING_X = 12;
 const CARD_DETAIL_TEXT_WIDTH = 960;
-const CARD_DETAIL_TEXT_HEIGHT = 600;
+const CARD_DETAIL_TEXT_TOP = 180;
+const CARD_DETAIL_TEXT_HEIGHT = 900;
 const CARD_DETAIL_FONT_SIZE = 40;
 const CARD_DETAIL_LINE_HEIGHT = 60;
+const CARD_DETAIL_SOURCE_TOP = 1110;
+const CARD_DETAIL_SOURCE_GAP = CARD_DETAIL_SOURCE_TOP - CARD_DETAIL_TEXT_TOP - CARD_DETAIL_TEXT_HEIGHT;
+const CARD_DETAIL_SOURCE_HEIGHT = 60;
+const CARD_DETAIL_STACK_CENTER =
+  CARD_DETAIL_TEXT_TOP + (CARD_DETAIL_TEXT_HEIGHT + CARD_DETAIL_SOURCE_GAP + CARD_DETAIL_SOURCE_HEIGHT) / 2;
 const CARD_DETAIL_EDITOR_MAX_WIDTH = CARD_DETAIL_TEXT_WIDTH * (CARD_PREVIEW_MAX_WIDTH / CARD_PREVIEW_WIDTH);
 const CARD_WORKSPACE_TEXTAREA_HEIGHT = 300;
+const CARD_WORKSPACE_EDITOR_MAX_WIDTH = CARD_DETAIL_EDITOR_MAX_WIDTH;
 const DEFAULT_TODAY_FIXTURES = {
   eyebrow: 'WORLD CUP 2026 · TODAY',
   title: '오늘의\n경기 일정',
@@ -533,6 +547,12 @@ function ItemEditor({ item, draft, onDraft, onAction, onDebate, onRegenerate, on
         <Badge tone={briefingTone(briefingStatus)}>{briefingStatus || item.news_type}</Badge>
         {teamTags.map(team => <Badge key={team}>{team}</Badge>)}
         {item.debate_question && <Badge tone="warn">DEBATE</Badge>}
+        {item.specialist_match && (
+          <span className="rounded px-1.5 py-0.5 text-xs font-black leading-none"
+            style={{ background: '#2a1f00', color: '#f4a100' }}>
+            ★ 전문기자
+          </span>
+        )}
         {isNew && (
           <span className="rounded px-1.5 py-0.5 text-xs font-black leading-none"
             style={{ background: '#0e2d1a', color: '#34d399' }}>
@@ -925,7 +945,7 @@ function cardFromFields(fields) {
       subject: String(fields.subject || '').trim(),
       subject_color: normalizeSubjectColor(fields.subject_color),
       headline: String(fields.headline || '').trim(),
-      summary: String(fields.summary || '').trim(),
+      summary: normalizeParagraphText(fields.summary),
     },
     detail: {
       paragraphs: normalizeParagraphText(fields.paragraphs),
@@ -971,7 +991,7 @@ function CardPreviewPage({ type, fields, imageSource }) {
   if (cleanSubject && cleanHeadline.startsWith(cleanSubject)) {
     cleanHeadline = cleanHeadline.slice(cleanSubject.length).replace(/^[\s,]+/, '').trim();
   }
-  const coverSummary = String(fields.summary || '요약을 입력하면 커버 하단에 표시됩니다.').replace(/\s+/g, ' ').trim();
+  const coverSummary = normalizeParagraphText(fields.summary) || '요약을 입력하면 커버 하단에 표시됩니다.';
   const detailText = normalizeParagraphText(fields.paragraphs) || '본문 문단을 입력하면 상세 카드에 표시됩니다.';
   const sourceText = String(fields.source || 'source').replace(/^@+/, '').trim() || 'source';
 
@@ -1074,7 +1094,6 @@ function CardPreviewPage({ type, fields, imageSource }) {
                   top: 898,
                   zIndex: 2,
                   width: 960,
-                  height: 200,
                   margin: 0,
                   color: '#fff',
                   fontSize: 84,
@@ -1083,7 +1102,7 @@ function CardPreviewPage({ type, fields, imageSource }) {
                   letterSpacing: 0,
                   wordBreak: 'keep-all',
                   overflowWrap: 'break-word',
-                  overflow: 'hidden',
+                  overflow: 'visible',
                 }}>
                 <span style={{ color: subjectColor }}>{cleanSubject}</span>
                 {cleanHeadline && <><br />{cleanHeadline}</>}
@@ -1095,7 +1114,6 @@ function CardPreviewPage({ type, fields, imageSource }) {
                   top: 1122,
                   zIndex: 2,
                   width: 826,
-                  height: 144,
                   margin: 0,
                   color: '#fff',
                   fontSize: 40,
@@ -1104,7 +1122,8 @@ function CardPreviewPage({ type, fields, imageSource }) {
                   letterSpacing: 0,
                   wordBreak: 'keep-all',
                   overflowWrap: 'break-word',
-                  overflow: 'hidden',
+                  whiteSpace: 'pre-wrap',
+                  overflow: 'visible',
                 }}>
                 {coverSummary}
               </p>
@@ -1115,49 +1134,51 @@ function CardPreviewPage({ type, fields, imageSource }) {
                 style={{
                   position: 'absolute',
                   left: 60,
-                  top: 325,
+                  top: CARD_DETAIL_STACK_CENTER,
                   zIndex: 2,
                   width: CARD_DETAIL_TEXT_WIDTH,
-                  height: CARD_DETAIL_TEXT_HEIGHT,
-                  color: '#fff',
-                  fontSize: CARD_DETAIL_FONT_SIZE,
-                  lineHeight: `${CARD_DETAIL_LINE_HEIGHT}px`,
-                  fontWeight: 500,
-                  letterSpacing: 0,
-                  textAlign: 'center',
-                  display: 'flex',
-                  alignItems: 'center',
-                  overflow: 'hidden',
+                  transform: 'translateY(-50%)',
+                  overflow: 'visible',
                 }}>
                 <div
                   style={{
-                    width: '100%',
-                    whiteSpace: 'pre-wrap',
-                    wordBreak: 'keep-all',
-                    overflowWrap: 'break-word',
+                    width: CARD_DETAIL_TEXT_WIDTH,
+                    minHeight: CARD_DETAIL_TEXT_HEIGHT,
+                    color: '#fff',
+                    fontSize: CARD_DETAIL_FONT_SIZE,
+                    lineHeight: `${CARD_DETAIL_LINE_HEIGHT}px`,
+                    fontWeight: 500,
+                    letterSpacing: 0,
+                    textAlign: 'center',
+                    display: 'flex',
+                    alignItems: 'center',
+                    overflow: 'visible',
                   }}>
-                  {detailText}
+                  <div
+                    style={{
+                      width: '100%',
+                      whiteSpace: 'pre-wrap',
+                      wordBreak: 'keep-all',
+                      overflowWrap: 'break-word',
+                    }}>
+                    {detailText}
+                  </div>
                 </div>
-              </div>
-              <div
-                style={{
-                  position: 'absolute',
-                  left: 60,
-                  top: 965,
-                  zIndex: 2,
-                  width: 960,
-                  height: 60,
-                  margin: 0,
-                  color: '#fff',
-                  fontSize: 32,
-                  lineHeight: '60px',
-                  fontWeight: 500,
-                  letterSpacing: 0,
-                  textAlign: 'right',
-                  whiteSpace: 'nowrap',
-                  overflow: 'hidden',
-                }}>
-                @{sourceText}
+                <div
+                  style={{
+                    width: 960,
+                    marginTop: CARD_DETAIL_SOURCE_GAP,
+                    color: '#fff',
+                    fontSize: 32,
+                    lineHeight: '60px',
+                    fontWeight: 500,
+                    letterSpacing: 0,
+                    textAlign: 'right',
+                    whiteSpace: 'nowrap',
+                    overflow: 'visible',
+                  }}>
+                  @{sourceText}
+                </div>
               </div>
             </>
           )}
@@ -1182,6 +1203,59 @@ function CardPreviewPage({ type, fields, imageSource }) {
         </div>
       </div>
     </div>
+  );
+}
+
+function CardSummaryEditor({ value, onChange, placeholder = 'cover summary' }) {
+  const textareaRef = useRef(null);
+  const [textareaHeight, setTextareaHeight] = useState(CARD_COVER_SUMMARY_EDITOR_MIN_HEIGHT);
+  const summaryPaddingRight =
+    `max(${CARD_TEXTAREA_PADDING_X}px, calc(100% - ${CARD_TEXTAREA_PADDING_X + CARD_COVER_SUMMARY_EDITOR_TEXT_WIDTH}px))`;
+
+  useEffect(() => {
+    const node = textareaRef.current;
+    if (!node) return;
+
+    node.style.height = 'auto';
+    const nextHeight = Math.max(CARD_COVER_SUMMARY_EDITOR_MIN_HEIGHT, node.scrollHeight);
+    node.style.height = `${nextHeight}px`;
+    setTextareaHeight(nextHeight);
+  }, [value]);
+
+  return (
+    <textarea
+      ref={textareaRef}
+      value={value}
+      onChange={onChange}
+      wrap="soft"
+      placeholder={placeholder}
+      className="block w-full rounded-md outline-none"
+      style={{
+        height: textareaHeight,
+        minHeight: CARD_COVER_SUMMARY_EDITOR_MIN_HEIGHT,
+        boxSizing: 'border-box',
+        paddingTop: 8,
+        paddingBottom: 8,
+        paddingLeft: CARD_TEXTAREA_PADDING_X,
+        paddingRight: summaryPaddingRight,
+        margin: 0,
+        border: '1px solid #283040',
+        resize: 'vertical',
+        background: '#11141d',
+        color: '#fff',
+        caretColor: '#fff',
+        fontFamily: '"Pretendard", "Malgun Gothic", "Apple SD Gothic Neo", sans-serif',
+        fontSize: CARD_COVER_SUMMARY_EDITOR_FONT_SIZE,
+        lineHeight: 'normal',
+        fontWeight: 500,
+        letterSpacing: 0,
+        textAlign: 'left',
+        whiteSpace: 'pre-wrap',
+        wordBreak: 'keep-all',
+        overflowWrap: 'break-word',
+        overflow: 'hidden',
+      }}
+    />
   );
 }
 
@@ -2037,17 +2111,16 @@ function CardNewsWorkspace({ headers, adminToken, seedItem, onNotify }) {
             </label>
             <label className="block">
               <span className="mb-1 block text-xs font-bold uppercase" style={{ color: '#687086' }}>summary</span>
-              <textarea
+              <CardSummaryEditor
                 value={fields.summary}
                 onChange={event => updateField('summary', event.target.value)}
-                rows={3}
                 placeholder="커버 카드에 들어갈 짧은 요약"
-                className="w-full rounded-md px-3 py-2 text-sm leading-6 outline-none"
-                style={{ background: '#11141d', color: '#fff', border: '1px solid #283040' }}
               />
             </label>
             <div className="grid min-w-0 gap-3 lg:grid-cols-2">
-              <label className="block min-w-0">
+              <label
+                className="block min-w-0"
+                style={{ maxWidth: CARD_WORKSPACE_EDITOR_MAX_WIDTH, width: '100%', margin: '0 auto' }}>
                 <span className="mb-1 block text-xs font-bold uppercase" style={{ color: '#687086' }}>paragraphs</span>
                 <CardParagraphEditor
                   value={fields.paragraphs}
@@ -2055,7 +2128,9 @@ function CardNewsWorkspace({ headers, adminToken, seedItem, onNotify }) {
                   minHeight={CARD_WORKSPACE_TEXTAREA_HEIGHT}
                 />
               </label>
-              <div className="block min-w-0">
+              <div
+                className="block min-w-0"
+                style={{ maxWidth: CARD_WORKSPACE_EDITOR_MAX_WIDTH, width: '100%', margin: '0 auto' }}>
                 <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
                   <span className="block text-xs font-bold uppercase" style={{ color: '#687086' }}>instagram caption</span>
                   <div className="flex flex-wrap gap-2">
@@ -2228,6 +2303,428 @@ function DebateModal({ item, onClose, onSave, busy }) {
   );
 }
 
+const CARD_TYPE_OPTIONS = [
+  { value: 'schedule', label: '경기 일정' },
+  { value: 'today', label: '오늘의 경기' },
+  { value: 'result', label: '경기 결과' },
+  { value: 'standings', label: '조별리그 순위' },
+  { value: 'lineup', label: '선발 라인업' },
+];
+
+function newMatch() { return { time: '', home: '', away: '', group: '' }; }
+function newDay() { return { date: '', matches: [newMatch()] }; }
+
+function WeeklyScheduleModal({ onClose, onSave, busy }) {
+  const [competition, setCompetition] = useState('월드컵 2026 · 조별리그');
+  const [period, setPeriod] = useState('');
+  const [teamTags, setTeamTags] = useState([]);
+  const [days, setDays] = useState([newDay()]);
+
+  const updateDay = (di, field, val) =>
+    setDays(prev => prev.map((d, i) => i === di ? { ...d, [field]: val } : d));
+  const removeDay = (di) => setDays(prev => prev.filter((_, i) => i !== di));
+  const addDay = () => setDays(prev => [...prev, newDay()]);
+
+  const updateMatch = (di, mi, field, val) =>
+    setDays(prev => prev.map((d, i) => i !== di ? d : {
+      ...d, matches: d.matches.map((m, j) => j === mi ? { ...m, [field]: val } : m),
+    }));
+  const removeMatch = (di, mi) =>
+    setDays(prev => prev.map((d, i) => i !== di ? d : {
+      ...d, matches: d.matches.filter((_, j) => j !== mi),
+    }));
+  const addMatch = (di) =>
+    setDays(prev => prev.map((d, i) => i !== di ? d : { ...d, matches: [...d.matches, newMatch()] }));
+
+  const canSave = period.trim() && days.some(d => d.date.trim() && d.matches.some(m => m.home.trim() && m.away.trim()));
+
+  const inputCls = 'rounded px-2 py-1 text-xs outline-none';
+  const inputStyle = { background: '#11141d', color: '#fff', border: '1px solid #283040' };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      style={{ background: 'rgba(0,0,0,0.75)' }}
+      onClick={e => e.target === e.currentTarget && onClose()}>
+      <div className="max-h-[90vh] w-full max-w-xl min-w-0 overflow-auto rounded-xl p-5"
+        style={{ background: '#0f1118', border: '1px solid #2a3040' }}>
+        <div className="mb-4 flex items-center justify-between">
+          <span className="text-base font-black text-white">이번주 경기 일정</span>
+          <button onClick={onClose} style={{ color: '#687086' }}>✕</button>
+        </div>
+
+        {/* 대회명·기간 */}
+        <div className="mb-3 grid grid-cols-2 gap-2">
+          <label className="block">
+            <span className="mb-1 block text-xs font-bold uppercase" style={{ color: '#687086' }}>대회명</span>
+            <input value={competition} onChange={e => setCompetition(e.target.value)}
+              className={`w-full ${inputCls}`} style={inputStyle} />
+          </label>
+          <label className="block">
+            <span className="mb-1 block text-xs font-bold uppercase" style={{ color: '#687086' }}>기간 *</span>
+            <input value={period} onChange={e => setPeriod(e.target.value)}
+              placeholder="6월 11일 ~ 6월 14일"
+              className={`w-full ${inputCls}`} style={inputStyle} />
+          </label>
+        </div>
+
+        {/* 팀 태그 */}
+        <div className="mb-3">
+          <span className="mb-1 block text-xs font-bold uppercase" style={{ color: '#687086' }}>팀 태그</span>
+          <div className="flex flex-wrap gap-1.5">
+            {TEAM_OPTIONS.map(team => {
+              const active = teamTags.includes(team);
+              return (
+                <button key={team} type="button"
+                  onClick={() => setTeamTags(active ? teamTags.filter(t => t !== team) : [...teamTags, team])}
+                  className="rounded px-2 py-0.5 text-xs font-black"
+                  style={{ background: active ? '#1e3a5f' : '#11141d', color: active ? '#60a5fa' : '#4a5568', border: active ? '1px solid #3b82f6' : '1px solid #283040' }}>
+                  {team}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* 날짜별 경기 */}
+        <div className="mb-3 space-y-3">
+          <span className="block text-xs font-bold uppercase" style={{ color: '#687086' }}>경기 일정</span>
+          {days.map((day, di) => (
+            <div key={di} className="rounded-lg p-3" style={{ background: '#080a10', border: '1px solid #1c2230' }}>
+              <div className="mb-2 flex items-center gap-2">
+                <input value={day.date} onChange={e => updateDay(di, 'date', e.target.value)}
+                  placeholder="6월 11일 (수)"
+                  className={`flex-1 ${inputCls}`} style={inputStyle} />
+                {days.length > 1 && (
+                  <button onClick={() => removeDay(di)} className="text-xs px-2 py-1 rounded"
+                    style={{ background: '#2a1115', color: '#f87171' }}>날짜 삭제</button>
+                )}
+              </div>
+              {day.matches.map((m, mi) => (
+                <div key={mi} className="mb-1.5 flex items-center gap-1.5">
+                  <input value={m.time} onChange={e => updateMatch(di, mi, 'time', e.target.value)}
+                    placeholder="09:00" className={`w-14 ${inputCls}`} style={inputStyle} />
+                  <input value={m.home} onChange={e => updateMatch(di, mi, 'home', e.target.value)}
+                    placeholder="홈팀" className={`flex-1 ${inputCls}`} style={inputStyle} />
+                  <span className="text-xs" style={{ color: '#4a4a6a' }}>vs</span>
+                  <input value={m.away} onChange={e => updateMatch(di, mi, 'away', e.target.value)}
+                    placeholder="원정팀" className={`flex-1 ${inputCls}`} style={inputStyle} />
+                  <input value={m.group} onChange={e => updateMatch(di, mi, 'group', e.target.value)}
+                    placeholder="조" className={`w-10 ${inputCls}`} style={inputStyle} />
+                  {day.matches.length > 1 && (
+                    <button onClick={() => removeMatch(di, mi)} style={{ color: '#f87171', fontSize: '14px' }}>×</button>
+                  )}
+                </div>
+              ))}
+              <button onClick={() => addMatch(di)}
+                className="mt-1 text-xs px-2 py-1 rounded"
+                style={{ background: '#0d2a1a', color: '#34d399' }}>+ 경기 추가</button>
+            </div>
+          ))}
+          <button onClick={addDay}
+            className="w-full rounded py-1.5 text-xs font-bold"
+            style={{ background: '#11141d', color: '#687086', border: '1px dashed #283040' }}>+ 날짜 추가</button>
+        </div>
+
+        <div className="flex justify-end gap-2">
+          <button onClick={onClose} className="rounded-md px-4 py-2 text-sm font-bold"
+            style={{ background: '#171923', color: '#a8b0c7', border: '1px solid #2a3040' }}>취소</button>
+          <button disabled={busy || !canSave}
+            onClick={() => onSave({ competition, period, days, team_tags: teamTags })}
+            className="rounded-md px-4 py-2 text-sm font-bold disabled:opacity-50"
+            style={{ background: '#1f6f4a', color: '#fff' }}>발행</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function fmtKickoff(iso) {
+  const k = new Date(new Date(iso).getTime() + 9 * 60 * 60 * 1000);
+  const dow = ['일', '월', '화', '수', '목', '금', '토'][k.getUTCDay()];
+  return `${k.getUTCMonth() + 1}/${k.getUTCDate()}(${dow}) ${String(k.getUTCHours()).padStart(2, '0')}:${String(k.getUTCMinutes()).padStart(2, '0')}`;
+}
+
+function MatchManagerModal({ adminToken, headers, onClose, onMessage }) {
+  const [matches, setMatches] = useState(null);
+  const [busy, setBusy] = useState(false);
+  // 입력 폼
+  const [competition, setCompetition] = useState('월드컵 2026 · 조별리그');
+  const [date, setDate] = useState('');       // yyyy-mm-dd
+  const [time, setTime] = useState('');       // hh:mm
+  const [home, setHome] = useState('');
+  const [homeFlag, setHomeFlag] = useState('');
+  const [away, setAway] = useState('');
+  const [awayFlag, setAwayFlag] = useState('');
+  const [group, setGroup] = useState('');
+  const [homeScore, setHomeScore] = useState('');
+  const [awayScore, setAwayScore] = useState('');
+
+  const load = async () => {
+    try {
+      const res = await fetch('/api/matches?range=all', { headers });
+      const data = await res.json();
+      setMatches(Array.isArray(data.matches) ? data.matches : []);
+    } catch { setMatches([]); }
+  };
+  useEffect(() => { load(); /* eslint-disable-next-line */ }, []);
+
+  // KST 날짜+시간 → UTC ISO
+  const toIso = () => {
+    if (!date || !time) return null;
+    const [y, mo, d] = date.split('-').map(Number);
+    const [h, mi] = time.split(':').map(Number);
+    return new Date(Date.UTC(y, mo - 1, d, h, mi) - 9 * 60 * 60 * 1000).toISOString();
+  };
+
+  const canAdd = date && time && home.trim() && away.trim();
+
+  const addMatch = async () => {
+    setBusy(true);
+    try {
+      const res = await fetch('/api/matches', {
+        method: 'POST', headers,
+        body: JSON.stringify({
+          competition, kickoff_at: toIso(),
+          home_team: home.trim(), away_team: away.trim(),
+          home_flag: homeFlag.trim() || null, away_flag: awayFlag.trim() || null,
+          group_name: group.trim() || null,
+          home_score: homeScore === '' ? null : Number(homeScore),
+          away_score: awayScore === '' ? null : Number(awayScore),
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || '경기 추가 실패');
+      setHome(''); setAway(''); setHomeFlag(''); setAwayFlag(''); setGroup(''); setHomeScore(''); setAwayScore('');
+      await load();
+      onMessage('good', '경기가 추가됐습니다.');
+    } catch (e) { onMessage('bad', e.message); } finally { setBusy(false); }
+  };
+
+  const removeMatch = async (id) => {
+    setBusy(true);
+    try {
+      const res = await fetch(`/api/matches?id=${encodeURIComponent(id)}`, { method: 'DELETE', headers });
+      if (!res.ok) { const d = await res.json(); throw new Error(d.error || '삭제 실패'); }
+      await load();
+    } catch (e) { onMessage('bad', e.message); } finally { setBusy(false); }
+  };
+
+  const inputCls = 'rounded px-2 py-1 text-xs outline-none';
+  const inputStyle = { background: '#11141d', color: '#fff', border: '1px solid #283040' };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      style={{ background: 'rgba(0,0,0,0.75)' }}
+      onClick={e => e.target === e.currentTarget && onClose()}>
+      <div className="max-h-[90vh] w-full max-w-2xl min-w-0 overflow-auto rounded-xl p-5"
+        style={{ background: '#0f1118', border: '1px solid #2a3040' }}>
+        <div className="mb-4 flex items-center justify-between">
+          <span className="text-base font-black text-white">경기 관리</span>
+          <button onClick={onClose} style={{ color: '#687086' }}>✕</button>
+        </div>
+
+        {/* 입력 폼 */}
+        <div className="mb-4 rounded-lg p-3 space-y-2" style={{ background: '#080a10', border: '1px solid #1c2230' }}>
+          <input value={competition} onChange={e => setCompetition(e.target.value)}
+            placeholder="대회명" className={`w-full ${inputCls}`} style={inputStyle} />
+          <div className="flex gap-2">
+            <input type="date" value={date} onChange={e => setDate(e.target.value)}
+              className={`flex-1 ${inputCls}`} style={inputStyle} />
+            <input type="time" value={time} onChange={e => setTime(e.target.value)}
+              className={`flex-1 ${inputCls}`} style={inputStyle} />
+            <input value={group} onChange={e => setGroup(e.target.value)}
+              placeholder="조 (F조)" className={`w-20 ${inputCls}`} style={inputStyle} />
+          </div>
+          <div className="flex items-center gap-1.5">
+            <input value={homeFlag} onChange={e => setHomeFlag(e.target.value)} placeholder="🇰🇷" className={`w-12 text-center ${inputCls}`} style={inputStyle} />
+            <input value={home} onChange={e => setHome(e.target.value)} placeholder="홈팀" className={`flex-1 ${inputCls}`} style={inputStyle} />
+            <input value={homeScore} onChange={e => setHomeScore(e.target.value)} placeholder="-" className={`w-10 text-center ${inputCls}`} style={inputStyle} />
+            <span className="text-xs" style={{ color: '#4a4a6a' }}>:</span>
+            <input value={awayScore} onChange={e => setAwayScore(e.target.value)} placeholder="-" className={`w-10 text-center ${inputCls}`} style={inputStyle} />
+            <input value={away} onChange={e => setAway(e.target.value)} placeholder="원정팀" className={`flex-1 ${inputCls}`} style={inputStyle} />
+            <input value={awayFlag} onChange={e => setAwayFlag(e.target.value)} placeholder="🇨🇿" className={`w-12 text-center ${inputCls}`} style={inputStyle} />
+          </div>
+          <div className="flex justify-end">
+            <button disabled={busy || !canAdd} onClick={addMatch}
+              className="rounded px-3 py-1.5 text-xs font-bold disabled:opacity-40"
+              style={{ background: '#0d2a1a', color: '#34d399' }}>+ 경기 추가</button>
+          </div>
+          <div className="text-xs" style={{ color: '#3a3a5a' }}>스코어 입력 시 자동으로 '종료' 처리됩니다.</div>
+        </div>
+
+        {/* 등록된 경기 목록 */}
+        <div className="text-xs font-bold uppercase mb-2" style={{ color: '#687086' }}>
+          등록된 경기 {matches ? `(${matches.length})` : ''}
+        </div>
+        <div className="space-y-1">
+          {matches === null ? (
+            <div className="text-xs py-4 text-center" style={{ color: '#3a3a5a' }}>불러오는 중…</div>
+          ) : matches.length === 0 ? (
+            <div className="text-xs py-4 text-center" style={{ color: '#3a3a5a' }}>등록된 경기가 없습니다</div>
+          ) : matches.map(m => (
+            <div key={m.id} className="flex items-center gap-2 rounded px-3 py-2 text-xs"
+              style={{ background: '#0b0d14', border: '1px solid #141420' }}>
+              <span className="w-28 shrink-0" style={{ color: '#687086' }}>{fmtKickoff(m.kickoff_at)}</span>
+              <span className="flex-1 text-right text-white truncate">{m.home_flag} {m.home_team}</span>
+              <span className="shrink-0 font-black" style={{ color: m.home_score != null ? '#fff' : '#1e1e38' }}>
+                {m.home_score != null ? `${m.home_score}:${m.away_score}` : 'vs'}
+              </span>
+              <span className="flex-1 text-white truncate">{m.away_team} {m.away_flag}</span>
+              {m.group_name && <span className="w-8 shrink-0 text-right" style={{ color: '#252540' }}>{m.group_name}</span>}
+              <button disabled={busy} onClick={() => removeMatch(m.id)}
+                className="shrink-0 px-1.5 rounded" style={{ color: '#f87171' }}>×</button>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function CustomCardModal({ onClose, onSave, busy }) {
+  const [files, setFiles] = useState([]);
+  const [previewUrls, setPreviewUrls] = useState([]);
+  const [cardType, setCardType] = useState('schedule');
+  const [title, setTitle] = useState('');
+  const [description, setDescription] = useState('');
+  const [teamTags, setTeamTags] = useState([]);
+  const [withDebate, setWithDebate] = useState(false);
+  const [question, setQuestion] = useState('');
+  const [forLabel, setForLabel] = useState('');
+  const [againstLabel, setAgainstLabel] = useState('');
+
+  const onPickFiles = (picked) => {
+    const arr = Array.from(picked).slice(0, 5);
+    setFiles(arr);
+    setPreviewUrls(arr.map(f => URL.createObjectURL(f)));
+  };
+
+  const removeFile = (i) => {
+    setFiles(prev => prev.filter((_, idx) => idx !== i));
+    setPreviewUrls(prev => prev.filter((_, idx) => idx !== i));
+  };
+
+  const canSave = Boolean(files.length > 0 && title.trim() && cardType)
+    && (!withDebate || (question.trim() && forLabel.trim() && againstLabel.trim()));
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      style={{ background: 'rgba(0,0,0,0.7)' }}
+      onClick={e => e.target === e.currentTarget && onClose()}>
+      <div className="max-h-[90vh] w-full max-w-lg min-w-0 overflow-auto rounded-xl p-6" style={{ background: '#0f1118', border: '1px solid #2a3040' }}>
+        <div className="mb-4 text-lg font-black text-white">콘텐츠 직접 올리기</div>
+
+        <label className="mb-3 block">
+          <span className="mb-1 block text-xs font-bold uppercase" style={{ color: '#687086' }}>이미지 * (최대 5장)</span>
+          <input type="file" accept="image/png,image/jpeg,image/webp,image/gif" multiple
+            onChange={e => onPickFiles(e.target.files || [])}
+            className="w-full text-sm" style={{ color: '#a8b0c7' }} />
+        </label>
+        {previewUrls.length > 0 && (
+          <div className="mb-3 flex gap-2 overflow-x-auto pb-1">
+            {previewUrls.map((url, i) => (
+              <div key={i} className="relative shrink-0">
+                <img src={url} alt={`preview-${i}`} className="h-24 w-24 rounded-md object-cover"
+                  style={{ border: '1px solid #283040' }} />
+                <button onClick={() => removeFile(i)}
+                  className="absolute -right-1 -top-1 flex h-4 w-4 items-center justify-center rounded-full text-xs font-black"
+                  style={{ background: '#e63946', color: '#fff' }}>×</button>
+              </div>
+            ))}
+          </div>
+        )}
+
+        <label className="mb-3 block">
+          <span className="mb-1 block text-xs font-bold uppercase" style={{ color: '#687086' }}>유형 *</span>
+          <select value={cardType} onChange={e => setCardType(e.target.value)}
+            className="w-full rounded-md px-3 py-2 text-sm font-bold outline-none"
+            style={{ background: '#11141d', color: '#fff', border: '1px solid #283040' }}>
+            {CARD_TYPE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+          </select>
+        </label>
+
+        <label className="mb-3 block">
+          <span className="mb-1 block text-xs font-bold uppercase" style={{ color: '#687086' }}>제목 *</span>
+          <input value={title} onChange={e => setTitle(e.target.value)}
+            placeholder="예: 이번주 경기 일정"
+            className="w-full rounded-md px-3 py-2 text-sm outline-none"
+            style={{ background: '#11141d', color: '#fff', border: '1px solid #283040' }} />
+        </label>
+
+        <label className="mb-3 block">
+          <span className="mb-1 block text-xs font-bold uppercase" style={{ color: '#687086' }}>설명</span>
+          <textarea value={description} onChange={e => setDescription(e.target.value)} rows={3}
+            placeholder="카드 설명/캡션"
+            className="w-full rounded-md px-3 py-2 text-sm leading-6 outline-none"
+            style={{ background: '#11141d', color: '#fff', border: '1px solid #283040' }} />
+        </label>
+
+        <div className="mb-3">
+          <span className="mb-1 block text-xs font-bold uppercase" style={{ color: '#687086' }}>팀 태그</span>
+          <div className="flex flex-wrap gap-1.5">
+            {TEAM_OPTIONS.map(team => {
+              const active = teamTags.includes(team);
+              return (
+                <button key={team} type="button"
+                  onClick={() => setTeamTags(active ? teamTags.filter(t => t !== team) : [...teamTags, team])}
+                  className="rounded px-2.5 py-1 text-xs font-black"
+                  style={{
+                    background: active ? '#1e3a5f' : '#11141d',
+                    color: active ? '#60a5fa' : '#4a5568',
+                    border: active ? '1px solid #3b82f6' : '1px solid #283040',
+                  }}>
+                  {team}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        <label className="mb-3 flex items-center gap-2">
+          <input type="checkbox" checked={withDebate} onChange={e => setWithDebate(e.target.checked)} />
+          <span className="text-sm font-bold" style={{ color: '#cbd3e8' }}>논쟁 추가</span>
+        </label>
+        {withDebate && (
+          <div className="mb-3 space-y-3 rounded-md p-3" style={{ background: '#0b0d14', border: '1px solid #202635' }}>
+            <input value={question} onChange={e => setQuestion(e.target.value)}
+              placeholder="논쟁 질문 *"
+              className="w-full rounded-md px-3 py-2 text-sm outline-none"
+              style={{ background: '#11141d', color: '#fff', border: '1px solid #283040' }} />
+            <div className="grid grid-cols-2 gap-3">
+              <input value={forLabel} onChange={e => setForLabel(e.target.value)} placeholder="선택지 A *"
+                className="w-full rounded-md px-3 py-2 text-sm outline-none"
+                style={{ background: '#11141d', color: '#fff', border: '1px solid #283040' }} />
+              <input value={againstLabel} onChange={e => setAgainstLabel(e.target.value)} placeholder="선택지 B *"
+                className="w-full rounded-md px-3 py-2 text-sm outline-none"
+                style={{ background: '#11141d', color: '#fff', border: '1px solid #283040' }} />
+            </div>
+          </div>
+        )}
+
+        <div className="flex justify-end gap-2">
+          <button onClick={onClose}
+            className="rounded-md px-4 py-2 text-sm font-bold"
+            style={{ background: '#171923', color: '#a8b0c7', border: '1px solid #2a3040' }}>
+            취소
+          </button>
+          <button disabled={busy || !canSave}
+            onClick={() => onSave({
+              files, card_type: cardType, title: title.trim(), description: description.trim(),
+              team_tags: teamTags,
+              debate_question: withDebate ? question.trim() : null,
+              vote_for_label: withDebate ? forLabel.trim() : null,
+              vote_against_label: withDebate ? againstLabel.trim() : null,
+            })}
+            className="rounded-md px-4 py-2 text-sm font-bold disabled:opacity-50"
+            style={{ background: '#1f6f4a', color: '#fff' }}>
+            발행
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function AdminDashboard() {
   const [adminToken, setAdminToken] = useState(() => localStorage.getItem('epl_admin_token') || '');
   const [cronSecret, setCronSecret] = useState(() => localStorage.getItem('epl_cron_secret') || '');
@@ -2242,6 +2739,9 @@ export default function AdminDashboard() {
   const [loaded, setLoaded] = useState(false);
   const [debateModal, setDebateModal] = useState(null);
   const [cardNewsSeed, setCardNewsSeed] = useState(null);
+  const [customModal, setCustomModal] = useState(false);
+  const [scheduleModal, setScheduleModal] = useState(false);
+  const [matchModal, setMatchModal] = useState(false);
   const [newIds, setNewIds] = useState(new Set());
   const isInitialLoading = Boolean(adminToken && busy && !loaded && !error);
 
@@ -2417,6 +2917,85 @@ export default function AdminDashboard() {
     }
   };
 
+  const customCreate = async (form) => {
+    setBusy(true);
+    setMessage('');
+    setError('');
+    try {
+      const fileList = form.files || (form.file ? [form.file] : []);
+      if (fileList.length === 0) throw new Error('이미지를 선택해 주세요.');
+
+      const imageUrls = await Promise.all(fileList.map(async (f) => {
+        const up = await fetch('/api/admin/upload', {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${adminToken}`, 'Content-Type': f.type },
+          body: f,
+        });
+        const upData = await readJsonResponse(up);
+        if (!up.ok) throw new Error(upData.error || 'Image upload failed');
+        return upData.url;
+      }));
+
+      const response = await fetch('/api/admin/custom', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          image_urls: imageUrls,
+          card_type: form.card_type,
+          title: form.title,
+          description: form.description,
+          team_tags: form.team_tags,
+          debate_question: form.debate_question || null,
+          vote_for_label: form.vote_for_label || null,
+          vote_against_label: form.vote_against_label || null,
+          actor: 'admin-ui',
+        }),
+      });
+      const data = await readJsonResponse(response);
+      if (!response.ok) throw new Error(data.error || 'Custom card create failed');
+      setCustomModal(false);
+      setMessageTone('good');
+      setMessage('커스텀 카드가 발행됐습니다.');
+      await loadItems({ preserveMessage: true });
+    } catch (error) {
+      setMessageTone('bad');
+      setMessage(error.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const scheduleCreate = async (form) => {
+    setBusy(true);
+    setMessage('');
+    setError('');
+    try {
+      const response = await fetch('/api/admin/custom', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          card_data: { competition: form.competition, period: form.period, days: form.days },
+          card_type: 'schedule',
+          title: `이번주 경기 일정 · ${form.period}`,
+          description: form.competition,
+          team_tags: form.team_tags || [],
+          actor: 'admin-ui',
+        }),
+      });
+      const data = await readJsonResponse(response);
+      if (!response.ok) throw new Error(data.error || 'Schedule card create failed');
+      setScheduleModal(false);
+      setMessageTone('good');
+      setMessage('이번주 경기 일정이 발행됐습니다.');
+      await loadItems({ preserveMessage: true });
+    } catch (error) {
+      setMessageTone('bad');
+      setMessage(error.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const runCollection = async () => {
     if (!cronSecret) {
       setMessageTone('warn');
@@ -2458,6 +3037,28 @@ export default function AdminDashboard() {
           onSave={data => debateAction(debateModal, data)}
         />
       )}
+      {customModal && (
+        <CustomCardModal
+          busy={busy}
+          onClose={() => setCustomModal(false)}
+          onSave={customCreate}
+        />
+      )}
+      {scheduleModal && (
+        <WeeklyScheduleModal
+          busy={busy}
+          onClose={() => setScheduleModal(false)}
+          onSave={scheduleCreate}
+        />
+      )}
+      {matchModal && (
+        <MatchManagerModal
+          adminToken={adminToken}
+          headers={headers}
+          onClose={() => setMatchModal(false)}
+          onMessage={(tone, msg) => { setMessageTone(tone); setMessage(msg); }}
+        />
+      )}
       <div className="mx-auto w-full max-w-7xl px-5 py-6" style={{ maxWidth: '100vw' }}>
         <header className="flex min-w-0 flex-col gap-4 border-b pb-5 lg:flex-row lg:items-end"
           style={{ borderColor: '#1c2230' }}>
@@ -2493,6 +3094,16 @@ export default function AdminDashboard() {
               className="rounded-md px-4 py-2 text-sm font-bold disabled:opacity-50"
               style={{ background: '#2557ff', color: '#fff' }}>
               Run collection
+            </button>
+            <button onClick={() => setCustomModal(true)} disabled={busy || !adminToken}
+              className="rounded-md px-4 py-2 text-sm font-bold disabled:opacity-50"
+              style={{ background: '#1f6f4a', color: '#fff' }}>
+              직접 올리기
+            </button>
+            <button onClick={() => setMatchModal(true)} disabled={busy || !adminToken}
+              className="rounded-md px-4 py-2 text-sm font-bold disabled:opacity-50"
+              style={{ background: '#1a2a4a', color: '#60a5fa', border: '1px solid #1e3a5f' }}>
+              경기 관리
             </button>
           </div>
         </header>
