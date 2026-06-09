@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 
+import todayFixturesTemplateUrl from './assets/today-fixtures-template.png';
+
 const CARD_NEWS_TAB = 'card_news_workspace';
 const ARTICLE_CARD_MODE = 'article';
 const TODAY_FIXTURES_MODE = 'today_fixtures';
@@ -438,7 +440,6 @@ function todayFixturesPayload(value) {
 
 function validateTodayFixturesPayload(payload) {
   if (!payload.date_label) return '날짜를 입력해주세요.';
-  if (!payload.title) return '제목을 입력해주세요.';
   if (payload.matches.length < 1 || payload.matches.length > 4) return '경기는 1개 이상 4개 이하로 입력해주세요.';
   const requiredKeys = ['kickoff_time', 'home_team', 'home_code', 'away_team', 'away_code'];
   for (let index = 0; index < payload.matches.length; index += 1) {
@@ -1388,36 +1389,15 @@ function TodayFixturesEditor({ value, onChange, onRender, disabled, rendering })
       </div>
 
       <div className="space-y-3">
-        <label className="block">
-          <span className="mb-1 block text-xs font-bold uppercase" style={{ color: '#687086' }}>eyebrow</span>
+        <label className="block min-w-0">
+          <span className="mb-1 block text-xs font-bold uppercase" style={{ color: '#687086' }}>date label</span>
           <input
-            value={value.eyebrow}
-            onChange={event => updateField('eyebrow', event.target.value)}
+            value={value.date_label}
+            onChange={event => updateField('date_label', event.target.value)}
             className="w-full rounded-md px-3 py-2 text-sm outline-none"
             style={{ background: '#11141d', color: '#fff', border: '1px solid #283040' }}
           />
         </label>
-        <div className="grid min-w-0 gap-3 md:grid-cols-2">
-          <label className="block min-w-0">
-            <span className="mb-1 block text-xs font-bold uppercase" style={{ color: '#687086' }}>title</span>
-            <textarea
-              value={value.title}
-              onChange={event => updateField('title', event.target.value)}
-              rows={2}
-              className="w-full rounded-md px-3 py-2 text-sm leading-6 outline-none"
-              style={{ background: '#11141d', color: '#fff', border: '1px solid #283040', resize: 'vertical' }}
-            />
-          </label>
-          <label className="block min-w-0">
-            <span className="mb-1 block text-xs font-bold uppercase" style={{ color: '#687086' }}>date label</span>
-            <input
-              value={value.date_label}
-              onChange={event => updateField('date_label', event.target.value)}
-              className="w-full rounded-md px-3 py-2 text-sm outline-none"
-              style={{ background: '#11141d', color: '#fff', border: '1px solid #283040' }}
-            />
-          </label>
-        </div>
 
         <div className="space-y-3">
           <div className="flex items-center justify-between gap-3">
@@ -1521,38 +1501,35 @@ function TodayFixturesPreview({ value }) {
               transformOrigin: 'top left',
               overflow: 'hidden',
               color: '#fff',
-              background: 'radial-gradient(circle at 29% -4%, rgba(38,120,72,0.42), rgba(38,120,72,0) 42%), radial-gradient(circle at 0% 82%, rgba(190,208,235,0.18), rgba(190,208,235,0) 39%), radial-gradient(circle at 97% 82%, rgba(190,208,235,0.18), rgba(190,208,235,0) 39%), linear-gradient(180deg,#070b12 0%,#0a0f19 44%,#07140f 100%)',
+              background: '#06090f',
               fontFamily: '"Pretendard", "Malgun Gothic", "Apple SD Gothic Neo", sans-serif',
             }}>
-            <div style={{ position: 'absolute', left: 93, top: 76, width: 410, height: 36, color: '#8bd8a5', fontSize: 30, lineHeight: '36px', whiteSpace: 'nowrap', overflow: 'hidden' }}>
-              {payload.eyebrow}
-            </div>
-            <div style={{ position: 'absolute', left: 72, top: 124, width: 430, height: 208, fontSize: 96, lineHeight: '104px', fontWeight: 900, whiteSpace: 'pre-line', overflow: 'hidden' }}>
-              {payload.title}
-            </div>
-            <div style={{ position: 'absolute', left: 72, top: 340, width: 360, height: 38, fontSize: 31, lineHeight: '38px', fontWeight: 900, whiteSpace: 'nowrap', overflow: 'hidden' }}>
+            <img
+              src={todayFixturesTemplateUrl}
+              alt=""
+              style={{ position: 'absolute', inset: 0, width: CARD_PREVIEW_WIDTH, height: CARD_PREVIEW_HEIGHT, display: 'block' }}
+            />
+            <div style={{ position: 'absolute', left: 72, top: 430, width: 360, height: 38, color: 'rgba(255,255,255,0.72)', fontSize: 31.1, lineHeight: '38px', fontWeight: 900, whiteSpace: 'nowrap', overflow: 'hidden' }}>
               {payload.date_label}
             </div>
             {payload.matches.map((match, index) => (
-              <div key={index} style={{ position: 'absolute', left: 72, top: 470 + (index * 205), width: 936, height: 150, overflow: 'hidden' }}>
-                <div style={{ position: 'absolute', left: 39, top: 23, width: 170, height: 95 }}>
-                  <div style={{ height: 26, color: 'rgba(255,255,255,0.66)', fontSize: 22, lineHeight: '26px', fontWeight: 900 }}>{match.time_period}</div>
-                  <div style={{ height: 67, fontSize: 56, lineHeight: '67px', fontWeight: 400, whiteSpace: 'nowrap' }}>{match.kickoff_time}</div>
+              <div key={index} style={{ position: 'absolute', left: 72, top: 462 + (index * 205), width: 936, height: 183, overflow: 'hidden' }}>
+                <div style={{ position: 'absolute', left: 39, top: 51, width: 132, height: 81 }}>
+                  <div style={{ width: 84, height: 26, color: 'rgba(255,255,255,0.46)', fontSize: 22, lineHeight: '26px', fontWeight: 900, whiteSpace: 'nowrap', overflow: 'hidden' }}>{match.time_period}</div>
+                  <div style={{ width: 170, height: 67, fontFamily: '"Bebas Neue", "Pretendard", sans-serif', fontSize: 56, lineHeight: '50.4px', fontWeight: 400, letterSpacing: 1.12, whiteSpace: 'nowrap', overflow: 'hidden' }}>{match.kickoff_time}</div>
                 </div>
-                <div style={{ position: 'absolute', left: 195, top: 21, width: 680, height: 115 }}>
-                  <div style={{ position: 'absolute', left: 0, top: 0, width: 228, height: 54, fontSize: 40, lineHeight: '48px', fontWeight: 900, textAlign: 'right', whiteSpace: 'nowrap', overflow: 'hidden' }}>{match.home_team}</div>
-                  <div style={{ position: 'absolute', left: 266, top: 8, width: 74, height: 44, border: '1px solid rgba(255,255,255,0.18)', borderRadius: 999, background: 'rgba(255,255,255,0.07)', color: 'rgba(255,255,255,0.86)', fontSize: 24, lineHeight: '42px', textAlign: 'center', overflow: 'hidden' }}>{match.home_code}</div>
-                  <div style={{ position: 'absolute', left: 348, top: 6, width: 50, height: 40, color: 'rgba(255,255,255,0.72)', fontSize: 26, lineHeight: '40px', textAlign: 'center' }}>VS</div>
-                  <div style={{ position: 'absolute', left: 404, top: 8, width: 74, height: 44, border: '1px solid rgba(255,255,255,0.18)', borderRadius: 999, background: 'rgba(255,255,255,0.07)', color: 'rgba(255,255,255,0.86)', fontSize: 24, lineHeight: '42px', textAlign: 'center', overflow: 'hidden' }}>{match.away_code}</div>
-                  <div style={{ position: 'absolute', left: 474, top: 0, width: 206, height: 54, fontSize: 40, lineHeight: '48px', fontWeight: 900, whiteSpace: 'nowrap', overflow: 'hidden' }}>{match.away_team}</div>
-                  <div style={{ position: 'absolute', left: 0, top: 77, width: 680, height: 25, color: 'rgba(255,255,255,0.46)', fontSize: 21, lineHeight: '25px', fontWeight: 900, whiteSpace: 'nowrap', overflow: 'hidden' }}>
+                <div style={{ position: 'absolute', left: 195, top: 33, width: 720, height: 116 }}>
+                  <div style={{ position: 'absolute', left: 0, top: 15, width: 228, height: 54, fontSize: 39.8, lineHeight: '48px', fontWeight: 900, textAlign: 'right', whiteSpace: 'nowrap', overflow: 'hidden' }}>{match.home_team}</div>
+                  <div style={{ position: 'absolute', left: 243, top: 0, width: 78, height: 78, border: '1px dashed rgba(255,255,255,0.28)', borderRadius: '50%', background: 'linear-gradient(180deg, rgba(255,255,255,0.025), rgba(255,255,255,0)), rgba(255,255,255,0.04)', color: 'rgba(255,255,255,0.72)', fontFamily: '"Bebas Neue", "Pretendard", sans-serif', fontSize: 24.3, lineHeight: '78px', fontWeight: 400, textAlign: 'center', letterSpacing: 0.973, overflow: 'hidden' }}>{match.home_code}</div>
+                  <div style={{ position: 'absolute', left: 322, top: 17, width: 54, height: 40, color: 'rgba(255,255,255,0.46)', fontFamily: '"Bebas Neue", "Pretendard", sans-serif', fontSize: 26, lineHeight: '31px', fontWeight: 400, textAlign: 'center' }}>VS</div>
+                  <div style={{ position: 'absolute', left: 381, top: 0, width: 78, height: 78, border: '1px dashed rgba(255,255,255,0.28)', borderRadius: '50%', background: 'linear-gradient(180deg, rgba(255,255,255,0.025), rgba(255,255,255,0)), rgba(255,255,255,0.04)', color: 'rgba(255,255,255,0.72)', fontFamily: '"Bebas Neue", "Pretendard", sans-serif', fontSize: 24.3, lineHeight: '78px', fontWeight: 400, textAlign: 'center', letterSpacing: 0.973, overflow: 'hidden' }}>{match.away_code}</div>
+                  <div style={{ position: 'absolute', left: 474, top: 15, width: 206, height: 54, fontSize: 39.8, lineHeight: '48px', fontWeight: 900, whiteSpace: 'nowrap', overflow: 'hidden' }}>{match.away_team}</div>
+                  <div style={{ position: 'absolute', left: 0, top: 84, width: 680, height: 25, color: 'rgba(255,255,255,0.46)', fontSize: 21, lineHeight: '25px', fontWeight: 900, whiteSpace: 'nowrap', overflow: 'hidden' }}>
                     {[match.group_label, match.venue].filter(Boolean).join(' · ')}
                   </div>
                 </div>
               </div>
             ))}
-            <div style={{ position: 'absolute', left: -108, top: 1079, width: 1296, height: 1, background: 'linear-gradient(90deg, rgba(120,200,150,0), rgba(120,200,150,0.22), rgba(120,200,150,0))' }} />
-            <div style={{ position: 'absolute', left: 126, top: 1309, width: 230, height: 34, fontSize: 27, lineHeight: '34px', fontWeight: 900 }}>@plick_football</div>
           </div>
         </div>
       </div>
