@@ -17,14 +17,26 @@ const TEAM_SUBJECT_COLORS = {
 const CARD_PREVIEW_WIDTH = 1080;
 const CARD_PREVIEW_HEIGHT = 1350;
 const CARD_PREVIEW_MAX_WIDTH = 360;
+const CARD_COVER_SUMMARY_WIDTH = 826;
+const CARD_COVER_SUMMARY_FONT_SIZE = 40;
+const CARD_PREVIEW_SCALE = CARD_PREVIEW_MAX_WIDTH / CARD_PREVIEW_WIDTH;
+const CARD_COVER_SUMMARY_EDITOR_TEXT_WIDTH = CARD_COVER_SUMMARY_WIDTH * CARD_PREVIEW_SCALE;
+const CARD_COVER_SUMMARY_EDITOR_FONT_SIZE = CARD_COVER_SUMMARY_FONT_SIZE * CARD_PREVIEW_SCALE;
+const CARD_COVER_SUMMARY_EDITOR_MIN_HEIGHT = 136;
+const CARD_TEXTAREA_PADDING_X = 12;
 const CARD_DETAIL_TEXT_WIDTH = 960;
 const CARD_DETAIL_TEXT_TOP = 180;
 const CARD_DETAIL_TEXT_HEIGHT = 900;
 const CARD_DETAIL_FONT_SIZE = 40;
 const CARD_DETAIL_LINE_HEIGHT = 60;
 const CARD_DETAIL_SOURCE_TOP = 1110;
+const CARD_DETAIL_SOURCE_GAP = CARD_DETAIL_SOURCE_TOP - CARD_DETAIL_TEXT_TOP - CARD_DETAIL_TEXT_HEIGHT;
+const CARD_DETAIL_SOURCE_HEIGHT = 60;
+const CARD_DETAIL_STACK_CENTER =
+  CARD_DETAIL_TEXT_TOP + (CARD_DETAIL_TEXT_HEIGHT + CARD_DETAIL_SOURCE_GAP + CARD_DETAIL_SOURCE_HEIGHT) / 2;
 const CARD_DETAIL_EDITOR_MAX_WIDTH = CARD_DETAIL_TEXT_WIDTH * (CARD_PREVIEW_MAX_WIDTH / CARD_PREVIEW_WIDTH);
 const CARD_WORKSPACE_TEXTAREA_HEIGHT = 300;
+const CARD_WORKSPACE_EDITOR_MAX_WIDTH = CARD_DETAIL_EDITOR_MAX_WIDTH;
 const STATUS_LABELS = {
   review: '검수',
   published: '발행',
@@ -828,7 +840,7 @@ function cardFromFields(fields) {
       subject: String(fields.subject || '').trim(),
       subject_color: normalizeSubjectColor(fields.subject_color),
       headline: String(fields.headline || '').trim(),
-      summary: String(fields.summary || '').trim(),
+      summary: normalizeParagraphText(fields.summary),
     },
     detail: {
       paragraphs: normalizeParagraphText(fields.paragraphs),
@@ -874,7 +886,7 @@ function CardPreviewPage({ type, fields, imageSource }) {
   if (cleanSubject && cleanHeadline.startsWith(cleanSubject)) {
     cleanHeadline = cleanHeadline.slice(cleanSubject.length).replace(/^[\s,]+/, '').trim();
   }
-  const coverSummary = String(fields.summary || '요약을 입력하면 커버 하단에 표시됩니다.').replace(/\s+/g, ' ').trim();
+  const coverSummary = normalizeParagraphText(fields.summary) || '요약을 입력하면 커버 하단에 표시됩니다.';
   const detailText = normalizeParagraphText(fields.paragraphs) || '본문 문단을 입력하면 상세 카드에 표시됩니다.';
   const sourceText = String(fields.source || 'source').replace(/^@+/, '').trim() || 'source';
 
@@ -977,7 +989,6 @@ function CardPreviewPage({ type, fields, imageSource }) {
                   top: 898,
                   zIndex: 2,
                   width: 960,
-                  height: 200,
                   margin: 0,
                   color: '#fff',
                   fontSize: 84,
@@ -986,7 +997,7 @@ function CardPreviewPage({ type, fields, imageSource }) {
                   letterSpacing: 0,
                   wordBreak: 'keep-all',
                   overflowWrap: 'break-word',
-                  overflow: 'hidden',
+                  overflow: 'visible',
                 }}>
                 <span style={{ color: subjectColor }}>{cleanSubject}</span>
                 {cleanHeadline && <><br />{cleanHeadline}</>}
@@ -998,7 +1009,6 @@ function CardPreviewPage({ type, fields, imageSource }) {
                   top: 1122,
                   zIndex: 2,
                   width: 826,
-                  height: 144,
                   margin: 0,
                   color: '#fff',
                   fontSize: 40,
@@ -1007,7 +1017,8 @@ function CardPreviewPage({ type, fields, imageSource }) {
                   letterSpacing: 0,
                   wordBreak: 'keep-all',
                   overflowWrap: 'break-word',
-                  overflow: 'hidden',
+                  whiteSpace: 'pre-wrap',
+                  overflow: 'visible',
                 }}>
                 {coverSummary}
               </p>
@@ -1018,49 +1029,51 @@ function CardPreviewPage({ type, fields, imageSource }) {
                 style={{
                   position: 'absolute',
                   left: 60,
-                  top: CARD_DETAIL_TEXT_TOP,
+                  top: CARD_DETAIL_STACK_CENTER,
                   zIndex: 2,
                   width: CARD_DETAIL_TEXT_WIDTH,
-                  height: CARD_DETAIL_TEXT_HEIGHT,
-                  color: '#fff',
-                  fontSize: CARD_DETAIL_FONT_SIZE,
-                  lineHeight: `${CARD_DETAIL_LINE_HEIGHT}px`,
-                  fontWeight: 500,
-                  letterSpacing: 0,
-                  textAlign: 'center',
-                  display: 'flex',
-                  alignItems: 'center',
-                  overflow: 'hidden',
+                  transform: 'translateY(-50%)',
+                  overflow: 'visible',
                 }}>
                 <div
                   style={{
-                    width: '100%',
-                    whiteSpace: 'pre-wrap',
-                    wordBreak: 'keep-all',
-                    overflowWrap: 'break-word',
+                    width: CARD_DETAIL_TEXT_WIDTH,
+                    minHeight: CARD_DETAIL_TEXT_HEIGHT,
+                    color: '#fff',
+                    fontSize: CARD_DETAIL_FONT_SIZE,
+                    lineHeight: `${CARD_DETAIL_LINE_HEIGHT}px`,
+                    fontWeight: 500,
+                    letterSpacing: 0,
+                    textAlign: 'center',
+                    display: 'flex',
+                    alignItems: 'center',
+                    overflow: 'visible',
                   }}>
-                  {detailText}
+                  <div
+                    style={{
+                      width: '100%',
+                      whiteSpace: 'pre-wrap',
+                      wordBreak: 'keep-all',
+                      overflowWrap: 'break-word',
+                    }}>
+                    {detailText}
+                  </div>
                 </div>
-              </div>
-              <div
-                style={{
-                  position: 'absolute',
-                  left: 60,
-                  top: CARD_DETAIL_SOURCE_TOP,
-                  zIndex: 2,
-                  width: 960,
-                  height: 60,
-                  margin: 0,
-                  color: '#fff',
-                  fontSize: 32,
-                  lineHeight: '60px',
-                  fontWeight: 500,
-                  letterSpacing: 0,
-                  textAlign: 'right',
-                  whiteSpace: 'nowrap',
-                  overflow: 'hidden',
-                }}>
-                @{sourceText}
+                <div
+                  style={{
+                    width: 960,
+                    marginTop: CARD_DETAIL_SOURCE_GAP,
+                    color: '#fff',
+                    fontSize: 32,
+                    lineHeight: '60px',
+                    fontWeight: 500,
+                    letterSpacing: 0,
+                    textAlign: 'right',
+                    whiteSpace: 'nowrap',
+                    overflow: 'visible',
+                  }}>
+                  @{sourceText}
+                </div>
               </div>
             </>
           )}
@@ -1085,6 +1098,59 @@ function CardPreviewPage({ type, fields, imageSource }) {
         </div>
       </div>
     </div>
+  );
+}
+
+function CardSummaryEditor({ value, onChange, placeholder = 'cover summary' }) {
+  const textareaRef = useRef(null);
+  const [textareaHeight, setTextareaHeight] = useState(CARD_COVER_SUMMARY_EDITOR_MIN_HEIGHT);
+  const summaryPaddingRight =
+    `max(${CARD_TEXTAREA_PADDING_X}px, calc(100% - ${CARD_TEXTAREA_PADDING_X + CARD_COVER_SUMMARY_EDITOR_TEXT_WIDTH}px))`;
+
+  useEffect(() => {
+    const node = textareaRef.current;
+    if (!node) return;
+
+    node.style.height = 'auto';
+    const nextHeight = Math.max(CARD_COVER_SUMMARY_EDITOR_MIN_HEIGHT, node.scrollHeight);
+    node.style.height = `${nextHeight}px`;
+    setTextareaHeight(nextHeight);
+  }, [value]);
+
+  return (
+    <textarea
+      ref={textareaRef}
+      value={value}
+      onChange={onChange}
+      wrap="soft"
+      placeholder={placeholder}
+      className="block w-full rounded-md outline-none"
+      style={{
+        height: textareaHeight,
+        minHeight: CARD_COVER_SUMMARY_EDITOR_MIN_HEIGHT,
+        boxSizing: 'border-box',
+        paddingTop: 8,
+        paddingBottom: 8,
+        paddingLeft: CARD_TEXTAREA_PADDING_X,
+        paddingRight: summaryPaddingRight,
+        margin: 0,
+        border: '1px solid #283040',
+        resize: 'vertical',
+        background: '#11141d',
+        color: '#fff',
+        caretColor: '#fff',
+        fontFamily: '"Pretendard", "Malgun Gothic", "Apple SD Gothic Neo", sans-serif',
+        fontSize: CARD_COVER_SUMMARY_EDITOR_FONT_SIZE,
+        lineHeight: 'normal',
+        fontWeight: 500,
+        letterSpacing: 0,
+        textAlign: 'left',
+        whiteSpace: 'pre-wrap',
+        wordBreak: 'keep-all',
+        overflowWrap: 'break-word',
+        overflow: 'hidden',
+      }}
+    />
   );
 }
 
@@ -1646,17 +1712,16 @@ function CardNewsWorkspace({ headers, adminToken, seedItem, onNotify }) {
             </label>
             <label className="block">
               <span className="mb-1 block text-xs font-bold uppercase" style={{ color: '#687086' }}>summary</span>
-              <textarea
+              <CardSummaryEditor
                 value={fields.summary}
                 onChange={event => updateField('summary', event.target.value)}
-                rows={3}
                 placeholder="커버 카드에 들어갈 짧은 요약"
-                className="w-full rounded-md px-3 py-2 text-sm leading-6 outline-none"
-                style={{ background: '#11141d', color: '#fff', border: '1px solid #283040' }}
               />
             </label>
             <div className="grid min-w-0 gap-3 lg:grid-cols-2">
-              <label className="block min-w-0">
+              <label
+                className="block min-w-0"
+                style={{ maxWidth: CARD_WORKSPACE_EDITOR_MAX_WIDTH, width: '100%', margin: '0 auto' }}>
                 <span className="mb-1 block text-xs font-bold uppercase" style={{ color: '#687086' }}>paragraphs</span>
                 <CardParagraphEditor
                   value={fields.paragraphs}
@@ -1664,7 +1729,9 @@ function CardNewsWorkspace({ headers, adminToken, seedItem, onNotify }) {
                   minHeight={CARD_WORKSPACE_TEXTAREA_HEIGHT}
                 />
               </label>
-              <div className="block min-w-0">
+              <div
+                className="block min-w-0"
+                style={{ maxWidth: CARD_WORKSPACE_EDITOR_MAX_WIDTH, width: '100%', margin: '0 auto' }}>
                 <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
                   <span className="block text-xs font-bold uppercase" style={{ color: '#687086' }}>instagram caption</span>
                   <div className="flex flex-wrap gap-2">
