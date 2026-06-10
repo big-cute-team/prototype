@@ -15,7 +15,7 @@ const TODAY_FIXTURES_TIME_PERIODS = ['오전', '오후'];
 const TODAY_FIXTURES_GROUPS = Array.from({ length: 8 }, (_, index) => `Group ${String.fromCharCode(65 + index)}`);
 const EPL_MATCHWEEK_OPTIONS = Array.from({ length: 38 }, (_, index) => `Matchweek ${index + 1}`);
 const UCL_ROUND_OPTIONS = ['League Phase', 'Round of 16', 'Quarter-final', 'Semi-final', 'Final'];
-const TODAY_FIXTURES_TITLE_PRESETS = [
+const SCHEDULE_TYPE_OPTIONS = [
   { id: 'today', label: '오늘의 경기 일정', title: '오늘의\n경기 일정' },
   { id: 'weekly', label: '이번주 경기 일정', title: '이번주\n경기 일정' },
 ];
@@ -87,9 +87,12 @@ const CARD_WORKSPACE_TEXTAREA_HEIGHT = 300;
 const CARD_WORKSPACE_EDITOR_MAX_WIDTH = CARD_DETAIL_EDITOR_MAX_WIDTH;
 const DEFAULT_TODAY_FIXTURES = {
   preset_id: 'world_cup',
+  schedule_type: 'today',
   eyebrow: 'WORLD CUP 2026 · TODAY',
   title: '오늘의\n경기 일정',
   date: '2026-06-12',
+  date_start: '2026-06-12',
+  date_end: '2026-06-18',
   date_label: '6월 12일 (금)',
   matches: [
     {
@@ -570,8 +573,30 @@ function formatTodayFixtureDateLabel(dateValue) {
   return `${month}월 ${day}일 (${weekdays[date.getDay()]})`;
 }
 
+function addDaysToDateValue(dateValue, days) {
+  const [year, month, day] = String(dateValue || '').split('-').map(Number);
+  if (!year || !month || !day) return '';
+  const date = new Date(year, month - 1, day);
+  date.setDate(date.getDate() + days);
+  const nextYear = date.getFullYear();
+  const nextMonth = String(date.getMonth() + 1).padStart(2, '0');
+  const nextDay = String(date.getDate()).padStart(2, '0');
+  return `${nextYear}-${nextMonth}-${nextDay}`;
+}
+
+function formatTodayFixtureDateRangeLabel(startDate, endDate) {
+  const startLabel = formatTodayFixtureDateLabel(startDate);
+  const endLabel = formatTodayFixtureDateLabel(endDate);
+  if (!startLabel || !endLabel) return startLabel || endLabel || '';
+  return `${startLabel} ~ ${endLabel}`;
+}
+
 function getTodayFixturesPreset(presetId) {
   return TODAY_FIXTURES_PRESETS.find(preset => preset.id === presetId) || TODAY_FIXTURES_PRESETS[0];
+}
+
+function getScheduleTypeOption(typeId) {
+  return SCHEDULE_TYPE_OPTIONS.find(option => option.id === typeId) || SCHEDULE_TYPE_OPTIONS[0];
 }
 
 function chunkItems(items, size) {
@@ -583,9 +608,10 @@ function chunkItems(items, size) {
 }
 
 function todayFixturesPayload(value) {
+  const scheduleType = getScheduleTypeOption(value.schedule_type);
   return {
     eyebrow: String(value.eyebrow || '').trim(),
-    title: String(value.title || '').replace(/\r\n/g, '\n').replace(/\r/g, '\n').trim(),
+    title: String(scheduleType.title || value.title || '').replace(/\r\n/g, '\n').replace(/\r/g, '\n').trim(),
     date_label: String(value.date_label || '').trim(),
     matches: (value.matches || []).map(match => {
       const homeImageUrl = String(match.home_image_url || '').trim();
@@ -1572,6 +1598,30 @@ function CompactSelect({ value, options, optionLabels = {}, onChange, ariaLabel,
   );
 }
 
+function ScheduleTypeToggle({ value, onChange }) {
+  return (
+    <div className="grid min-w-0 grid-cols-2 gap-1 rounded-md p-1" style={{ background: '#11141d', border: '1px solid #283040' }}>
+      {SCHEDULE_TYPE_OPTIONS.map(option => {
+        const selected = value === option.id;
+        return (
+          <button
+            key={option.id}
+            type="button"
+            onClick={() => onChange(option.id)}
+            className="min-h-10 rounded px-3 text-sm font-black transition"
+            style={{
+              background: selected ? '#f8fafc' : 'transparent',
+              color: selected ? '#0b0d14' : '#aab4cc',
+            }}
+          >
+            {option.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 function FixtureCountrySelect({ value, onSelect, placeholder }) {
   const [query, setQuery] = useState('');
   const [open, setOpen] = useState(false);
@@ -1694,6 +1744,7 @@ function TodayFixturesEditor({
   const rowRefs = useRef([]);
   const [dragIndex, setDragIndex] = useState(null);
   const currentPreset = getTodayFixturesPreset(value.preset_id);
+  const currentScheduleType = getScheduleTypeOption(value.schedule_type);
   const groupOptions = currentPreset.groupOptions;
   const payload = todayFixturesPayload(value);
   const validationIssues = todayFixturesValidationIssues(payload);
@@ -1701,7 +1752,42 @@ function TodayFixturesEditor({
     onChange({
       ...value,
       date: nextDate,
+      date_start: nextDate,
+      date_end: value.date_end || addDaysToDateValue(nextDate, 6),
       date_label: formatTodayFixtureDateLabel(nextDate),
+    });
+  };
+  const updateWeekStart = nextStartDate => {
+    const nextEndDate = addDaysToDateValue(nextStartDate, 6);
+    onChange({
+      ...value,
+      date: nextStartDate,
+      date_start: nextStartDate,
+      date_end: nextEndDate,
+      date_label: formatTodayFixtureDateRangeLabel(nextStartDate, nextEndDate),
+    });
+  };
+  const updateWeekEnd = nextEndDate => {
+    onChange({
+      ...value,
+      date_end: nextEndDate,
+      date_label: formatTodayFixtureDateRangeLabel(value.date_start || value.date, nextEndDate),
+    });
+  };
+  const updateScheduleType = nextType => {
+    const option = getScheduleTypeOption(nextType);
+    const startDate = value.date_start || value.date;
+    const endDate = value.date_end || addDaysToDateValue(startDate, 6);
+    onChange({
+      ...value,
+      schedule_type: option.id,
+      title: option.title,
+      date: startDate,
+      date_start: startDate,
+      date_end: endDate,
+      date_label: option.id === 'weekly'
+        ? formatTodayFixtureDateRangeLabel(startDate, endDate)
+        : formatTodayFixtureDateLabel(startDate),
     });
   };
   const applyPreset = presetId => {
@@ -1716,11 +1802,6 @@ function TodayFixturesEditor({
         group_label: preset.groupOptions.includes(match.group_label) ? match.group_label : preset.defaultGroupLabel,
       })),
     });
-  };
-  const applyTitlePreset = titlePresetId => {
-    const titlePreset = TODAY_FIXTURES_TITLE_PRESETS.find(preset => preset.id === titlePresetId);
-    if (!titlePreset) return;
-    onChange({ ...value, title: titlePreset.title });
   };
   const updateMatch = (index, name, nextValue) => {
     const matches = value.matches.map((match, matchIndex) => (
@@ -1815,46 +1896,51 @@ function TodayFixturesEditor({
               style={{ background: '#11141d', color: '#fff', border: '1px solid #283040' }}
             />
           </label>
-          <label className="block min-w-0">
-            <span className="mb-1 block text-xs font-bold uppercase" style={{ color: '#687086' }}>title preset</span>
-            <CompactSelect
-              value=""
-              options={TODAY_FIXTURES_TITLE_PRESETS.map(preset => preset.id)}
-              optionLabels={Object.fromEntries(TODAY_FIXTURES_TITLE_PRESETS.map(preset => [preset.id, preset.label]))}
-              onChange={applyTitlePreset}
-              ariaLabel="일정 제목 프리셋"
-              placeholder="직접 입력"
-            />
-          </label>
+          <div className="min-w-0">
+            <span className="mb-1 block text-xs font-bold uppercase" style={{ color: '#687086' }}>title</span>
+            <div className="flex h-10 items-center rounded-md px-3 text-sm font-black" style={{ background: '#11141d', color: '#fff', border: '1px solid #283040' }}>
+              {currentScheduleType.label}
+            </div>
+          </div>
         </div>
-        <label className="block min-w-0">
-          <span className="mb-1 block text-xs font-bold uppercase" style={{ color: '#687086' }}>title</span>
-          <textarea
-            value={value.title || ''}
-            onChange={event => onChange({ ...value, title: event.target.value })}
-            rows={2}
-            placeholder={'오늘의\n경기 일정'}
-            className="w-full resize-none rounded-md px-3 py-2 text-sm font-black leading-5 outline-none"
-            style={{ background: '#11141d', color: '#fff', border: '1px solid #283040' }}
-          />
-        </label>
-        <div className="grid min-w-0 gap-2 sm:grid-cols-[180px_minmax(0,1fr)]">
-          <label className="block min-w-0">
-            <span className="mb-1 block text-xs font-bold uppercase" style={{ color: '#687086' }}>date</span>
-            <input
-              type="date"
-              value={value.date || ''}
-              onInput={event => updateDate(event.currentTarget.value)}
-              onChange={event => updateDate(event.target.value)}
-              className="h-10 w-full rounded-md px-3 text-sm font-bold outline-none"
-              style={{ background: '#11141d', color: '#fff', border: '1px solid #283040' }}
-            />
-          </label>
+        <div className="space-y-2">
+          <div>
+            <span className="mb-1 block text-xs font-bold uppercase" style={{ color: '#687086' }}>schedule title</span>
+            <ScheduleTypeToggle value={currentScheduleType.id} onChange={updateScheduleType} />
+          </div>
+          <div className={`grid min-w-0 gap-2 ${currentScheduleType.id === 'weekly' ? 'sm:grid-cols-[180px_180px_minmax(0,1fr)]' : 'sm:grid-cols-[180px_minmax(0,1fr)]'}`}>
+            <label className="block min-w-0">
+              <span className="mb-1 block text-xs font-bold uppercase" style={{ color: '#687086' }}>
+                {currentScheduleType.id === 'weekly' ? 'start date' : 'date'}
+              </span>
+              <input
+                type="date"
+                value={currentScheduleType.id === 'weekly' ? (value.date_start || value.date || '') : (value.date || '')}
+                onInput={event => (currentScheduleType.id === 'weekly' ? updateWeekStart(event.currentTarget.value) : updateDate(event.currentTarget.value))}
+                onChange={event => (currentScheduleType.id === 'weekly' ? updateWeekStart(event.target.value) : updateDate(event.target.value))}
+                className="h-10 w-full rounded-md px-3 text-sm font-bold outline-none"
+                style={{ background: '#11141d', color: '#fff', border: '1px solid #283040' }}
+              />
+            </label>
+            {currentScheduleType.id === 'weekly' && (
+              <label className="block min-w-0">
+                <span className="mb-1 block text-xs font-bold uppercase" style={{ color: '#687086' }}>end date</span>
+                <input
+                  type="date"
+                  value={value.date_end || ''}
+                  onInput={event => updateWeekEnd(event.currentTarget.value)}
+                  onChange={event => updateWeekEnd(event.target.value)}
+                  className="h-10 w-full rounded-md px-3 text-sm font-bold outline-none"
+                  style={{ background: '#11141d', color: '#fff', border: '1px solid #283040' }}
+                />
+              </label>
+            )}
           <div className="min-w-0">
             <span className="mb-1 block text-xs font-bold uppercase" style={{ color: '#687086' }}>date label</span>
             <div className="flex h-10 items-center rounded-md px-3 text-sm font-black" style={{ background: '#11141d', color: '#fff', border: '1px solid #283040' }}>
               {value.date_label || '날짜를 선택하세요'}
             </div>
+          </div>
           </div>
         </div>
 
