@@ -9,6 +9,12 @@ admin project.
 - Commit and push admin changes to `origin develop`.
 - Do not include unrelated untracked or user-created files unless the user asks.
 
+## Card News Work
+
+When creating or refactoring card news, consult `CARD_NEWS_IMPLEMENTATION.md`
+for the current admin-to-render-server architecture, payload shapes, template
+ids, preview behavior, and testing checklist.
+
 ## Start The Admin Server
 
 Use PowerShell from this directory:
