@@ -495,6 +495,31 @@ function publicationStatusTone(status) {
   return '#ffd166';
 }
 
+function instagramStatusTone(status) {
+  if (status === 'published') return '#48d99a';
+  if (status === 'failed') return '#ff8f8f';
+  if (status === 'publishing') return '#ffd166';
+  return '#687086';
+}
+
+function instagramStatusLabel(status) {
+  if (status === 'published') return 'Instagram 게시 완료';
+  if (status === 'publishing') return 'Instagram 게시 중';
+  if (status === 'failed') return 'Instagram 게시 실패';
+  return 'Instagram 미게시';
+}
+
+function instagramPagesForPublication(publication) {
+  if (Array.isArray(publication?.instagram_pages) && publication.instagram_pages.length > 0) {
+    return publication.instagram_pages;
+  }
+  const sourcePayload = publication?.source_payload && typeof publication.source_payload === 'object'
+    ? publication.source_payload
+    : {};
+  if (Array.isArray(sourcePayload.instagram_pages)) return sourcePayload.instagram_pages;
+  return [];
+}
+
 function cloneTodayFixturesDefaults() {
   return {
     ...DEFAULT_TODAY_FIXTURES,
@@ -2757,6 +2782,8 @@ function GeneratedCardNewsArchive({ headers, adminToken, onNotify }) {
   const [pageIndex, setPageIndex] = useState(0);
   const [busy, setBusy] = useState(false);
   const [deletingId, setDeletingId] = useState('');
+  const [postingId, setPostingId] = useState('');
+  const [instagramCaption, setInstagramCaption] = useState('');
   const [localMessage, setLocalMessage] = useState('');
   const [localTone, setLocalTone] = useState('neutral');
 
@@ -2851,16 +2878,25 @@ function GeneratedCardNewsArchive({ headers, adminToken, onNotify }) {
 
   const activePublication = publications[activeIndex] || null;
   const pages = Array.isArray(activePublication?.pages) ? activePublication.pages : [];
+  const instagramPages = instagramPagesForPublication(activePublication);
   const safePageIndex = pages.length > 0 ? Math.min(pageIndex, pages.length - 1) : 0;
   const currentPage = pages[safePageIndex] || null;
   const running = isPublicationRunning(activePublication?.status);
+  const instagramStatus = activePublication?.instagram_status || 'idle';
+  const instagramPosting = postingId === activePublication?.id || instagramStatus === 'publishing';
+  const instagramPublished = instagramStatus === 'published';
   const statusColor = publicationStatusTone(activePublication?.status);
+  const instagramColor = instagramStatusTone(instagramStatus);
   const renderTimingLabel = formatRenderTimings(activePublication?.source_payload?.render_timings_ms);
   const renderTimingDetails = formatRenderTimingDetails(activePublication?.source_payload?.render_timings_ms);
 
   useEffect(() => {
     setPageIndex(0);
   }, [activePublication?.id]);
+
+  useEffect(() => {
+    setInstagramCaption(activePublication?.instagram_caption || activePublication?.caption || '');
+  }, [activePublication?.id, activePublication?.caption, activePublication?.instagram_caption]);
 
   const moveCard = direction => {
     setActiveIndex(prev => {
@@ -2874,6 +2910,55 @@ function GeneratedCardNewsArchive({ headers, adminToken, onNotify }) {
       const next = prev + direction;
       return Math.max(0, Math.min(pages.length - 1, next));
     });
+  };
+
+  const publishToInstagram = async () => {
+    const publication = activePublication;
+    if (!publication?.id) return;
+    if (publication.status !== 'completed') {
+      setNotice('warn', '카드뉴스 이미지 생성이 완료된 뒤 게시할 수 있습니다.');
+      return;
+    }
+    if (instagramPages.length === 0) {
+      setNotice('warn', '인스타 발행용 JPEG가 없습니다. 카드뉴스를 다시 생성해주세요.');
+      return;
+    }
+    const ok = window.confirm(`"${publication.title || 'Card news'}"를 우리 인스타그램에 게시할까요?`);
+    if (!ok) return;
+
+    setPostingId(publication.id);
+    setLocalMessage('');
+    try {
+      setPublications(prev => prev.map(row => (
+        row.id === publication.id
+          ? { ...row, instagram_status: 'publishing', instagram_caption: instagramCaption, instagram_error: null }
+          : row
+      )));
+      const response = await fetch('/api/admin/instagram-publish', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          id: publication.id,
+          actor: 'admin-ui',
+          caption: instagramCaption,
+        }),
+      });
+      const data = await readJsonResponse(response);
+      if (!response.ok) throw new Error(data.error || 'Instagram 게시에 실패했습니다.');
+      if (data.publication?.id) {
+        setPublications(prev => prev.map(row => (row.id === data.publication.id ? data.publication : row)));
+      }
+      setNotice('good', data.already_published ? '이미 Instagram에 게시된 카드뉴스입니다.' : 'Instagram 게시가 완료됐습니다.');
+    } catch (error) {
+      setPublications(prev => prev.map(row => (
+        row.id === publication.id
+          ? { ...row, instagram_status: 'failed', instagram_caption: instagramCaption, instagram_error: error.message }
+          : row
+      )));
+      setNotice('bad', error.message);
+    } finally {
+      setPostingId('');
+    }
   };
 
   return (
@@ -2991,6 +3076,61 @@ function GeneratedCardNewsArchive({ headers, adminToken, onNotify }) {
                 {activePublication?.error_message && (
                   <div className="mt-3 break-words text-xs" style={{ color: '#ff8f8f', overflowWrap: 'anywhere' }}>
                     {activePublication.error_message}
+                  </div>
+                )}
+
+                {activePublication && (
+                  <div className="mt-4 min-w-0 rounded-md p-3" style={{ background: '#080a10', border: '1px solid #202635' }}>
+                    <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                      <div className="text-xs font-bold uppercase" style={{ color: '#687086' }}>Instagram publish</div>
+                      <span
+                        className="rounded px-2 py-1 text-xs font-black"
+                        style={{ background: `${instagramColor}22`, color: instagramColor, border: `1px solid ${instagramColor}66` }}>
+                        {instagramStatusLabel(instagramStatus)}
+                      </span>
+                    </div>
+                    <textarea
+                      value={instagramCaption}
+                      onChange={e => setInstagramCaption(e.target.value)}
+                      disabled={instagramPosting || instagramPublished}
+                      maxLength={2200}
+                      placeholder="Instagram caption"
+                      className="min-h-[120px] w-full resize-y rounded-md px-3 py-2 text-sm outline-none disabled:opacity-60"
+                      style={{ background: '#11141d', color: '#fff', border: '1px solid #283040', lineHeight: 1.6 }}
+                    />
+                    <div className="mt-2 flex flex-wrap items-center justify-between gap-2 text-xs" style={{ color: '#8791aa' }}>
+                      <span>JPEG {instagramPages.length}장 · {instagramCaption.length}/2200</span>
+                      {activePublication.instagram_permalink && (
+                        <a href={activePublication.instagram_permalink} target="_blank" rel="noreferrer" style={{ color: '#48d99a' }}>
+                          Instagram에서 보기
+                        </a>
+                      )}
+                    </div>
+                    {activePublication.instagram_error && (
+                      <div className="mt-2 break-words text-xs" style={{ color: '#ff8f8f', overflowWrap: 'anywhere' }}>
+                        {activePublication.instagram_error}
+                      </div>
+                    )}
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        onClick={publishToInstagram}
+                        disabled={!adminToken || running || activePublication.status !== 'completed' || instagramPages.length === 0 || instagramPosting || instagramPublished}
+                        className="rounded px-3 py-2 text-sm font-black disabled:opacity-50"
+                        style={{ background: '#e8edf7', color: '#05070d' }}>
+                        {instagramPosting ? '게시 중' : instagramPublished ? '게시 완료' : '인스타 게시'}
+                      </button>
+                      {instagramPages.length > 0 && (
+                        <a
+                          href={instagramPages[0].url}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="rounded px-3 py-2 text-sm font-bold"
+                          style={{ background: '#171923', color: '#cbd3e8', border: '1px solid #2a3040' }}>
+                          JPEG 확인
+                        </a>
+                      )}
+                    </div>
                   </div>
                 )}
 

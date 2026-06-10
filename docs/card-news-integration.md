@@ -42,6 +42,37 @@ POST /card/render-upload
 manifest.json
 ```
 
+## Instagram Publishing
+
+The render job keeps PNG files for preview/download and uploads JPEG
+derivatives under `instagram/` for Instagram Content Publishing. Admin stores
+those JPEG assets in `card_news_publications.instagram_pages`.
+
+Admin server environment:
+
+```env
+INSTAGRAM_IG_USER_ID=17841400000000000
+INSTAGRAM_ACCESS_TOKEN=long-lived-instagram-or-page-token
+INSTAGRAM_GRAPH_API_VERSION=v25.0
+```
+
+`INSTAGRAM_ACCESS_TOKEN` is a server-only secret and must never be exposed to
+the browser. New card news must be generated after this change to receive
+`instagram_pages`; older rows only have PNG preview pages.
+
+Before production use, run:
+
+```text
+supabase/migrations/20260610_instagram_publication_fields.sql
+```
+
+Optional render server settings:
+
+```env
+INSTAGRAM_JPEG_QUALITY=95
+INSTAGRAM_JPEG_MAX_BYTES=8388608
+```
+
 ## Notes
 
 - MVP는 ZIP 다운로드 제공까지 구현한다.

@@ -73,16 +73,23 @@ create table if not exists public.card_news_publications (
   id uuid primary key default gen_random_uuid(),
   content_item_id uuid references public.content_items(id) on delete set null,
   kind text not null check (kind in ('article', 'today_fixtures')),
-  status text not null default 'pending' check (status in ('pending', 'queued', 'running', 'completed', 'failed')),
+  status text not null default 'pending' check (status in ('pending', 'queued', 'running', 'zip_pending', 'completed', 'failed')),
   render_job_id text,
   template_id text not null,
   title text not null,
   caption text,
   source_payload jsonb not null default '{}'::jsonb,
   pages jsonb not null default '[]'::jsonb,
+  instagram_pages jsonb not null default '[]'::jsonb,
   zip_url text,
   r2_prefix text,
   error_message text,
+  instagram_status text not null default 'idle' check (instagram_status in ('idle', 'publishing', 'published', 'failed')),
+  instagram_media_id text,
+  instagram_permalink text,
+  instagram_caption text,
+  instagram_error text,
+  instagram_published_at timestamptz,
   created_at timestamptz not null default now(),
   completed_at timestamptz
 );
@@ -97,6 +104,7 @@ create index if not exists idx_audit_events_created on public.audit_events(creat
 create index if not exists idx_card_news_publications_created on public.card_news_publications(created_at desc);
 create index if not exists idx_card_news_publications_content_item on public.card_news_publications(content_item_id, created_at desc);
 create index if not exists idx_card_news_publications_status on public.card_news_publications(status, created_at desc);
+create index if not exists idx_card_news_publications_instagram_status on public.card_news_publications(instagram_status, created_at desc);
 
 alter table public.sources enable row level security;
 alter table public.team_aliases enable row level security;

@@ -46,6 +46,7 @@ function patchForJob(job, sourcePayload = {}) {
     render_job_id: job.job_id || null,
     source_payload: mergeRenderTimings(sourcePayload, job),
     pages: Array.isArray(job.pages) ? job.pages : [],
+    instagram_pages: Array.isArray(job.instagram_pages) ? job.instagram_pages : [],
     zip_url: job.zip_url || null,
     r2_prefix: job.r2_prefix || null,
     error_message: job.error_message || null,

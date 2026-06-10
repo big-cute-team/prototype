@@ -50,6 +50,7 @@ function patchForJob(job, sourcePayload = {}) {
     render_job_id: job.job_id || null,
     source_payload: mergeRenderTimings(sourcePayload, job),
     pages: Array.isArray(job.pages) ? job.pages : [],
+    instagram_pages: Array.isArray(job.instagram_pages) ? job.instagram_pages : [],
     zip_url: job.zip_url || null,
     r2_prefix: job.r2_prefix || null,
     error_message: job.error_message || null,
@@ -104,6 +105,7 @@ async function createPublication(req, res) {
     caption: payload.caption,
     source_payload: payload.sourcePayload,
     pages: [],
+    instagram_pages: [],
     zip_url: null,
     r2_prefix: null,
     error_message: null,
@@ -137,6 +139,10 @@ function storageKeysForPublication(publication) {
   const keys = new Set();
   const pages = Array.isArray(publication.pages) ? publication.pages : [];
   pages.forEach(page => {
+    if (page?.key) keys.add(String(page.key));
+  });
+  const instagramPages = Array.isArray(publication.instagram_pages) ? publication.instagram_pages : [];
+  instagramPages.forEach(page => {
     if (page?.key) keys.add(String(page.key));
   });
   if (publication.r2_prefix) keys.add(`${String(publication.r2_prefix).replace(/\/$/, '')}/cardnews.zip`);

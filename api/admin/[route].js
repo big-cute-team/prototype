@@ -7,6 +7,7 @@ const HANDLERS = {
   'card-publications': require('../_handlers/admin/card-publications'),
   'card-publications-sync': require('../_handlers/admin/card-publications-sync'),
   'card-template-render': require('../_handlers/admin/card-template-render'),
+  'instagram-publish': require('../_handlers/admin/instagram-publish'),
   custom: require('../_handlers/admin/custom'),
   debate: require('../_handlers/admin/debate'),
   items: require('../_handlers/admin/items'),
