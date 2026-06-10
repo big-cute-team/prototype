@@ -3,6 +3,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import todayFixturesTemplateUrl from './assets/today-fixtures-template.png';
 
 const CARD_NEWS_TAB = 'card_news_workspace';
+const GENERATED_CARD_NEWS_TAB = 'generated_card_news';
 const ARTICLE_CARD_MODE = 'article';
 const TODAY_FIXTURES_MODE = 'today_fixtures';
 const ARTICLE_CARD_TEMPLATE_ID = 'plick_transfer_v1';
@@ -14,7 +15,7 @@ const CARD_WORKSPACE_MODES = [
   { id: TODAY_FIXTURES_MODE, label: '오늘의 경기 일정' },
 ];
 const STATUS_OPTIONS = ['review', 'published', 'discarded', 'rejected', 'all'];
-const ADMIN_TAB_OPTIONS = [...STATUS_OPTIONS, CARD_NEWS_TAB];
+const ADMIN_TAB_OPTIONS = [...STATUS_OPTIONS, CARD_NEWS_TAB, GENERATED_CARD_NEWS_TAB];
 const BRIEFING_STATUS_OPTIONS = ['OFFICIAL', 'CONFIRMED', 'UPDATE', 'RUMOUR', 'DENIED'];
 const TEAM_OPTIONS = ['ARS', 'CHE', 'LIV', 'MCI', 'MUN', 'TOT'];
 const DEFAULT_SUBJECT_COLOR = '#FFFFFF';
@@ -1466,7 +1467,7 @@ function TodayFixturesEditor({ value, onChange, onRender, disabled, rendering })
           disabled={disabled || rendering}
           className="w-full rounded-md px-4 py-3 text-sm font-black disabled:opacity-50"
           style={{ background: '#21c17a', color: '#03130c' }}>
-          {rendering ? '발행 중' : '오늘의 경기 일정 발행'}
+          {rendering ? '업로드 중' : '오늘의 경기 일정 업로드'}
         </button>
       </div>
     </section>
@@ -1710,22 +1711,22 @@ function CardNewsWorkspace({ headers, adminToken, seedItem, onNotify }) {
       if (publication.status === 'completed') {
         updateRenderJob(localJobId, {
           status: 'success',
-          phase: 'R2 발행 완료',
+          phase: 'R2 업로드 완료',
           finishedAt: Date.now(),
           zipUrl: publication.zip_url,
         });
-        setNotice('good', `${publication.title || '카드뉴스'} 발행이 완료됐습니다.`);
+        setNotice('good', `${publication.title || '카드뉴스'} 업로드가 완료됐습니다.`);
       } else if (publication.status === 'failed') {
         updateRenderJob(localJobId, {
           status: 'error',
-          phase: '발행 실패',
+          phase: '업로드 실패',
           finishedAt: Date.now(),
           error: publication.error_message || 'Render job failed',
         });
-        setNotice('bad', publication.error_message || '카드뉴스 발행에 실패했습니다.');
+        setNotice('bad', publication.error_message || '카드뉴스 업로드에 실패했습니다.');
       } else {
         updateRenderJob(localJobId, {
-          phase: `R2 발행 중 (${publication.status})`,
+          phase: `R2 업로드 중 (${publication.status})`,
         });
       }
     }
@@ -1816,7 +1817,7 @@ function CardNewsWorkspace({ headers, adminToken, seedItem, onNotify }) {
     upsertPublication(publication);
     updateRenderJob(jobId, {
       publicationId: publication.id,
-      phase: `R2 발행 중 (${publication.status})`,
+      phase: `R2 업로드 중 (${publication.status})`,
     });
     return publication;
   };
@@ -2054,7 +2055,7 @@ function CardNewsWorkspace({ headers, adminToken, seedItem, onNotify }) {
       return;
     }
     if (isRenderingZip) {
-      setNotice('warn', '이미 카드뉴스 발행 작업이 진행 중입니다.');
+      setNotice('warn', '이미 카드뉴스 업로드 작업이 진행 중입니다.');
       return;
     }
     if (!file && !imageUrlValue) {
@@ -2077,7 +2078,7 @@ function CardNewsWorkspace({ headers, adminToken, seedItem, onNotify }) {
       title: compactText(item.title_ko || item.raw_text, 72, 'Card news'),
       filename,
       startedAt,
-      phase: file ? '이미지 업로드 중' : 'R2 발행 요청 중',
+      phase: file ? '이미지 업로드 중' : 'R2 업로드 요청 중',
     }, ...prev].slice(0, 5));
 
     try {
@@ -2088,7 +2089,7 @@ function CardNewsWorkspace({ headers, adminToken, seedItem, onNotify }) {
         setImageFile(null);
       }
 
-      updateRenderJob(jobId, { phase: 'R2 발행 작업 등록 중' });
+      updateRenderJob(jobId, { phase: 'R2 업로드 작업 등록 중' });
       const publication = await startCardPublication({
         jobId,
         kind: 'article',
@@ -2106,11 +2107,11 @@ function CardNewsWorkspace({ headers, adminToken, seedItem, onNotify }) {
           card,
         },
       });
-      setNotice('good', `${publication.title || filename} 발행 작업을 시작했습니다.`);
+      setNotice('good', `${publication.title || filename} 업로드 작업을 시작했습니다.`);
     } catch (error) {
       updateRenderJob(jobId, {
         status: 'error',
-        phase: '발행 실패',
+        phase: '업로드 실패',
         finishedAt: Date.now(),
         error: error.message,
       });
@@ -2127,7 +2128,7 @@ function CardNewsWorkspace({ headers, adminToken, seedItem, onNotify }) {
       return;
     }
     if (isRenderingZip) {
-      setNotice('warn', '이미 카드뉴스 발행 작업이 진행 중입니다.');
+      setNotice('warn', '이미 카드뉴스 업로드 작업이 진행 중입니다.');
       return;
     }
 
@@ -2143,7 +2144,7 @@ function CardNewsWorkspace({ headers, adminToken, seedItem, onNotify }) {
       title,
       filename,
       startedAt,
-      phase: 'R2 발행 작업 등록 중',
+      phase: 'R2 업로드 작업 등록 중',
     }, ...prev].slice(0, 5));
 
     try {
@@ -2161,11 +2162,11 @@ function CardNewsWorkspace({ headers, adminToken, seedItem, onNotify }) {
           today_fixtures: payload,
         },
       });
-      setNotice('good', `${publication.title || filename} 발행 작업을 시작했습니다.`);
+      setNotice('good', `${publication.title || filename} 업로드 작업을 시작했습니다.`);
     } catch (error) {
       updateRenderJob(jobId, {
         status: 'error',
-        phase: '발행 실패',
+        phase: '업로드 실패',
         finishedAt: Date.now(),
         error: error.message,
       });
@@ -2227,7 +2228,7 @@ function CardNewsWorkspace({ headers, adminToken, seedItem, onNotify }) {
       });
       const data = await readJsonResponse(response);
       if (!response.ok) throw new Error(data.error || 'Failed to start card news publication');
-      setNotice('good', '카드뉴스 발행 작업을 시작했습니다.');
+      setNotice('good', '카드뉴스 업로드 작업을 시작했습니다.');
     } catch (error) {
       setNotice('bad', error.message);
     } finally {
@@ -2289,7 +2290,7 @@ function CardNewsWorkspace({ headers, adminToken, seedItem, onNotify }) {
       });
       const data = await readJsonResponse(response);
       if (!response.ok) throw new Error(data.error || 'Failed to start card news publication');
-      setNotice('good', '카드뉴스 발행 작업을 시작했습니다.');
+      setNotice('good', '카드뉴스 업로드 작업을 시작했습니다.');
     } catch (error) {
       setNotice('bad', error.message);
     } finally {
@@ -2304,9 +2305,9 @@ function CardNewsWorkspace({ headers, adminToken, seedItem, onNotify }) {
       {renderJobs.length > 0 && (
         <div className="space-y-2 rounded-md p-3" style={{ background: '#080a10', border: '1px solid #202635' }} aria-live="polite">
           <div className="flex items-center justify-between gap-3">
-            <div className="text-xs font-bold uppercase" style={{ color: '#687086' }}>Publish jobs</div>
+            <div className="text-xs font-bold uppercase" style={{ color: '#687086' }}>R2 upload jobs</div>
             <div className="text-xs font-bold" style={{ color: isRenderingZip ? '#ffd166' : '#8791aa' }}>
-              {isRenderingZip ? '생성 중' : '대기 작업 없음'}
+              {isRenderingZip ? '업로드 중' : '대기 작업 없음'}
             </div>
           </div>
           {renderJobs.map(job => {
@@ -2333,110 +2334,33 @@ function CardNewsWorkspace({ headers, adminToken, seedItem, onNotify }) {
                       </div>
                     )}
                   </div>
-                  {!isRunning && (
-                    <button
-                      type="button"
-                      onClick={() => setRenderJobs(prev => prev.filter(row => row.id !== job.id))}
-                      className="shrink-0 rounded px-2 py-1 text-xs font-bold"
-                      style={{ background: '#171923', color: '#a8b0c7', border: '1px solid #2a3040' }}>
-                      닫기
-                    </button>
-                  )}
+                  <div className="flex shrink-0 flex-wrap justify-end gap-2">
+                    {job.zipUrl && (
+                      <a
+                        href={job.zipUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="rounded px-3 py-1 text-xs font-black"
+                        style={{ background: '#21c17a', color: '#03130c' }}>
+                        카드뉴스 다운로드
+                      </a>
+                    )}
+                    {!isRunning && (
+                      <button
+                        type="button"
+                        onClick={() => setRenderJobs(prev => prev.filter(row => row.id !== job.id))}
+                        className="rounded px-2 py-1 text-xs font-bold"
+                        style={{ background: '#171923', color: '#a8b0c7', border: '1px solid #2a3040' }}>
+                        닫기
+                      </button>
+                    )}
+                  </div>
                 </div>
               </div>
             );
           })}
         </div>
       )}
-
-      <section className="space-y-3 rounded-md p-3" style={{ background: '#080a10', border: '1px solid #202635' }}>
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <div className="text-xs font-bold uppercase" style={{ color: '#687086' }}>Published card news</div>
-            <div className="mt-1 text-sm font-bold text-white">발행된 카드뉴스</div>
-          </div>
-          <button
-            type="button"
-            onClick={loadPublications}
-            disabled={!adminToken}
-            className="rounded px-3 py-1.5 text-xs font-bold disabled:opacity-50"
-            style={{ background: '#171923', color: '#cbd3e8', border: '1px solid #2a3040' }}>
-            새로고침
-          </button>
-        </div>
-        {publications.length === 0 ? (
-          <div className="rounded px-3 py-2 text-sm" style={{ background: '#11141d', color: '#8791aa', border: '1px solid #283040' }}>
-            아직 발행된 카드뉴스가 없습니다.
-          </div>
-        ) : (
-          <div className="grid min-w-0 gap-3 lg:grid-cols-2">
-            {publications.map(publication => {
-              const pages = Array.isArray(publication.pages) ? publication.pages : [];
-              const running = isPublicationRunning(publication.status);
-              const statusColor = publicationStatusTone(publication.status);
-              return (
-                <article key={publication.id} className="min-w-0 rounded-md p-3" style={{ background: '#11141d', border: '1px solid #283040' }}>
-                  <div className="flex min-w-0 items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <div className="flex min-w-0 items-center gap-2">
-                        <span className={running ? 'inline-block h-2.5 w-2.5 shrink-0 rounded-full animate-pulse' : 'inline-block h-2.5 w-2.5 shrink-0 rounded-full'} style={{ background: statusColor }} />
-                        <span className="min-w-0 break-words text-sm font-black text-white" style={{ overflowWrap: 'anywhere' }}>
-                          {publication.title || 'Card news'}
-                        </span>
-                      </div>
-                      <div className="mt-1 text-xs" style={{ color: '#8791aa' }}>
-                        {publication.kind} · {publication.status} · {publication.created_at ? fmtKST(publication.created_at) : ''}
-                      </div>
-                    </div>
-                    {running && (
-                      <button
-                        type="button"
-                        onClick={() => syncPublication(publication.id).catch(error => setNotice('bad', error.message))}
-                        className="shrink-0 rounded px-2 py-1 text-xs font-bold"
-                        style={{ background: '#171923', color: '#ffd166', border: '1px solid #2a3040' }}>
-                        sync
-                      </button>
-                    )}
-                  </div>
-                  {publication.error_message && (
-                    <div className="mt-2 break-words text-xs" style={{ color: '#ff8f8f', overflowWrap: 'anywhere' }}>
-                      {publication.error_message}
-                    </div>
-                  )}
-                  {pages.length > 0 && (
-                    <div className="mt-3 grid grid-cols-3 gap-2">
-                      {pages.map(page => (
-                        <a key={page.url || page.key || page.page} href={page.url} target="_blank" rel="noreferrer" className="block overflow-hidden rounded" style={{ border: '1px solid #2a3040', background: '#05070d' }}>
-                          <img src={page.url} alt={`${publication.title || 'card'} ${page.page}p`} className="block w-full" style={{ aspectRatio: '4 / 5', objectFit: 'cover' }} />
-                        </a>
-                      ))}
-                    </div>
-                  )}
-                  {publication.zip_url && (
-                    <div className="mt-3 flex flex-wrap gap-2">
-                      <a
-                        href={publication.zip_url}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="rounded px-3 py-1.5 text-xs font-bold"
-                        style={{ background: '#21c17a', color: '#03130c' }}>
-                        ZIP 다운로드
-                      </a>
-                      <button
-                        type="button"
-                        onClick={() => copyTextToClipboard(publication.zip_url).then(ok => setNotice(ok ? 'good' : 'warn', ok ? 'ZIP URL을 복사했습니다.' : '복사할 URL이 없습니다.'))}
-                        className="rounded px-3 py-1.5 text-xs font-bold"
-                        style={{ background: '#171923', color: '#cbd3e8', border: '1px solid #2a3040' }}>
-                        URL 복사
-                      </button>
-                    </div>
-                  )}
-                </article>
-              );
-            })}
-          </div>
-        )}
-      </section>
 
       <div className="flex flex-wrap gap-2 rounded-md p-2" style={{ background: '#080a10', border: '1px solid #202635' }}>
         {CARD_WORKSPACE_MODES.map(mode => {
@@ -2697,7 +2621,7 @@ function CardNewsWorkspace({ headers, adminToken, seedItem, onNotify }) {
               disabled={!adminToken || !selectedItem || busy || isRenderingZip}
               className="w-full rounded-md px-4 py-3 text-sm font-black disabled:opacity-50"
               style={{ background: '#21c17a', color: '#03130c' }}>
-              {isRenderingZip ? '발행 중' : '카드뉴스 발행'}
+              {isRenderingZip ? '업로드 중' : '카드뉴스 업로드'}
             </button>
           </div>
         </section>
@@ -2716,6 +2640,287 @@ function CardNewsWorkspace({ headers, adminToken, seedItem, onNotify }) {
         <TodayFixturesPreview value={todayFixtures} />
       </div>
       )}
+    </div>
+  );
+}
+
+function GeneratedCardNewsArchive({ headers, adminToken, onNotify }) {
+  const [publications, setPublications] = useState([]);
+  const [activeIndex, setActiveIndex] = useState(0);
+  const [pageIndex, setPageIndex] = useState(0);
+  const [busy, setBusy] = useState(false);
+  const [localMessage, setLocalMessage] = useState('');
+  const [localTone, setLocalTone] = useState('neutral');
+
+  const setNotice = (tone, text) => {
+    setLocalTone(tone);
+    setLocalMessage(text);
+    onNotify?.(tone, text);
+  };
+
+  const loadPublications = async () => {
+    if (!adminToken) {
+      setPublications([]);
+      return;
+    }
+    setBusy(true);
+    setLocalMessage('');
+    try {
+      const response = await fetch('/api/admin/card-publications?limit=50', { headers });
+      const data = await readJsonResponse(response);
+      if (!response.ok) throw new Error(data.error || '생성된 카드뉴스를 불러오지 못했습니다.');
+      setPublications(Array.isArray(data.publications) ? data.publications : []);
+      setActiveIndex(0);
+      setPageIndex(0);
+    } catch (error) {
+      setNotice('bad', error.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const syncPublication = async publication => {
+    if (!publication?.id) return;
+    try {
+      const response = await fetch('/api/admin/card-publications-sync', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ id: publication.id, actor: 'admin-ui' }),
+      });
+      const data = await readJsonResponse(response);
+      if (!response.ok) throw new Error(data.error || '카드뉴스 상태 동기화에 실패했습니다.');
+      setPublications(prev => prev.map(row => (row.id === data.publication?.id ? data.publication : row)));
+      setNotice('good', '카드뉴스 상태를 갱신했습니다.');
+    } catch (error) {
+      setNotice('bad', error.message);
+    }
+  };
+
+  useEffect(() => {
+    loadPublications();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [adminToken]);
+
+  useEffect(() => {
+    if (activeIndex >= publications.length) setActiveIndex(Math.max(0, publications.length - 1));
+  }, [activeIndex, publications.length]);
+
+  const activePublication = publications[activeIndex] || null;
+  const pages = Array.isArray(activePublication?.pages) ? activePublication.pages : [];
+  const safePageIndex = pages.length > 0 ? Math.min(pageIndex, pages.length - 1) : 0;
+  const currentPage = pages[safePageIndex] || null;
+  const running = isPublicationRunning(activePublication?.status);
+  const statusColor = publicationStatusTone(activePublication?.status);
+
+  useEffect(() => {
+    setPageIndex(0);
+  }, [activePublication?.id]);
+
+  const moveCard = direction => {
+    setActiveIndex(prev => {
+      const next = prev + direction;
+      return Math.max(0, Math.min(publications.length - 1, next));
+    });
+  };
+
+  const movePage = direction => {
+    setPageIndex(prev => {
+      const next = prev + direction;
+      return Math.max(0, Math.min(pages.length - 1, next));
+    });
+  };
+
+  return (
+    <div className="min-w-0 space-y-4">
+      {localMessage && <Notice tone={localTone}>{localMessage}</Notice>}
+
+      <section className="min-w-0 rounded-md p-4" style={{ background: '#0b0d14', border: '1px solid #202635' }}>
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <div className="text-xs font-bold uppercase" style={{ color: '#687086' }}>Generated card news</div>
+            <h2 className="mt-1 text-lg font-black text-white">생성된 카드뉴스</h2>
+          </div>
+          <button
+            type="button"
+            onClick={loadPublications}
+            disabled={!adminToken || busy}
+            className="rounded-md px-3 py-2 text-sm font-bold disabled:opacity-50"
+            style={{ background: '#171923', color: '#cbd3e8', border: '1px solid #2a3040' }}>
+            {busy ? '불러오는 중' : '새로고침'}
+          </button>
+        </div>
+
+        {publications.length === 0 ? (
+          <div className="rounded-md p-8 text-center text-sm" style={{ background: '#11141d', color: '#8791aa', border: '1px solid #283040' }}>
+            아직 생성된 카드뉴스가 없습니다.
+          </div>
+        ) : (
+          <div className="grid min-w-0 gap-4 xl:grid-cols-[minmax(320px,420px)_minmax(0,1fr)]">
+            <div className="min-w-0">
+              <div className="overflow-hidden rounded-md" style={{ background: '#05070d', border: '1px solid #283040' }}>
+                {currentPage?.url ? (
+                  <a href={currentPage.url} target="_blank" rel="noreferrer" className="block">
+                    <img
+                      src={currentPage.url}
+                      alt={`${activePublication?.title || 'card'} ${currentPage.page || safePageIndex + 1}p`}
+                      className="block w-full"
+                      style={{ aspectRatio: '4 / 5', objectFit: 'cover' }}
+                    />
+                  </a>
+                ) : (
+                  <div className="flex items-center justify-center text-sm" style={{ aspectRatio: '4 / 5', color: '#8791aa' }}>
+                    미리보기 이미지가 없습니다.
+                  </div>
+                )}
+              </div>
+              {pages.length > 1 && (
+                <div className="mt-3 flex items-center justify-center gap-3">
+                  <button
+                    type="button"
+                    onClick={() => movePage(-1)}
+                    disabled={safePageIndex <= 0}
+                    className="h-9 w-9 rounded-md text-sm font-black disabled:opacity-40"
+                    style={{ background: '#171923', color: '#cbd3e8', border: '1px solid #2a3040' }}>
+                    &lt;
+                  </button>
+                  <div className="text-xs font-bold" style={{ color: '#8791aa' }}>
+                    {safePageIndex + 1} / {pages.length}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => movePage(1)}
+                    disabled={safePageIndex >= pages.length - 1}
+                    className="h-9 w-9 rounded-md text-sm font-black disabled:opacity-40"
+                    style={{ background: '#171923', color: '#cbd3e8', border: '1px solid #2a3040' }}>
+                    &gt;
+                  </button>
+                </div>
+              )}
+            </div>
+
+            <div className="min-w-0 space-y-4">
+              <div className="min-w-0 rounded-md p-4" style={{ background: '#11141d', border: '1px solid #283040' }}>
+                <div className="flex min-w-0 items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="flex min-w-0 items-center gap-2">
+                      <span className={running ? 'inline-block h-2.5 w-2.5 shrink-0 rounded-full animate-pulse' : 'inline-block h-2.5 w-2.5 shrink-0 rounded-full'} style={{ background: statusColor }} />
+                      <h3 className="min-w-0 break-words text-base font-black text-white" style={{ overflowWrap: 'anywhere' }}>
+                        {activePublication?.title || 'Card news'}
+                      </h3>
+                    </div>
+                    <div className="mt-1 text-xs" style={{ color: '#8791aa' }}>
+                      {activePublication?.kind || '-'} · {activePublication?.status || '-'} · {activePublication?.created_at ? fmtKST(activePublication.created_at) : '-'}
+                    </div>
+                  </div>
+                  <div className="flex shrink-0 items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => moveCard(-1)}
+                      disabled={activeIndex <= 0}
+                      className="h-9 w-9 rounded-md text-sm font-black disabled:opacity-40"
+                      style={{ background: '#171923', color: '#cbd3e8', border: '1px solid #2a3040' }}>
+                      &lt;
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => moveCard(1)}
+                      disabled={activeIndex >= publications.length - 1}
+                      className="h-9 w-9 rounded-md text-sm font-black disabled:opacity-40"
+                      style={{ background: '#171923', color: '#cbd3e8', border: '1px solid #2a3040' }}>
+                      &gt;
+                    </button>
+                  </div>
+                </div>
+
+                {activePublication?.error_message && (
+                  <div className="mt-3 break-words text-xs" style={{ color: '#ff8f8f', overflowWrap: 'anywhere' }}>
+                    {activePublication.error_message}
+                  </div>
+                )}
+
+                <div className="mt-4 flex flex-wrap gap-2">
+                  {activePublication?.zip_url && (
+                    <a
+                      href={activePublication.zip_url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="rounded px-3 py-2 text-sm font-black"
+                      style={{ background: '#21c17a', color: '#03130c' }}>
+                      ZIP 다운로드
+                    </a>
+                  )}
+                  {currentPage?.url && (
+                    <a
+                      href={currentPage.url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="rounded px-3 py-2 text-sm font-bold"
+                      style={{ background: '#171923', color: '#cbd3e8', border: '1px solid #2a3040' }}>
+                      현재 이미지 열기
+                    </a>
+                  )}
+                  {activePublication?.zip_url && (
+                    <button
+                      type="button"
+                      onClick={() => copyTextToClipboard(activePublication.zip_url).then(ok => setNotice(ok ? 'good' : 'warn', ok ? 'ZIP URL을 복사했습니다.' : '복사할 URL이 없습니다.'))}
+                      className="rounded px-3 py-2 text-sm font-bold"
+                      style={{ background: '#171923', color: '#cbd3e8', border: '1px solid #2a3040' }}>
+                      ZIP URL 복사
+                    </button>
+                  )}
+                  {running && (
+                    <button
+                      type="button"
+                      onClick={() => syncPublication(activePublication)}
+                      className="rounded px-3 py-2 text-sm font-bold"
+                      style={{ background: '#332400', color: '#ffd166', border: '1px solid #665017' }}>
+                      상태 갱신
+                    </button>
+                  )}
+                </div>
+
+                {pages.length > 0 && (
+                  <div className="mt-4 grid grid-cols-4 gap-2 sm:grid-cols-6">
+                    {pages.map((page, index) => (
+                      <button
+                        key={page.url || page.key || page.page || index}
+                        type="button"
+                        onClick={() => setPageIndex(index)}
+                        className="overflow-hidden rounded p-0"
+                        style={{ border: index === safePageIndex ? '2px solid #21c17a' : '1px solid #2a3040', background: '#05070d' }}>
+                        <img src={page.url} alt={`${index + 1}p`} className="block w-full" style={{ aspectRatio: '4 / 5', objectFit: 'cover' }} />
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              <div className="min-w-0 rounded-md p-3" style={{ background: '#080a10', border: '1px solid #202635' }}>
+                <div className="mb-2 text-xs font-bold uppercase" style={{ color: '#687086' }}>Latest</div>
+                <div className="max-h-[360px] space-y-2 overflow-auto pr-1">
+                  {publications.map((publication, index) => (
+                    <button
+                      key={publication.id}
+                      type="button"
+                      onClick={() => { setActiveIndex(index); setPageIndex(0); }}
+                      className="block w-full rounded-md px-3 py-2 text-left"
+                      style={{
+                        background: index === activeIndex ? '#e8edf7' : '#11141d',
+                        color: index === activeIndex ? '#05070d' : '#cbd3e8',
+                        border: '1px solid #283040',
+                      }}>
+                      <div className="truncate text-sm font-black">{publication.title || 'Card news'}</div>
+                      <div className="mt-1 truncate text-xs" style={{ color: index === activeIndex ? '#334155' : '#8791aa' }}>
+                        {publication.status} · {publication.created_at ? fmtKST(publication.created_at) : '-'}
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+      </section>
     </div>
   );
 }
@@ -3626,20 +3831,25 @@ export default function AdminDashboard() {
           <Metric label="Rejected" value={dashboard?.rejected} />
         </section>
 
-        <section className={status === CARD_NEWS_TAB ? 'mt-5 grid min-w-0 gap-5' : 'mt-5 grid min-w-0 gap-5 lg:grid-cols-[minmax(0,1fr)_320px]'}>
+        <section className={[CARD_NEWS_TAB, GENERATED_CARD_NEWS_TAB].includes(status) ? 'mt-5 grid min-w-0 gap-5' : 'mt-5 grid min-w-0 gap-5 lg:grid-cols-[minmax(0,1fr)_320px]'}>
           <div className="min-w-0">
             <div className="mb-3 flex flex-wrap items-center gap-2">
               {ADMIN_TAB_OPTIONS.map(option => {
-                const countMap = { review: dashboard?.review, published: dashboard?.published, discarded: dashboard?.discarded, rejected: dashboard?.rejected, all: dashboard?.total, [CARD_NEWS_TAB]: dashboard?.published };
+                const countMap = { review: dashboard?.review, published: dashboard?.published, discarded: dashboard?.discarded, rejected: dashboard?.rejected, all: dashboard?.total, [CARD_NEWS_TAB]: dashboard?.published, [GENERATED_CARD_NEWS_TAB]: 0 };
                 const count = countMap[option] || 0;
                 const isActive = status === option;
                 const isWarn = option === 'review' && count > 0;
                 const newCount = [...newIds].filter(id => {
-                  if (option === CARD_NEWS_TAB) return false;
+                  if ([CARD_NEWS_TAB, GENERATED_CARD_NEWS_TAB].includes(option)) return false;
                   const it = items.find(i => i.id === id);
                   if (!it) return false;
                   return option === 'all' || it.status === option;
                 }).length;
+                const label = option === CARD_NEWS_TAB
+                  ? '카드뉴스 작업대'
+                  : option === GENERATED_CARD_NEWS_TAB
+                    ? '생성된 카드뉴스'
+                    : STATUS_LABELS[option];
                 return (
                   <button key={option}
                     onClick={() => { setStatus(option); setNewIds(new Set()); }}
@@ -3649,7 +3859,7 @@ export default function AdminDashboard() {
                       color: isActive ? '#05070d' : '#a8b0c7',
                       border: isActive ? '1px solid #283040' : isWarn ? '1px solid #665017' : '1px solid #283040',
                     }}>
-                    {option === CARD_NEWS_TAB ? '카드뉴스 작업대' : STATUS_LABELS[option]}
+                    {label}
                     {count > 0 && (
                       <span className="rounded px-1.5 py-0.5 text-xs font-black leading-none"
                         style={{
@@ -3674,6 +3884,15 @@ export default function AdminDashboard() {
                 headers={headers}
                 adminToken={adminToken}
                 seedItem={cardNewsSeed}
+                onNotify={(tone, text) => {
+                  setMessageTone(tone);
+                  setMessage(text);
+                }}
+              />
+            ) : status === GENERATED_CARD_NEWS_TAB ? (
+              <GeneratedCardNewsArchive
+                headers={headers}
+                adminToken={adminToken}
                 onNotify={(tone, text) => {
                   setMessageTone(tone);
                   setMessage(text);
@@ -3713,7 +3932,7 @@ export default function AdminDashboard() {
             )}
           </div>
 
-          {status !== CARD_NEWS_TAB && (
+          {![CARD_NEWS_TAB, GENERATED_CARD_NEWS_TAB].includes(status) && (
           <aside className="min-w-0 space-y-3">
             <div className="min-w-0 rounded-md p-4" style={{ background: '#0b0d14', border: '1px solid #202635' }}>
               <div className="text-xs font-bold uppercase" style={{ color: '#687086' }}>Last collected</div>
