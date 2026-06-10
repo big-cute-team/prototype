@@ -23,7 +23,7 @@ const TODAY_FIXTURES_PRESETS = [
   {
     id: 'world_cup',
     label: '월드컵',
-    eyebrow: 'WORLD CUP 2026 · TODAY',
+    eyebrow_base: 'WORLD CUP 2026',
     title: '오늘의\n경기 일정',
     groupOptions: TODAY_FIXTURES_GROUPS,
     defaultGroupLabel: 'Group A',
@@ -31,7 +31,7 @@ const TODAY_FIXTURES_PRESETS = [
   {
     id: 'epl',
     label: 'EPL',
-    eyebrow: 'PREMIER LEAGUE · TODAY',
+    eyebrow_base: 'PREMIER LEAGUE',
     title: '오늘의\n경기 일정',
     groupOptions: EPL_MATCHWEEK_OPTIONS,
     defaultGroupLabel: 'Matchweek 1',
@@ -39,7 +39,7 @@ const TODAY_FIXTURES_PRESETS = [
   {
     id: 'champions_league',
     label: '챔스',
-    eyebrow: 'CHAMPIONS LEAGUE · TODAY',
+    eyebrow_base: 'CHAMPIONS LEAGUE',
     title: '오늘의\n경기 일정',
     groupOptions: UCL_ROUND_OPTIONS,
     defaultGroupLabel: 'League Phase',
@@ -88,6 +88,7 @@ const CARD_WORKSPACE_EDITOR_MAX_WIDTH = CARD_DETAIL_EDITOR_MAX_WIDTH;
 const DEFAULT_TODAY_FIXTURES = {
   preset_id: 'world_cup',
   schedule_type: 'today',
+  eyebrow_base: 'WORLD CUP 2026',
   eyebrow: 'WORLD CUP 2026 · TODAY',
   title: '오늘의\n경기 일정',
   date: '2026-06-12',
@@ -599,6 +600,14 @@ function getScheduleTypeOption(typeId) {
   return SCHEDULE_TYPE_OPTIONS.find(option => option.id === typeId) || SCHEDULE_TYPE_OPTIONS[0];
 }
 
+function scheduleEyebrowForValue(value) {
+  const preset = getTodayFixturesPreset(value.preset_id);
+  const scheduleType = getScheduleTypeOption(value.schedule_type);
+  const base = String(value.eyebrow_base || preset.eyebrow_base || '').trim();
+  const period = scheduleType.id === 'weekly' ? 'WEEK' : 'TODAY';
+  return base ? `${base} · ${period}` : period;
+}
+
 function chunkItems(items, size) {
   const chunks = [];
   for (let index = 0; index < items.length; index += size) {
@@ -610,7 +619,7 @@ function chunkItems(items, size) {
 function todayFixturesPayload(value) {
   const scheduleType = getScheduleTypeOption(value.schedule_type);
   return {
-    eyebrow: String(value.eyebrow || '').trim(),
+    eyebrow: scheduleEyebrowForValue(value),
     title: String(scheduleType.title || value.title || '').replace(/\r\n/g, '\n').replace(/\r/g, '\n').trim(),
     date_label: String(value.date_label || '').trim(),
     matches: (value.matches || []).map(match => {
@@ -1782,6 +1791,7 @@ function TodayFixturesEditor({
       ...value,
       schedule_type: option.id,
       title: option.title,
+      eyebrow: scheduleEyebrowForValue({ ...value, schedule_type: option.id }),
       date: startDate,
       date_start: startDate,
       date_end: endDate,
@@ -1795,7 +1805,8 @@ function TodayFixturesEditor({
     onChange({
       ...value,
       preset_id: preset.id,
-      eyebrow: preset.eyebrow,
+      eyebrow_base: preset.eyebrow_base,
+      eyebrow: scheduleEyebrowForValue({ ...value, preset_id: preset.id, eyebrow_base: preset.eyebrow_base }),
       title: value.title || preset.title,
       matches: value.matches.map(match => ({
         ...match,
@@ -1885,24 +1896,6 @@ function TodayFixturesEditor({
             ariaLabel="경기 일정 프리셋"
           />
         </label>
-        <div className="grid min-w-0 gap-2 md:grid-cols-[minmax(0,1fr)_180px]">
-          <label className="block min-w-0">
-            <span className="mb-1 block text-xs font-bold uppercase" style={{ color: '#687086' }}>top label</span>
-            <input
-              value={value.eyebrow || ''}
-              onChange={event => onChange({ ...value, eyebrow: event.target.value })}
-              placeholder="WORLD CUP 2026 · TODAY"
-              className="h-10 w-full rounded-md px-3 text-sm font-bold outline-none"
-              style={{ background: '#11141d', color: '#fff', border: '1px solid #283040' }}
-            />
-          </label>
-          <div className="min-w-0">
-            <span className="mb-1 block text-xs font-bold uppercase" style={{ color: '#687086' }}>title</span>
-            <div className="flex h-10 items-center rounded-md px-3 text-sm font-black" style={{ background: '#11141d', color: '#fff', border: '1px solid #283040' }}>
-              {currentScheduleType.label}
-            </div>
-          </div>
-        </div>
         <div className="space-y-2">
           <div>
             <span className="mb-1 block text-xs font-bold uppercase" style={{ color: '#687086' }}>schedule title</span>
@@ -1935,9 +1928,9 @@ function TodayFixturesEditor({
                 />
               </label>
             )}
-          <div className="min-w-0">
+          <div className="min-w-0 sm:col-span-1">
             <span className="mb-1 block text-xs font-bold uppercase" style={{ color: '#687086' }}>date label</span>
-            <div className="flex h-10 items-center rounded-md px-3 text-sm font-black" style={{ background: '#11141d', color: '#fff', border: '1px solid #283040' }}>
+            <div className="flex min-h-10 items-center rounded-md px-3 py-2 text-sm font-black leading-5" style={{ background: '#11141d', color: '#fff', border: '1px solid #283040' }}>
               {value.date_label || '날짜를 선택하세요'}
             </div>
           </div>
@@ -2128,7 +2121,10 @@ function TodayFixturesPreview({ value, selectedMatchIndex, onSelectMatch }) {
   }, [fixturePages.length, selectedMatchIndex]);
 
   return (
-    <aside className="min-w-0 rounded-md p-4" style={{ background: '#0b0d14', border: '1px solid #202635' }}>
+    <aside
+      className="min-w-0 rounded-md p-4 xl:sticky xl:top-4 xl:self-start"
+      style={{ background: '#0b0d14', border: '1px solid #202635', maxHeight: 'calc(100vh - 32px)', overflowY: 'auto' }}
+    >
       <div className="mb-4 flex items-center justify-between gap-3">
         <div>
           <div className="text-xs font-bold uppercase" style={{ color: '#687086' }}>Live preview</div>
@@ -2185,7 +2181,7 @@ function TodayFixturesPreview({ value, selectedMatchIndex, onSelectMatch }) {
             <div style={{ position: 'absolute', left: 72, top: 165, width: 470, height: 190, color: '#fff', fontSize: 78, lineHeight: '1.13', fontWeight: 900, letterSpacing: 0, whiteSpace: 'pre-line', wordBreak: 'keep-all', overflow: 'hidden' }}>
               {payload.title}
             </div>
-            <div style={{ position: 'absolute', left: 72, top: 383.66, width: 360, height: 38, color: 'rgba(255,255,255,0.72)', fontSize: 31.1, lineHeight: '38px', fontWeight: 900, whiteSpace: 'nowrap', overflow: 'hidden' }}>
+            <div style={{ position: 'absolute', left: 72, top: 383.66, width: 620, height: 38, color: 'rgba(255,255,255,0.72)', fontSize: 29, lineHeight: '38px', fontWeight: 900, whiteSpace: 'nowrap', overflow: 'hidden' }}>
               {payload.date_label}
             </div>
             {activeMatches.map((match, index) => {
@@ -4575,7 +4571,7 @@ export default function AdminDashboard() {
   };
 
   return (
-    <div className="min-h-screen overflow-x-hidden" style={{ background: '#05070d', color: '#fff' }}>
+    <div className="min-h-screen" style={{ background: '#05070d', color: '#fff' }}>
       {debateModal && (
         <DebateModal
           item={debateModal}
