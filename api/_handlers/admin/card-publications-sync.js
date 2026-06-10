@@ -16,10 +16,20 @@ async function requestRenderJobStatus(jobId) {
   return response.json();
 }
 
-function patchForJob(job) {
+function mergeRenderTimings(sourcePayload, job) {
+  const base = sourcePayload && typeof sourcePayload === 'object' && !Array.isArray(sourcePayload) ? sourcePayload : {};
+  const timings = job?.timings_ms;
+  if (!timings || typeof timings !== 'object' || Array.isArray(timings) || Object.keys(timings).length === 0) {
+    return base;
+  }
+  return { ...base, render_timings_ms: timings };
+}
+
+function patchForJob(job, sourcePayload = {}) {
   const status = PUBLICATION_STATUSES.has(job.status) ? job.status : 'running';
   return {
     status,
+    source_payload: mergeRenderTimings(sourcePayload, job),
     pages: Array.isArray(job.pages) ? job.pages : [],
     zip_url: job.zip_url || null,
     r2_prefix: job.r2_prefix || null,
@@ -49,7 +59,7 @@ module.exports = async function handler(req, res) {
     }
 
     const job = await requestRenderJobStatus(current.render_job_id);
-    const updates = patchForJob(job);
+    const updates = patchForJob(job, current.source_payload);
     const updatedRows = await patch('card_news_publications', eq('id', id), updates);
     const publication = updatedRows[0] || { ...current, ...updates };
 

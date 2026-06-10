@@ -22,11 +22,21 @@ async function requestRenderJob(renderRequest, publicationId) {
   return response.json();
 }
 
-function patchForJob(job) {
+function mergeRenderTimings(sourcePayload, job) {
+  const base = sourcePayload && typeof sourcePayload === 'object' && !Array.isArray(sourcePayload) ? sourcePayload : {};
+  const timings = job?.timings_ms;
+  if (!timings || typeof timings !== 'object' || Array.isArray(timings) || Object.keys(timings).length === 0) {
+    return base;
+  }
+  return { ...base, render_timings_ms: timings };
+}
+
+function patchForJob(job, sourcePayload = {}) {
   const status = PUBLICATION_STATUSES.has(job.status) ? job.status : 'running';
   return {
     status,
     render_job_id: job.job_id || null,
+    source_payload: mergeRenderTimings(sourcePayload, job),
     pages: Array.isArray(job.pages) ? job.pages : [],
     zip_url: job.zip_url || null,
     r2_prefix: job.r2_prefix || null,
@@ -92,7 +102,7 @@ async function createPublication(req, res) {
   await insert('card_news_publications', [row]);
   try {
     const job = await requestRenderJob(payload.renderRequest, id);
-    const updated = await patch('card_news_publications', eq('id', id), patchForJob(job));
+    const updated = await patch('card_news_publications', eq('id', id), patchForJob(job, payload.sourcePayload));
     await recordAudit('card_news_publication_started', {
       content_item_id: payload.contentItemId,
       actor: body.actor || 'admin',
@@ -100,7 +110,7 @@ async function createPublication(req, res) {
       render_job_id: job.job_id,
       kind: payload.kind,
     });
-    json(res, 200, { ok: true, publication: updated[0] || { ...row, ...patchForJob(job) } });
+    json(res, 200, { ok: true, publication: updated[0] || { ...row, ...patchForJob(job, payload.sourcePayload) } });
   } catch (error) {
     await patch('card_news_publications', eq('id', id), {
       status: 'failed',

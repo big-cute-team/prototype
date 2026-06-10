@@ -400,6 +400,18 @@ function formatDuration(startedAt, now = Date.now()) {
   return `${minutes}:${String(seconds).padStart(2, '0')}`;
 }
 
+function formatRenderTimings(timings) {
+  if (!timings || typeof timings !== 'object') return '';
+  const total = Number(timings.total_ms);
+  const render = Number(timings.render_pages_ms);
+  const upload = Number(timings.upload_pages_ms || 0) + Number(timings.upload_zip_ms || 0);
+  const parts = [];
+  if (Number.isFinite(total) && total > 0) parts.push(`total ${(total / 1000).toFixed(1)}s`);
+  if (Number.isFinite(render) && render >= 0) parts.push(`render ${(render / 1000).toFixed(1)}s`);
+  if (Number.isFinite(upload) && upload >= 0) parts.push(`upload ${(upload / 1000).toFixed(1)}s`);
+  return parts.join(' · ');
+}
+
 function renderJobId() {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
@@ -1714,6 +1726,7 @@ function CardNewsWorkspace({ headers, adminToken, seedItem, onNotify }) {
           phase: 'R2 업로드 완료',
           finishedAt: Date.now(),
           zipUrl: publication.zip_url,
+          timings: publication.source_payload?.render_timings_ms || null,
         });
         setNotice('good', `${publication.title || '카드뉴스'} 업로드가 완료됐습니다.`);
       } else if (publication.status === 'failed') {
@@ -1722,11 +1735,13 @@ function CardNewsWorkspace({ headers, adminToken, seedItem, onNotify }) {
           phase: '업로드 실패',
           finishedAt: Date.now(),
           error: publication.error_message || 'Render job failed',
+          timings: publication.source_payload?.render_timings_ms || null,
         });
         setNotice('bad', publication.error_message || '카드뉴스 업로드에 실패했습니다.');
       } else {
         updateRenderJob(localJobId, {
           phase: `R2 업로드 중 (${publication.status})`,
+          timings: publication.source_payload?.render_timings_ms || null,
         });
       }
     }
@@ -2314,6 +2329,7 @@ function CardNewsWorkspace({ headers, adminToken, seedItem, onNotify }) {
             const isRunning = job.status === 'running';
             const isSuccess = job.status === 'success';
             const statusColor = isRunning ? '#ffd166' : isSuccess ? '#48d99a' : '#ff8f8f';
+            const timingLabel = formatRenderTimings(job.timings);
             return (
               <div key={job.id} className="min-w-0 rounded px-3 py-2 text-sm" style={{ background: '#11141d', border: '1px solid #283040' }}>
                 <div className="flex min-w-0 items-start justify-between gap-3">
@@ -2328,6 +2344,11 @@ function CardNewsWorkspace({ headers, adminToken, seedItem, onNotify }) {
                     <div className="mt-1 break-words text-xs" style={{ color: '#8791aa', overflowWrap: 'anywhere' }}>
                       {job.filename} · {job.phase} · {formatDuration(job.startedAt, isRunning ? renderNow : (job.finishedAt || renderNow))}
                     </div>
+                    {timingLabel && (
+                      <div className="mt-1 break-words text-xs" style={{ color: '#687086', overflowWrap: 'anywhere' }}>
+                        {timingLabel}
+                      </div>
+                    )}
                     {job.error && (
                       <div className="mt-1 break-words text-xs" style={{ color: '#ff8f8f', overflowWrap: 'anywhere' }}>
                         {job.error}
@@ -2711,6 +2732,7 @@ function GeneratedCardNewsArchive({ headers, adminToken, onNotify }) {
   const currentPage = pages[safePageIndex] || null;
   const running = isPublicationRunning(activePublication?.status);
   const statusColor = publicationStatusTone(activePublication?.status);
+  const renderTimingLabel = formatRenderTimings(activePublication?.source_payload?.render_timings_ms);
 
   useEffect(() => {
     setPageIndex(0);
@@ -2811,6 +2833,11 @@ function GeneratedCardNewsArchive({ headers, adminToken, onNotify }) {
                     <div className="mt-1 text-xs" style={{ color: '#8791aa' }}>
                       {activePublication?.kind || '-'} · {activePublication?.status || '-'} · {activePublication?.created_at ? fmtKST(activePublication.created_at) : '-'}
                     </div>
+                    {renderTimingLabel && (
+                      <div className="mt-1 text-xs" style={{ color: '#687086' }}>
+                        {renderTimingLabel}
+                      </div>
+                    )}
                   </div>
                   <div className="flex shrink-0 items-center gap-2">
                     <button
