@@ -16,6 +16,20 @@ async function requestRenderJobStatus(jobId) {
   return response.json();
 }
 
+async function requestRenderJob(renderRequest, publicationId) {
+  const response = await fetch(cardRenderUrl('/card/render-jobs'), {
+    method: 'POST',
+    headers: cardRenderAuthHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify({
+      publication_id: publicationId,
+      ...renderRequest,
+    }),
+  });
+
+  if (!response.ok) await readCardRenderError(response);
+  return response.json();
+}
+
 function mergeRenderTimings(sourcePayload, job) {
   const base = sourcePayload && typeof sourcePayload === 'object' && !Array.isArray(sourcePayload) ? sourcePayload : {};
   const timings = job?.timings_ms;
@@ -29,6 +43,7 @@ function patchForJob(job, sourcePayload = {}) {
   const status = PUBLICATION_STATUSES.has(job.status) ? job.status : 'running';
   return {
     status,
+    render_job_id: job.job_id || null,
     source_payload: mergeRenderTimings(sourcePayload, job),
     pages: Array.isArray(job.pages) ? job.pages : [],
     zip_url: job.zip_url || null,
@@ -36,6 +51,75 @@ function patchForJob(job, sourcePayload = {}) {
     error_message: job.error_message || null,
     completed_at: ['completed', 'failed'].includes(status) ? new Date().toISOString() : null,
   };
+}
+
+function renderRequestFromPublication(publication) {
+  const sourcePayload = publication.source_payload && typeof publication.source_payload === 'object'
+    ? publication.source_payload
+    : {};
+  if (publication.kind === 'today_fixtures' || publication.template_id === 'plick_today_fixtures_v1') {
+    if (!sourcePayload.today_fixtures) return null;
+    return {
+      template_id: 'plick_today_fixtures_v1',
+      today_fixtures: sourcePayload.today_fixtures,
+    };
+  }
+  if (!sourcePayload.image_url || !sourcePayload.card) return null;
+  return {
+    template_id: publication.template_id || 'plick_transfer_v1',
+    image_url: sourcePayload.image_url,
+    card: sourcePayload.card,
+  };
+}
+
+function lostRenderJobError(current) {
+  return {
+    status: 'failed',
+    source_payload: current.source_payload || {},
+    error_message: 'Render job metadata was lost. Please start the R2 upload again.',
+    completed_at: new Date().toISOString(),
+  };
+}
+
+async function recoverMissingRenderJob(current, actor) {
+  const sourcePayload = current.source_payload && typeof current.source_payload === 'object'
+    ? current.source_payload
+    : {};
+  const requeueCount = Number(sourcePayload.render_job_requeue_count || 0);
+  const renderRequest = renderRequestFromPublication(current);
+
+  if (!renderRequest || requeueCount >= 1) {
+    const updates = lostRenderJobError(current);
+    const updatedRows = await patch('card_news_publications', eq('id', current.id), updates);
+    const publication = updatedRows[0] || { ...current, ...updates };
+    await recordAudit('card_news_publication_failed', {
+      content_item_id: publication.content_item_id,
+      actor,
+      publication_id: publication.id,
+      render_job_id: publication.render_job_id,
+      error_message: publication.error_message,
+    }).catch(() => {});
+    return publication;
+  }
+
+  const nextSourcePayload = {
+    ...sourcePayload,
+    render_job_requeue_count: requeueCount + 1,
+    render_job_requeued_at: new Date().toISOString(),
+    render_job_requeued_from: current.render_job_id,
+  };
+  const job = await requestRenderJob(renderRequest, current.id);
+  const updates = patchForJob(job, nextSourcePayload);
+  const updatedRows = await patch('card_news_publications', eq('id', current.id), updates);
+  const publication = updatedRows[0] || { ...current, ...updates };
+  await recordAudit('card_news_publication_requeued', {
+    content_item_id: publication.content_item_id,
+    actor,
+    publication_id: publication.id,
+    previous_render_job_id: current.render_job_id,
+    render_job_id: publication.render_job_id,
+  }).catch(() => {});
+  return publication;
 }
 
 module.exports = async function handler(req, res) {
@@ -58,7 +142,17 @@ module.exports = async function handler(req, res) {
       return;
     }
 
-    const job = await requestRenderJobStatus(current.render_job_id);
+    let job;
+    try {
+      job = await requestRenderJobStatus(current.render_job_id);
+    } catch (error) {
+      if (error.statusCode === 404 && String(error.message || '').includes('Render job not found')) {
+        const publication = await recoverMissingRenderJob(current, body.actor || 'admin');
+        json(res, 200, { ok: true, publication });
+        return;
+      }
+      throw error;
+    }
     const updates = patchForJob(job, current.source_payload);
     const updatedRows = await patch('card_news_publications', eq('id', id), updates);
     const publication = updatedRows[0] || { ...current, ...updates };

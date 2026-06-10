@@ -432,6 +432,43 @@ function renderJobId() {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
+function publicationUploadFilename(publication) {
+  if (publication?.source_payload?.filename) return publication.source_payload.filename;
+  if (publication?.zip_url) {
+    try {
+      const name = decodeURIComponent(new URL(publication.zip_url).pathname.split('/').filter(Boolean).pop() || '');
+      if (name) return name;
+    } catch {
+      // Ignore malformed stored URLs and fall through to a stable fallback.
+    }
+  }
+  return `cardnews-${publication?.id || 'upload'}.zip`;
+}
+
+function publicationToRenderJob(publication) {
+  const status = publication?.status === 'failed'
+    ? 'error'
+    : publication?.status === 'completed'
+      ? 'success'
+      : 'running';
+  const startedAt = publication?.created_at ? Date.parse(publication.created_at) : Date.now();
+  const finishedAt = publication?.completed_at ? Date.parse(publication.completed_at) : null;
+  return {
+    id: `publication-${publication.id}`,
+    publicationBacked: true,
+    publicationId: publication.id,
+    status,
+    title: publication.title || 'Card news',
+    filename: publicationUploadFilename(publication),
+    startedAt: Number.isFinite(startedAt) ? startedAt : Date.now(),
+    finishedAt: Number.isFinite(finishedAt) ? finishedAt : null,
+    phase: status === 'running' ? `R2 upload ${publication.status || 'running'}` : status === 'success' ? 'R2 upload completed' : 'R2 upload failed',
+    zipUrl: publication.zip_url || null,
+    error: publication.error_message || null,
+    timings: publication.source_payload?.render_timings_ms || null,
+  };
+}
+
 function isPublicationRunning(status) {
   return ['pending', 'queued', 'running'].includes(String(status || ''));
 }
@@ -1652,6 +1689,15 @@ function CardNewsWorkspace({ headers, adminToken, seedItem, onNotify }) {
   const activePublications = publications.filter(publication => isPublicationRunning(publication.status));
   const activePublicationKey = activePublications.map(publication => publication.id).join('|');
   const isRenderingZip = activeRenderJobs.length > 0 || activePublications.length > 0;
+  const displayRenderJobs = useMemo(() => {
+    const jobs = [...renderJobs];
+    activePublications.forEach(publication => {
+      if (!jobs.some(job => job.publicationId === publication.id)) {
+        jobs.push(publicationToRenderJob(publication));
+      }
+    });
+    return jobs.slice(0, 5);
+  }, [activePublications, renderJobs]);
 
   const setNotice = (tone, text) => {
     setLocalTone(tone);
@@ -1790,10 +1836,10 @@ function CardNewsWorkspace({ headers, adminToken, seedItem, onNotify }) {
   }, [imageFile]);
 
   useEffect(() => {
-    if (activeRenderJobs.length === 0) return undefined;
+    if (!isRenderingZip) return undefined;
     const timer = window.setInterval(() => setRenderNow(Date.now()), 1000);
     return () => window.clearInterval(timer);
-  }, [activeRenderJobs.length]);
+  }, [isRenderingZip]);
 
   useEffect(() => {
     if (!adminToken || activePublications.length === 0) return undefined;
@@ -2128,6 +2174,7 @@ function CardNewsWorkspace({ headers, adminToken, seedItem, onNotify }) {
         title: compactText(item.title_ko || item.raw_text, 120, 'Card news'),
         caption,
         sourcePayload: {
+          filename,
           item_id: item.id,
           image_url: finalImageUrl,
           card,
@@ -2186,6 +2233,7 @@ function CardNewsWorkspace({ headers, adminToken, seedItem, onNotify }) {
         title,
         caption: '',
         sourcePayload: {
+          filename,
           today_fixtures: payload,
         },
         renderRequest: {
@@ -2333,7 +2381,7 @@ function CardNewsWorkspace({ headers, adminToken, seedItem, onNotify }) {
     <div className="min-w-0 space-y-4">
       {localMessage && <Notice tone={localTone}>{localMessage}</Notice>}
 
-      {renderJobs.length > 0 && (
+      {displayRenderJobs.length > 0 && (
         <div className="space-y-2 rounded-md p-3" style={{ background: '#080a10', border: '1px solid #202635' }} aria-live="polite">
           <div className="flex items-center justify-between gap-3">
             <div className="text-xs font-bold uppercase" style={{ color: '#687086' }}>R2 upload jobs</div>
@@ -2341,7 +2389,7 @@ function CardNewsWorkspace({ headers, adminToken, seedItem, onNotify }) {
               {isRenderingZip ? '업로드 중' : '대기 작업 없음'}
             </div>
           </div>
-          {renderJobs.map(job => {
+          {displayRenderJobs.map(job => {
             const isRunning = job.status === 'running';
             const isSuccess = job.status === 'success';
             const statusColor = isRunning ? '#ffd166' : isSuccess ? '#48d99a' : '#ff8f8f';
@@ -2388,7 +2436,7 @@ function CardNewsWorkspace({ headers, adminToken, seedItem, onNotify }) {
                         카드뉴스 다운로드
                       </a>
                     )}
-                    {!isRunning && (
+                    {!isRunning && !job.publicationBacked && (
                       <button
                         type="button"
                         onClick={() => setRenderJobs(prev => prev.filter(row => row.id !== job.id))}
