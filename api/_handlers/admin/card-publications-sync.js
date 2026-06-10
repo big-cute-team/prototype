@@ -5,6 +5,9 @@ const { handleError, json, parseJsonBody } = require('../../_lib/http');
 const { select, patch, eq } = require('../../_lib/supabase');
 
 const PUBLICATION_STATUSES = new Set(['pending', 'queued', 'running', 'zip_pending', 'completed', 'failed']);
+const TODAY_FIXTURES_TEMPLATE_ID = 'plick_today_fixtures_v1';
+const WEEKLY_FIXTURES_TEMPLATE_ID = 'plick_weekly_fixtures_v1';
+const FIXTURE_TEMPLATE_IDS = new Set([TODAY_FIXTURES_TEMPLATE_ID, WEEKLY_FIXTURES_TEMPLATE_ID]);
 
 async function requestRenderJobStatus(jobId) {
   const response = await fetch(cardRenderUrl(`/card/render-jobs/${encodeURIComponent(jobId)}`), {
@@ -57,10 +60,13 @@ function renderRequestFromPublication(publication) {
   const sourcePayload = publication.source_payload && typeof publication.source_payload === 'object'
     ? publication.source_payload
     : {};
-  if (publication.kind === 'today_fixtures' || publication.template_id === 'plick_today_fixtures_v1') {
+  if (publication.kind === 'today_fixtures' || FIXTURE_TEMPLATE_IDS.has(publication.template_id)) {
     if (!sourcePayload.today_fixtures) return null;
+    const templateId = FIXTURE_TEMPLATE_IDS.has(publication.template_id)
+      ? publication.template_id
+      : (sourcePayload.today_fixtures?.schedule_type === 'weekly' ? WEEKLY_FIXTURES_TEMPLATE_ID : TODAY_FIXTURES_TEMPLATE_ID);
     return {
-      template_id: 'plick_today_fixtures_v1',
+      template_id: templateId,
       today_fixtures: sourcePayload.today_fixtures,
     };
   }

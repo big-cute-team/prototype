@@ -5,6 +5,8 @@ const { handleError, json } = require('../../_lib/http');
 
 const MAX_RENDER_BODY_BYTES = 2 * 1024 * 1024;
 const TODAY_FIXTURES_TEMPLATE_ID = 'plick_today_fixtures_v1';
+const WEEKLY_FIXTURES_TEMPLATE_ID = 'plick_weekly_fixtures_v1';
+const FIXTURE_TEMPLATE_IDS = new Set([TODAY_FIXTURES_TEMPLATE_ID, WEEKLY_FIXTURES_TEMPLATE_ID]);
 
 function parseJsonBody(req) {
   return new Promise((resolve, reject) => {
@@ -72,20 +74,21 @@ module.exports = async function handler(req, res) {
 
     const body = await parseJsonBody(req);
     const templateId = body.template_id || TODAY_FIXTURES_TEMPLATE_ID;
-    if (templateId !== TODAY_FIXTURES_TEMPLATE_ID) {
+    if (!FIXTURE_TEMPLATE_IDS.has(templateId)) {
       throw Object.assign(new Error('Unsupported template_id'), { statusCode: 400 });
     }
 
     const todayFixtures = requireTodayFixturesPayload(body);
     const zipBytes = await requestTemplateRender({
-      template_id: TODAY_FIXTURES_TEMPLATE_ID,
+      template_id: templateId,
       today_fixtures: todayFixtures,
     });
-    const filename = `cardnews-today-fixtures-${safeFilename(todayFixtures.date_label, 'today')}.zip`;
+    const filenamePrefix = templateId === WEEKLY_FIXTURES_TEMPLATE_ID ? 'cardnews-weekly-fixtures' : 'cardnews-today-fixtures';
+    const filename = `${filenamePrefix}-${safeFilename(todayFixtures.date_label, 'fixtures')}.zip`;
 
     await recordAudit('card_template_rendered', {
       actor: body.actor || 'admin',
-      template_id: TODAY_FIXTURES_TEMPLATE_ID,
+      template_id: templateId,
       fixture_count: Array.isArray(todayFixtures.matches) ? todayFixtures.matches.length : null,
       zip_bytes: zipBytes.length,
     }).catch(() => {});
