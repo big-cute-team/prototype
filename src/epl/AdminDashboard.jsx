@@ -2443,6 +2443,7 @@ function TodayFixturesEditor({
 
 function TodayFixturesPreview({ value, selectedMatchIndex, onSelectMatch }) {
   const wrapperRef = useRef(null);
+  const lastSyncedSelectedMatchIndexRef = useRef(selectedMatchIndex);
   const [previewWidth, setPreviewWidth] = useState(360);
   const [pageIndex, setPageIndex] = useState(0);
   const scale = previewWidth / CARD_PREVIEW_WIDTH;
@@ -2481,6 +2482,8 @@ function TodayFixturesPreview({ value, selectedMatchIndex, onSelectMatch }) {
 
   useEffect(() => {
     if (selectedMatchIndex < 0) return;
+    if (lastSyncedSelectedMatchIndexRef.current === selectedMatchIndex) return;
+    lastSyncedSelectedMatchIndexRef.current = selectedMatchIndex;
     const selectedPage = isWeekly
       ? fixturePages.findIndex(days => days.some(day => day.matches.some(entry => entry.absoluteIndex === selectedMatchIndex)))
       : Math.floor(selectedMatchIndex / TODAY_FIXTURES_MATCHES_PER_PAGE);
