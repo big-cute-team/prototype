@@ -3793,7 +3793,7 @@ function CardNewsWorkspace({ headers, adminToken, seedItem, onNotify }) {
 
 function GeneratedCardNewsArchive({ headers, adminToken, onNotify }) {
   const [publications, setPublications] = useState([]);
-  const [activeIndex, setActiveIndex] = useState(0);
+  const [activePublicationId, setActivePublicationId] = useState('');
   const [pageIndex, setPageIndex] = useState(0);
   const [busy, setBusy] = useState(false);
   const [deletingId, setDeletingId] = useState('');
@@ -3817,8 +3817,9 @@ function GeneratedCardNewsArchive({ headers, adminToken, onNotify }) {
       const response = await fetch('/api/admin/card-publications?limit=50', { headers });
       const data = await readJsonResponse(response);
       if (!response.ok) throw new Error(data.error || '생성된 카드뉴스를 불러오지 못했습니다.');
-      setPublications(Array.isArray(data.publications) ? data.publications : []);
-      setActiveIndex(0);
+      const rows = Array.isArray(data.publications) ? data.publications : [];
+      setPublications(rows);
+      setActivePublicationId(prev => (prev && rows.some(row => row.id === prev) ? prev : (rows[0]?.id || '')));
       setPageIndex(0);
     } catch (error) {
       setNotice('bad', error.message);
@@ -3856,8 +3857,10 @@ function GeneratedCardNewsArchive({ headers, adminToken, onNotify }) {
       });
       const data = await readJsonResponse(response);
       if (!response.ok) throw new Error(data.error || 'Failed to delete card news publication');
-      setPublications(prev => prev.filter(row => row.id !== publication.id));
-      setActiveIndex(prev => Math.max(0, Math.min(prev, publications.length - 2)));
+      const currentIndex = publications.findIndex(row => row.id === publication.id);
+      const nextPublications = publications.filter(row => row.id !== publication.id);
+      setPublications(nextPublications);
+      setActivePublicationId(nextPublications[Math.max(0, Math.min(currentIndex, nextPublications.length - 1))]?.id || '');
       setPageIndex(0);
       setNotice(data.storage_warning ? 'warn' : 'good', data.storage_warning || '카드뉴스를 삭제했습니다.');
     } catch (error) {
@@ -3886,10 +3889,18 @@ function GeneratedCardNewsArchive({ headers, adminToken, onNotify }) {
   }, [adminToken, activePublicationKey]);
 
   useEffect(() => {
-    if (activeIndex >= publications.length) setActiveIndex(Math.max(0, publications.length - 1));
-  }, [activeIndex, publications.length]);
+    if (publications.length === 0) {
+      if (activePublicationId) setActivePublicationId('');
+      return;
+    }
+    if (!activePublicationId || !publications.some(publication => publication.id === activePublicationId)) {
+      setActivePublicationId(publications[0].id);
+    }
+  }, [activePublicationId, publications]);
 
-  const activePublication = publications[activeIndex] || null;
+  const activeIndex = publications.findIndex(publication => publication.id === activePublicationId);
+  const safeActiveIndex = activeIndex >= 0 ? activeIndex : 0;
+  const activePublication = publications[safeActiveIndex] || null;
   const pages = Array.isArray(activePublication?.pages) ? activePublication.pages : [];
   const safePageIndex = pages.length > 0 ? Math.min(pageIndex, pages.length - 1) : 0;
   const currentPage = pages[safePageIndex] || null;
@@ -3903,10 +3914,9 @@ function GeneratedCardNewsArchive({ headers, adminToken, onNotify }) {
   }, [activePublication?.id]);
 
   const moveCard = direction => {
-    setActiveIndex(prev => {
-      const next = prev + direction;
-      return Math.max(0, Math.min(publications.length - 1, next));
-    });
+    const nextIndex = Math.max(0, Math.min(publications.length - 1, safeActiveIndex + direction));
+    setActivePublicationId(publications[nextIndex]?.id || '');
+    setPageIndex(0);
   };
 
   const movePage = direction => {
@@ -4012,7 +4022,7 @@ function GeneratedCardNewsArchive({ headers, adminToken, onNotify }) {
                     <button
                       type="button"
                       onClick={() => moveCard(-1)}
-                      disabled={activeIndex <= 0}
+                      disabled={safeActiveIndex <= 0}
                       className="h-9 w-9 rounded-md text-sm font-black disabled:opacity-40"
                       style={{ background: '#171923', color: '#cbd3e8', border: '1px solid #2a3040' }}>
                       &lt;
@@ -4020,7 +4030,7 @@ function GeneratedCardNewsArchive({ headers, adminToken, onNotify }) {
                     <button
                       type="button"
                       onClick={() => moveCard(1)}
-                      disabled={activeIndex >= publications.length - 1}
+                      disabled={safeActiveIndex >= publications.length - 1}
                       className="h-9 w-9 rounded-md text-sm font-black disabled:opacity-40"
                       style={{ background: '#171923', color: '#cbd3e8', border: '1px solid #2a3040' }}>
                       &gt;
@@ -4115,15 +4125,15 @@ function GeneratedCardNewsArchive({ headers, adminToken, onNotify }) {
                     <button
                       key={publication.id}
                       type="button"
-                      onClick={() => { setActiveIndex(index); setPageIndex(0); }}
+                      onClick={() => { setActivePublicationId(publication.id); setPageIndex(0); }}
                       className="block w-full rounded-md px-3 py-2 text-left"
                       style={{
-                        background: index === activeIndex ? '#e8edf7' : '#11141d',
-                        color: index === activeIndex ? '#05070d' : '#cbd3e8',
+                        background: publication.id === activePublication?.id ? '#e8edf7' : '#11141d',
+                        color: publication.id === activePublication?.id ? '#05070d' : '#cbd3e8',
                         border: '1px solid #283040',
                       }}>
                       <div className="truncate text-sm font-black">{publication.title || 'Card news'}</div>
-                      <div className="mt-1 truncate text-xs" style={{ color: index === activeIndex ? '#334155' : '#8791aa' }}>
+                      <div className="mt-1 truncate text-xs" style={{ color: publication.id === activePublication?.id ? '#334155' : '#8791aa' }}>
                         {publication.status} · {publication.created_at ? fmtKST(publication.created_at) : '-'}
                       </div>
                     </button>
