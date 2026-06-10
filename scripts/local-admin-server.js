@@ -7,17 +7,7 @@ const DIST = path.join(ROOT, 'dist');
 const PORT = Number(process.env.PORT || 3100);
 
 const API_ROUTES = {
-  '/api/admin/items': './api/admin/items',
-  '/api/admin/review': './api/admin/review',
-  '/api/admin/debate': './api/admin/debate',
-  '/api/admin/regenerate': './api/admin/regenerate',
-  '/api/admin/card-news-draft': './api/admin/card-news-draft',
-  '/api/admin/card-news-caption': './api/admin/card-news-caption',
-  '/api/admin/card-publications': './api/admin/card-publications',
-  '/api/admin/card-publications-sync': './api/admin/card-publications-sync',
-  '/api/admin/upload': './api/admin/upload',
-  '/api/admin/card-template-render': './api/admin/card-template-render',
-  '/api/admin/card-news-render': './api/admin/card-news-render',
+  '/api/admin': './api/admin/[route]',
 };
 
 const CONTENT_TYPES = {
@@ -61,7 +51,9 @@ function serveStatic(req, res, pathname) {
 }
 
 async function handleApi(req, res, pathname, parsedUrl) {
-  const route = API_ROUTES[pathname];
+  const route = pathname.startsWith('/api/admin/')
+    ? API_ROUTES['/api/admin']
+    : API_ROUTES[pathname];
   if (!route) {
     res.statusCode = 404;
     res.setHeader('Content-Type', 'application/json; charset=utf-8');

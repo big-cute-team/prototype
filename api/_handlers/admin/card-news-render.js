@@ -1,5 +1,5 @@
-const { requireToken } = require('../_lib/auth');
-const { recordAudit } = require('../_lib/audit');
+const { requireToken } = require('../../_lib/auth');
+const { recordAudit } = require('../../_lib/audit');
 const {
   CARD_TEMPLATE_ID,
   cardRenderAuthHeaders,
@@ -8,8 +8,8 @@ const {
   parseImageDataUrl,
   readCardRenderError,
   safeFilename,
-} = require('../_lib/card-news');
-const { handleError, json } = require('../_lib/http');
+} = require('../../_lib/card-news');
+const { handleError, json } = require('../../_lib/http');
 
 const MAX_RENDER_BODY_BYTES = 18 * 1024 * 1024;
 

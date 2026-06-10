@@ -1,7 +1,7 @@
-const { requireToken } = require('../_lib/auth');
-const { recordAudit } = require('../_lib/audit');
-const { cardRenderAuthHeaders, cardRenderUrl, readCardRenderError, safeFilename } = require('../_lib/card-news');
-const { handleError, json } = require('../_lib/http');
+const { requireToken } = require('../../_lib/auth');
+const { recordAudit } = require('../../_lib/audit');
+const { cardRenderAuthHeaders, cardRenderUrl, readCardRenderError, safeFilename } = require('../../_lib/card-news');
+const { handleError, json } = require('../../_lib/http');
 
 const MAX_RENDER_BODY_BYTES = 2 * 1024 * 1024;
 const TODAY_FIXTURES_TEMPLATE_ID = 'plick_today_fixtures_v1';

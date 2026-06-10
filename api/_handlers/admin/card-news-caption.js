@@ -1,6 +1,6 @@
-const { requireToken } = require('../_lib/auth');
-const { recordAudit } = require('../_lib/audit');
-const { handleError, json, parseJsonBody } = require('../_lib/http');
+const { requireToken } = require('../../_lib/auth');
+const { recordAudit } = require('../../_lib/audit');
+const { handleError, json, parseJsonBody } = require('../../_lib/http');
 
 const MAX_TAG_INPUT_LENGTH = 2600;
 const REQUIRED_HASHTAGS = [

@@ -1,8 +1,8 @@
 const crypto = require('crypto');
-const { requireToken } = require('../_lib/auth');
-const { recordAudit } = require('../_lib/audit');
-const { handleError, json, parseJsonBody } = require('../_lib/http');
-const { insert } = require('../_lib/supabase');
+const { requireToken } = require('../../_lib/auth');
+const { recordAudit } = require('../../_lib/audit');
+const { handleError, json, parseJsonBody } = require('../../_lib/http');
+const { insert } = require('../../_lib/supabase');
 
 const CARD_TYPES = ['schedule', 'today', 'result', 'standings', 'lineup'];
 const TARGET_TEAM_CODES = ['ARS', 'CHE', 'LIV', 'MCI', 'MUN', 'TOT'];

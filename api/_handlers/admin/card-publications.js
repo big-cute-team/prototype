@@ -1,9 +1,9 @@
 const crypto = require('crypto');
-const { requireToken } = require('../_lib/auth');
-const { recordAudit } = require('../_lib/audit');
-const { cardRenderAuthHeaders, cardRenderUrl, readCardRenderError } = require('../_lib/card-news');
-const { handleError, json, parseJsonBody } = require('../_lib/http');
-const { insert, select, patch, eq } = require('../_lib/supabase');
+const { requireToken } = require('../../_lib/auth');
+const { recordAudit } = require('../../_lib/audit');
+const { cardRenderAuthHeaders, cardRenderUrl, readCardRenderError } = require('../../_lib/card-news');
+const { handleError, json, parseJsonBody } = require('../../_lib/http');
+const { insert, select, patch, eq } = require('../../_lib/supabase');
 
 const PUBLICATION_KINDS = new Set(['article', 'today_fixtures']);
 const PUBLICATION_STATUSES = new Set(['pending', 'queued', 'running', 'completed', 'failed']);

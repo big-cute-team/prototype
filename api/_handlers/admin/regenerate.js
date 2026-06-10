@@ -1,11 +1,11 @@
 const fs = require('fs');
 const path = require('path');
-const { requireToken } = require('../_lib/auth');
-const { recordAudit } = require('../_lib/audit');
-const { handleError, json, parseJsonBody } = require('../_lib/http');
-const { eq, select } = require('../_lib/supabase');
+const { requireToken } = require('../../_lib/auth');
+const { recordAudit } = require('../../_lib/audit');
+const { handleError, json, parseJsonBody } = require('../../_lib/http');
+const { eq, select } = require('../../_lib/supabase');
 
-const CONTENT_PROMPT = fs.readFileSync(path.join(__dirname, '../../content.md'), 'utf8').trim();
+const CONTENT_PROMPT = fs.readFileSync(path.join(__dirname, '../../../content.md'), 'utf8').trim();
 const BRIEFING_STATUSES = ['OFFICIAL', 'CONFIRMED', 'UPDATE', 'RUMOUR', 'DENIED'];
 const TARGET_TEAM_CODES = ['ARS', 'CHE', 'LIV', 'MCI', 'MUN', 'TOT'];
 
