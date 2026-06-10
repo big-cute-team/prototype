@@ -6,7 +6,14 @@ const { handleError, json } = require('../../_lib/http');
 const MAX_RENDER_BODY_BYTES = 2 * 1024 * 1024;
 const TODAY_FIXTURES_TEMPLATE_ID = 'plick_today_fixtures_v1';
 const WEEKLY_FIXTURES_TEMPLATE_ID = 'plick_weekly_fixtures_v1';
-const FIXTURE_TEMPLATE_IDS = new Set([TODAY_FIXTURES_TEMPLATE_ID, WEEKLY_FIXTURES_TEMPLATE_ID]);
+const TODAY_RESULTS_TEMPLATE_ID = 'plick_today_results_v1';
+const WEEKLY_RESULTS_TEMPLATE_ID = 'plick_weekly_results_v1';
+const FIXTURE_TEMPLATE_IDS = new Set([
+  TODAY_FIXTURES_TEMPLATE_ID,
+  WEEKLY_FIXTURES_TEMPLATE_ID,
+  TODAY_RESULTS_TEMPLATE_ID,
+  WEEKLY_RESULTS_TEMPLATE_ID,
+]);
 
 function parseJsonBody(req) {
   return new Promise((resolve, reject) => {
@@ -83,7 +90,13 @@ module.exports = async function handler(req, res) {
       template_id: templateId,
       today_fixtures: todayFixtures,
     });
-    const filenamePrefix = templateId === WEEKLY_FIXTURES_TEMPLATE_ID ? 'cardnews-weekly-fixtures' : 'cardnews-today-fixtures';
+    const filenamePrefix = templateId === WEEKLY_RESULTS_TEMPLATE_ID
+      ? 'cardnews-weekly-results'
+      : templateId === TODAY_RESULTS_TEMPLATE_ID
+        ? 'cardnews-today-results'
+        : templateId === WEEKLY_FIXTURES_TEMPLATE_ID
+          ? 'cardnews-weekly-fixtures'
+          : 'cardnews-today-fixtures';
     const filename = `${filenamePrefix}-${safeFilename(todayFixtures.date_label, 'fixtures')}.zip`;
 
     await recordAudit('card_template_rendered', {

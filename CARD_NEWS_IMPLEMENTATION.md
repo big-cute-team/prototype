@@ -238,6 +238,130 @@ Render behavior:
 - It intentionally does not render `group_label` or `venue`.
 - Weekly long team names use `_weekly_fixture_team_font_size()` with a smaller base size than today.
 
+### Match Results Cards
+
+- Template ids:
+  - `plick_today_results_v1`
+  - `plick_weekly_results_v1`
+- Admin mode id:
+  - `match_results`
+- Admin UI:
+  - Reuses `TodayFixturesEditor` with `variant="results"`
+  - Reuses `TodayFixturesPreview` with `variant="results"`
+- Render template directories:
+  - `app/render/templates/plick_today_results_v1`
+  - `app/render/templates/plick_weekly_results_v1`
+- Background asset:
+  - Same fixed fixtures background as schedule cards.
+
+Expected today-result request shape:
+
+```json
+{
+  "template_id": "plick_today_results_v1",
+  "today_fixtures": {
+    "schedule_type": "today",
+    "content_type": "results",
+    "eyebrow": "WORLD CUP 2026 · RESULT",
+    "title": "오늘의\n경기 결과",
+    "date_label": "6월 12일 (금)",
+    "matches": [
+      {
+        "time_period": "오전",
+        "kickoff_time": "04:00",
+        "home_team": "브라질",
+        "home_code": "BRA",
+        "home_image_url": "https://...",
+        "home_score": "2",
+        "away_team": "세네갈",
+        "away_code": "SEN",
+        "away_image_url": "https://...",
+        "away_score": "1",
+        "group_label": "Group F",
+        "venue": "마이애미 · 하드록 스타디움"
+      }
+    ]
+  }
+}
+```
+
+Expected weekly-result request shape:
+
+```json
+{
+  "template_id": "plick_weekly_results_v1",
+  "today_fixtures": {
+    "schedule_type": "weekly",
+    "content_type": "results",
+    "eyebrow": "WORLD CUP 2026 · WEEK RESULT",
+    "title": "이번주\n경기 결과",
+    "date_label": "6월 11일 — 6월 13일",
+    "matches": [
+      {
+        "time_period": "오전",
+        "kickoff_time": "09:00",
+        "home_team": "멕시코",
+        "home_code": "MEX",
+        "home_image_url": "https://...",
+        "home_score": "1",
+        "away_team": "대한민국",
+        "away_code": "KOR",
+        "away_image_url": "https://...",
+        "away_score": "1",
+        "group_label": "",
+        "venue": ""
+      }
+    ],
+    "days": [
+      {
+        "date": "2026-06-11",
+        "date_label": "6월 11일 (목)",
+        "matches": [
+          {
+            "time_period": "오전",
+            "kickoff_time": "09:00",
+            "home_team": "멕시코",
+            "home_code": "MEX",
+            "home_image_url": "https://...",
+            "home_score": "1",
+            "away_team": "대한민국",
+            "away_code": "KOR",
+            "away_image_url": "https://...",
+            "away_score": "1",
+            "group_label": "",
+            "venue": ""
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+Admin behavior:
+
+- Results cards reuse fixture match input structure and add score input fields.
+- Scores are stored as `home_score` and `away_score`.
+- The preview joins them as `home_score:away_score`.
+- Today results follow today fixtures layout:
+  - 4 matches per page
+  - group/round and venue remain visible
+- Weekly results follow weekly fixtures layout:
+  - target maximum 6 matches per page
+  - keep date groups together where possible
+  - split one large date if it exceeds 6 matches and repeat the date header
+  - group/round and venue are not rendered
+- The visible center label uses Bebas Neue score text instead of `VS`.
+
+Render behavior:
+
+- `TodayFixtureMatch` accepts optional `home_score` and `away_score`.
+- `TodayFixturesContent` accepts `content_type: "fixtures" | "results"`.
+- `build_today_results_html_pages()` uses today fixtures pagination and result row HTML.
+- `build_weekly_results_html_pages()` uses weekly fixtures pagination and result row HTML.
+- `_today_result_match_to_html()` and `_weekly_result_match_to_html()` render score classes instead of `fixture-vs`.
+- Result score typography is defined in the result template CSS with Bebas Neue.
+
 ## Admin Publication Flow
 
 ### Immediate ZIP Download
@@ -250,12 +374,14 @@ Render behavior:
   - Generate and download a fixtures ZIP directly.
 - Route behavior:
   - Requires admin token.
-  - Accepts `plick_today_fixtures_v1` and `plick_weekly_fixtures_v1`.
+  - Accepts `plick_today_fixtures_v1`, `plick_weekly_fixtures_v1`, `plick_today_results_v1`, and `plick_weekly_results_v1`.
   - Forwards to card render server `POST /card/render`.
   - Returns ZIP bytes.
 - Filename prefix:
   - today: `cardnews-today-fixtures-*`
   - weekly: `cardnews-weekly-fixtures-*`
+  - today results: `cardnews-today-results-*`
+  - weekly results: `cardnews-weekly-results-*`
 
 ### R2 Upload / Publication
 
@@ -273,7 +399,7 @@ Render behavior:
 - Publication kinds:
   - `article`
   - `today_fixtures`
-- Template ids are stored separately in `template_id`, so weekly fixtures still use `kind: "today_fixtures"` with `template_id: "plick_weekly_fixtures_v1"`.
+- Template ids are stored separately in `template_id`, so weekly fixtures and match results still use `kind: "today_fixtures"` with their specific fixture/result template id.
 - `source_payload` stores the original source data needed for recovery/requeue.
 - `render_request` is sent to the card render server `POST /card/render-jobs`.
 - `card-publications-sync` polls `GET /card/render-jobs/{job_id}` and patches:

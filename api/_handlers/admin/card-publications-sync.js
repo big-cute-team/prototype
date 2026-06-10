@@ -7,7 +7,14 @@ const { select, patch, eq } = require('../../_lib/supabase');
 const PUBLICATION_STATUSES = new Set(['pending', 'queued', 'running', 'zip_pending', 'completed', 'failed']);
 const TODAY_FIXTURES_TEMPLATE_ID = 'plick_today_fixtures_v1';
 const WEEKLY_FIXTURES_TEMPLATE_ID = 'plick_weekly_fixtures_v1';
-const FIXTURE_TEMPLATE_IDS = new Set([TODAY_FIXTURES_TEMPLATE_ID, WEEKLY_FIXTURES_TEMPLATE_ID]);
+const TODAY_RESULTS_TEMPLATE_ID = 'plick_today_results_v1';
+const WEEKLY_RESULTS_TEMPLATE_ID = 'plick_weekly_results_v1';
+const FIXTURE_TEMPLATE_IDS = new Set([
+  TODAY_FIXTURES_TEMPLATE_ID,
+  WEEKLY_FIXTURES_TEMPLATE_ID,
+  TODAY_RESULTS_TEMPLATE_ID,
+  WEEKLY_RESULTS_TEMPLATE_ID,
+]);
 
 async function requestRenderJobStatus(jobId) {
   const response = await fetch(cardRenderUrl(`/card/render-jobs/${encodeURIComponent(jobId)}`), {
@@ -64,7 +71,9 @@ function renderRequestFromPublication(publication) {
     if (!sourcePayload.today_fixtures) return null;
     const templateId = FIXTURE_TEMPLATE_IDS.has(publication.template_id)
       ? publication.template_id
-      : (sourcePayload.today_fixtures?.schedule_type === 'weekly' ? WEEKLY_FIXTURES_TEMPLATE_ID : TODAY_FIXTURES_TEMPLATE_ID);
+      : sourcePayload.today_fixtures?.content_type === 'results'
+        ? (sourcePayload.today_fixtures?.schedule_type === 'weekly' ? WEEKLY_RESULTS_TEMPLATE_ID : TODAY_RESULTS_TEMPLATE_ID)
+        : (sourcePayload.today_fixtures?.schedule_type === 'weekly' ? WEEKLY_FIXTURES_TEMPLATE_ID : TODAY_FIXTURES_TEMPLATE_ID);
     return {
       template_id: templateId,
       today_fixtures: sourcePayload.today_fixtures,

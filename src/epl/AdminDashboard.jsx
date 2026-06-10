@@ -7,9 +7,12 @@ const CARD_NEWS_TAB = 'card_news_workspace';
 const GENERATED_CARD_NEWS_TAB = 'generated_card_news';
 const ARTICLE_CARD_MODE = 'article';
 const TODAY_FIXTURES_MODE = 'today_fixtures';
+const MATCH_RESULTS_MODE = 'match_results';
 const ARTICLE_CARD_TEMPLATE_ID = 'plick_transfer_v1';
 const TODAY_FIXTURES_TEMPLATE_ID = 'plick_today_fixtures_v1';
 const WEEKLY_FIXTURES_TEMPLATE_ID = 'plick_weekly_fixtures_v1';
+const TODAY_RESULTS_TEMPLATE_ID = 'plick_today_results_v1';
+const WEEKLY_RESULTS_TEMPLATE_ID = 'plick_weekly_results_v1';
 const TODAY_FIXTURES_MATCHES_PER_PAGE = 4;
 const WEEKLY_FIXTURES_MATCHES_PER_PAGE = 6;
 const TODAY_FIXTURES_MAX_MATCHES = 40;
@@ -20,6 +23,10 @@ const UCL_ROUND_OPTIONS = ['League Phase', 'Round of 16', 'Quarter-final', 'Semi
 const SCHEDULE_TYPE_OPTIONS = [
   { id: 'today', label: '오늘의 경기 일정', title: '오늘의\n경기 일정' },
   { id: 'weekly', label: '이번주 경기 일정', title: '이번주\n경기 일정' },
+];
+const RESULT_TYPE_OPTIONS = [
+  { id: 'today', label: '오늘의 경기 결과', title: '오늘의\n경기 결과' },
+  { id: 'weekly', label: '이번주 경기 결과', title: '이번주\n경기 결과' },
 ];
 const TODAY_FIXTURES_PRESETS = [
   {
@@ -50,6 +57,7 @@ const TODAY_FIXTURES_PRESETS = [
 const CARD_WORKSPACE_MODES = [
   { id: ARTICLE_CARD_MODE, label: '기사 기반' },
   { id: TODAY_FIXTURES_MODE, label: '경기 일정' },
+  { id: MATCH_RESULTS_MODE, label: '경기 결과' },
 ];
 const STATUS_OPTIONS = ['review', 'published', 'discarded', 'rejected', 'all'];
 const ADMIN_TAB_OPTIONS = [...STATUS_OPTIONS, CARD_NEWS_TAB, GENERATED_CARD_NEWS_TAB];
@@ -561,6 +569,29 @@ function cloneTodayFixturesDefaults() {
   };
 }
 
+function cloneMatchResultsDefaults() {
+  const base = cloneTodayFixturesDefaults();
+  const withScores = match => ({
+    ...match,
+    home_score: String(match.home_score ?? ''),
+    away_score: String(match.away_score ?? ''),
+  });
+  return {
+    ...base,
+    title: '오늘의\n경기 결과',
+    eyebrow: scheduleEyebrowForValue(base, 'results'),
+    matches: base.matches.map(match => withScores({
+      ...match,
+      home_score: '1',
+      away_score: '1',
+    })),
+    days: (base.days || []).map(day => ({
+      ...day,
+      matches: (day.matches || []).map(withScores),
+    })),
+  };
+}
+
 function emptyTodayFixtureMatch() {
   return {
     time_period: '오전',
@@ -573,6 +604,8 @@ function emptyTodayFixtureMatch() {
     away_image_url: '',
     group_label: '',
     venue: '',
+    home_score: '',
+    away_score: '',
   };
 }
 
@@ -610,6 +643,11 @@ function getScheduleTypeOption(typeId) {
   return SCHEDULE_TYPE_OPTIONS.find(option => option.id === typeId) || SCHEDULE_TYPE_OPTIONS[0];
 }
 
+function getFixtureTypeOption(typeId, variant = 'fixtures') {
+  const options = variant === 'results' ? RESULT_TYPE_OPTIONS : SCHEDULE_TYPE_OPTIONS;
+  return options.find(option => option.id === typeId) || options[0];
+}
+
 function fixtureTeamNameUnits(text) {
   return Array.from(String(text || '')).reduce((sum, char) => {
     if (/\s/.test(char)) return sum + 0.34;
@@ -635,11 +673,13 @@ function weeklyFixtureTeamNameFontSize(text) {
   return Math.max(18, Number(size.toFixed(1)));
 }
 
-function scheduleEyebrowForValue(value) {
+function scheduleEyebrowForValue(value, variant = 'fixtures') {
   const preset = getTodayFixturesPreset(value.preset_id);
-  const scheduleType = getScheduleTypeOption(value.schedule_type);
+  const scheduleType = getFixtureTypeOption(value.schedule_type, variant);
   const base = String(value.eyebrow_base || preset.eyebrow_base || '').trim();
-  const period = scheduleType.id === 'weekly' ? 'WEEK' : 'TODAY';
+  const period = variant === 'results'
+    ? (scheduleType.id === 'weekly' ? 'WEEK RESULT' : 'RESULT')
+    : (scheduleType.id === 'weekly' ? 'WEEK' : 'TODAY');
   return base ? `${base} · ${period}` : period;
 }
 
@@ -669,6 +709,8 @@ function normalizeTodayFixtureMatch(match) {
     ...(awayImageUrl ? { away_image_url: awayImageUrl } : {}),
     group_label: String(match.group_label || '').trim(),
     venue: String(match.venue || '').trim(),
+    home_score: String(match.home_score ?? '').trim(),
+    away_score: String(match.away_score ?? '').trim(),
   };
 }
 
@@ -735,8 +777,14 @@ function buildWeeklyFixturePreviewPages(days, maxMatches = WEEKLY_FIXTURES_MATCH
   return pages.length > 0 ? pages : [[]];
 }
 
-function todayFixturesPayload(value) {
-  const scheduleType = getScheduleTypeOption(value.schedule_type);
+function fixtureScoreText(match) {
+  const homeScore = String(match?.home_score ?? '').trim();
+  const awayScore = String(match?.away_score ?? '').trim();
+  return homeScore || awayScore ? `${homeScore || '-'}:${awayScore || '-'}` : '-:-';
+}
+
+function todayFixturesPayload(value, variant = 'fixtures') {
+  const scheduleType = getFixtureTypeOption(value.schedule_type, variant);
   const isWeekly = scheduleType.id === 'weekly';
   const days = isWeekly ? weeklyFixtureDaysForValue(value) : [];
   const matches = isWeekly
@@ -745,7 +793,8 @@ function todayFixturesPayload(value) {
 
   return {
     schedule_type: scheduleType.id,
-    eyebrow: scheduleEyebrowForValue(value),
+    ...(variant === 'results' ? { content_type: 'results' } : {}),
+    eyebrow: scheduleEyebrowForValue(value, variant),
     title: String(scheduleType.title || value.title || '').replace(/\r\n/g, '\n').replace(/\r/g, '\n').trim(),
     date_label: String(value.date_label || '').trim(),
     ...(isWeekly ? { days } : {}),
@@ -753,23 +802,24 @@ function todayFixturesPayload(value) {
   };
 }
 
-function todayFixturesValidationIssues(payload) {
+function todayFixturesValidationIssues(payload, variant = 'fixtures') {
   const issues = [];
+  const isResults = variant === 'results' || payload.content_type === 'results';
   if (!payload.date_label) issues.push({ key: 'date', message: '날짜를 선택해주세요.' });
   if (payload.matches.length < 1 || payload.matches.length > TODAY_FIXTURES_MAX_MATCHES) {
     issues.push({ key: 'matches', message: `경기는 1개 이상 ${TODAY_FIXTURES_MAX_MATCHES}개 이하로 입력해주세요.` });
   }
-  const requiredKeys = payload.schedule_type === 'weekly' ? [
+  const requiredKeys = [
     ['kickoff_time', '시간'],
     ['home_code', '홈 국가'],
     ['away_code', '원정 국가'],
-  ] : [
-    ['kickoff_time', '시간'],
-    ['home_code', '홈 국가'],
-    ['away_code', '원정 국가'],
-    ['group_label', '그룹/라운드'],
-    ['venue', '경기장'],
   ];
+  if (isResults) {
+    requiredKeys.push(['home_score', '홈 스코어'], ['away_score', '원정 스코어']);
+  }
+  if (payload.schedule_type !== 'weekly') {
+    requiredKeys.push(['group_label', '그룹/라운드'], ['venue', '경기장']);
+  }
 
   if (payload.schedule_type === 'weekly') {
     let absoluteIndex = 0;
@@ -817,6 +867,18 @@ function validateTodayFixturesPayload(payload) {
 
 function scheduleTitleForPayload(payload) {
   return compactText(String(payload.title || '').replace(/\s+/g, ' '), 48, '경기 일정');
+}
+
+function fixtureTemplateIdForPayload(payload, variant = 'fixtures') {
+  const isWeekly = payload.schedule_type === 'weekly';
+  if (variant === 'results') return isWeekly ? WEEKLY_RESULTS_TEMPLATE_ID : TODAY_RESULTS_TEMPLATE_ID;
+  return isWeekly ? WEEKLY_FIXTURES_TEMPLATE_ID : TODAY_FIXTURES_TEMPLATE_ID;
+}
+
+function fixtureFilenamePrefixForPayload(payload, variant = 'fixtures') {
+  const isWeekly = payload.schedule_type === 'weekly';
+  if (variant === 'results') return isWeekly ? 'cardnews-weekly-results' : 'cardnews-today-results';
+  return isWeekly ? 'cardnews-weekly-fixtures' : 'cardnews-today-fixtures';
 }
 
 function Metric({ label, value, warn }) {
@@ -1748,10 +1810,11 @@ function CompactSelect({ value, options, optionLabels = {}, onChange, ariaLabel,
   );
 }
 
-function ScheduleTypeToggle({ value, onChange }) {
+function ScheduleTypeToggle({ value, onChange, variant = 'fixtures' }) {
+  const options = variant === 'results' ? RESULT_TYPE_OPTIONS : SCHEDULE_TYPE_OPTIONS;
   return (
     <div className="grid min-w-0 grid-cols-2 gap-1 rounded-md p-1" style={{ background: '#11141d', border: '1px solid #283040' }}>
-      {SCHEDULE_TYPE_OPTIONS.map(option => {
+      {options.map(option => {
         const selected = value === option.id;
         return (
           <button
@@ -1884,6 +1947,7 @@ function TodayFixturesEditor({
   onRender,
   disabled,
   rendering,
+  variant = 'fixtures',
   selectedMatchIndex,
   onSelectMatch,
   focusRequest,
@@ -1892,11 +1956,12 @@ function TodayFixturesEditor({
 }) {
   const rowRefs = useRef([]);
   const [dragIndex, setDragIndex] = useState(null);
+  const isResults = variant === 'results';
   const currentPreset = getTodayFixturesPreset(value.preset_id);
-  const currentScheduleType = getScheduleTypeOption(value.schedule_type);
+  const currentScheduleType = getFixtureTypeOption(value.schedule_type, variant);
   const groupOptions = currentPreset.groupOptions;
-  const payload = todayFixturesPayload(value);
-  const validationIssues = todayFixturesValidationIssues(payload);
+  const payload = todayFixturesPayload(value, variant);
+  const validationIssues = todayFixturesValidationIssues(payload, variant);
   const isWeekly = currentScheduleType.id === 'weekly';
   const weeklyDays = isWeekly ? weeklyFixtureDaysForValue(value) : [];
   const totalWeeklyMatches = flattenWeeklyFixtureDays(weeklyDays).length;
@@ -1927,7 +1992,7 @@ function TodayFixturesEditor({
     });
   };
   const updateScheduleType = nextType => {
-    const option = getScheduleTypeOption(nextType);
+    const option = getFixtureTypeOption(nextType, variant);
     const startDate = value.date_start || value.date;
     const endDate = value.date_end || addDaysToDateValue(startDate, 6);
     const nextDays = option.id === 'weekly'
@@ -1943,7 +2008,7 @@ function TodayFixturesEditor({
       ...value,
       schedule_type: option.id,
       title: option.title,
-      eyebrow: scheduleEyebrowForValue({ ...value, schedule_type: option.id }),
+      eyebrow: scheduleEyebrowForValue({ ...value, schedule_type: option.id }, variant),
       date: startDate,
       date_start: startDate,
       date_end: endDate,
@@ -1959,7 +2024,7 @@ function TodayFixturesEditor({
       ...value,
       preset_id: preset.id,
       eyebrow_base: preset.eyebrow_base,
-      eyebrow: scheduleEyebrowForValue({ ...value, preset_id: preset.id, eyebrow_base: preset.eyebrow_base }),
+      eyebrow: scheduleEyebrowForValue({ ...value, preset_id: preset.id, eyebrow_base: preset.eyebrow_base }, variant),
       title: value.title || preset.title,
       matches: value.matches.map(match => ({
         ...match,
@@ -2105,11 +2170,11 @@ function TodayFixturesEditor({
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <div>
           <div className="text-xs font-bold uppercase" style={{ color: '#687086' }}>manual template</div>
-          <div className="mt-1 text-sm font-bold text-white">경기 일정</div>
+          <div className="mt-1 text-sm font-bold text-white">{isResults ? '경기 결과' : '경기 일정'}</div>
         </div>
         <button
           type="button"
-          onClick={() => onChange(cloneTodayFixturesDefaults())}
+          onClick={() => onChange(isResults ? cloneMatchResultsDefaults() : cloneTodayFixturesDefaults())}
           className="rounded-md px-3 py-2 text-xs font-bold"
           style={{ background: '#171923', color: '#cbd3e8', border: '1px solid #2a3040' }}>
           샘플 복원
@@ -2130,7 +2195,7 @@ function TodayFixturesEditor({
         <div className="space-y-2">
           <div>
             <span className="mb-1 block text-xs font-bold uppercase" style={{ color: '#687086' }}>schedule title</span>
-            <ScheduleTypeToggle value={currentScheduleType.id} onChange={updateScheduleType} />
+            <ScheduleTypeToggle value={currentScheduleType.id} onChange={updateScheduleType} variant={variant} />
           </div>
           <div className={`grid min-w-0 gap-2 ${currentScheduleType.id === 'weekly' ? 'sm:grid-cols-[180px_180px_minmax(0,1fr)]' : 'sm:grid-cols-[180px_minmax(0,1fr)]'}`}>
             <label className="block min-w-0">
@@ -2239,7 +2304,7 @@ function TodayFixturesEditor({
                       boxShadow: selected ? '0 0 0 1px rgba(53,212,138,0.35)' : 'none',
                     }}
                   >
-                    <div className="grid min-w-0 items-end gap-2 sm:grid-cols-[34px_86px_104px_minmax(0,1fr)_40px]">
+                    <div className={`grid min-w-0 items-end gap-2 ${isResults ? 'sm:grid-cols-[34px_86px_104px_112px_minmax(0,1fr)_40px]' : 'sm:grid-cols-[34px_86px_104px_minmax(0,1fr)_40px]'}`}>
                       <div
                         className="flex h-10 items-center justify-center rounded text-xs font-black"
                         style={{ background: '#11141d', color: '#aab4cc', border: '1px solid #283040' }}
@@ -2265,6 +2330,30 @@ function TodayFixturesEditor({
                           style={{ background: '#11141d', color: '#fff', border: '1px solid #283040' }}
                         />
                       </label>
+                      {isResults && (
+                        <label className="block min-w-0 space-y-1">
+                          <span className="block text-xs font-bold uppercase" style={{ color: '#687086' }}>score</span>
+                          <div className="grid h-10 grid-cols-[1fr_12px_1fr] items-center rounded-md px-2" style={{ background: '#11141d', border: '1px solid #283040' }}>
+                            <input
+                              value={match.home_score || ''}
+                              onChange={event => updateWeeklyMatch(dayIndex, matchIndex, 'home_score', event.target.value)}
+                              placeholder="1"
+                              inputMode="numeric"
+                              className="min-w-0 bg-transparent text-center text-sm font-black outline-none"
+                              style={{ color: '#fff' }}
+                            />
+                            <span className="text-center text-sm font-black" style={{ color: '#687086' }}>:</span>
+                            <input
+                              value={match.away_score || ''}
+                              onChange={event => updateWeeklyMatch(dayIndex, matchIndex, 'away_score', event.target.value)}
+                              placeholder="1"
+                              inputMode="numeric"
+                              className="min-w-0 bg-transparent text-center text-sm font-black outline-none"
+                              style={{ color: '#fff' }}
+                            />
+                          </div>
+                        </label>
+                      )}
                       <div className="min-w-0">
                         <span className="mb-1 block text-xs font-bold uppercase" style={{ color: '#687086' }}>match</span>
                         <div className="grid min-w-0 gap-2 sm:grid-cols-2">
@@ -2336,7 +2425,7 @@ function TodayFixturesEditor({
                 boxShadow: selected ? '0 0 0 1px rgba(53,212,138,0.35)' : 'none',
               }}
             >
-              <div className="grid min-w-0 items-end gap-2 sm:grid-cols-[34px_86px_104px_minmax(0,1fr)_40px]">
+              <div className={`grid min-w-0 items-end gap-2 ${isResults ? 'sm:grid-cols-[34px_86px_104px_112px_minmax(0,1fr)_40px]' : 'sm:grid-cols-[34px_86px_104px_minmax(0,1fr)_40px]'}`}>
                 <button
                   type="button"
                   onMouseDown={event => beginDragMatch(event, index)}
@@ -2357,6 +2446,31 @@ function TodayFixturesEditor({
                     ariaLabel={`${index + 1}번째 경기 오전 오후`}
                   />
                 </label>
+
+                {isResults && (
+                  <label className="block min-w-0 space-y-1">
+                    <span className="block text-xs font-bold uppercase" style={{ color: '#687086' }}>score</span>
+                    <div className="grid h-10 grid-cols-[1fr_12px_1fr] items-center rounded-md px-2" style={{ background: '#11141d', border: '1px solid #283040' }}>
+                      <input
+                        value={match.home_score || ''}
+                        onChange={event => updateMatch(index, 'home_score', event.target.value)}
+                        placeholder="1"
+                        inputMode="numeric"
+                        className="min-w-0 bg-transparent text-center text-sm font-black outline-none"
+                        style={{ color: '#fff' }}
+                      />
+                      <span className="text-center text-sm font-black" style={{ color: '#687086' }}>:</span>
+                      <input
+                        value={match.away_score || ''}
+                        onChange={event => updateMatch(index, 'away_score', event.target.value)}
+                        placeholder="1"
+                        inputMode="numeric"
+                        className="min-w-0 bg-transparent text-center text-sm font-black outline-none"
+                        style={{ color: '#fff' }}
+                      />
+                    </div>
+                  </label>
+                )}
 
                 <label className="block min-w-0 space-y-1">
                   <span className="block text-xs font-bold uppercase" style={{ color: '#687086' }}>time</span>
@@ -2434,19 +2548,20 @@ function TodayFixturesEditor({
           disabled={disabled || rendering}
           className="w-full rounded-md px-4 py-3 text-sm font-black disabled:opacity-50"
           style={{ background: '#21c17a', color: '#03130c' }}>
-          {rendering ? '업로드 중' : '경기 일정 업로드'}
+          {rendering ? '업로드 중' : `${isResults ? '경기 결과' : '경기 일정'} 업로드`}
         </button>
       </div>
     </section>
   );
 }
 
-function TodayFixturesPreview({ value, selectedMatchIndex, onSelectMatch }) {
+function TodayFixturesPreview({ value, selectedMatchIndex, onSelectMatch, variant = 'fixtures' }) {
   const wrapperRef = useRef(null);
   const lastSyncedSelectedMatchIndexRef = useRef(selectedMatchIndex);
   const [previewWidth, setPreviewWidth] = useState(360);
   const [pageIndex, setPageIndex] = useState(0);
   const scale = previewWidth / CARD_PREVIEW_WIDTH;
+  const isResults = variant === 'results';
 
   useEffect(() => {
     const node = wrapperRef.current;
@@ -2468,7 +2583,7 @@ function TodayFixturesPreview({ value, selectedMatchIndex, onSelectMatch }) {
     return () => observer.disconnect();
   }, []);
 
-  const payload = todayFixturesPayload(value);
+  const payload = todayFixturesPayload(value, variant);
   const isWeekly = payload.schedule_type === 'weekly';
   const weeklyPages = isWeekly ? buildWeeklyFixturePreviewPages(payload.days || []) : [];
   const fixturePages = isWeekly ? weeklyPages : chunkItems(payload.matches, TODAY_FIXTURES_MATCHES_PER_PAGE);
@@ -2599,7 +2714,7 @@ function TodayFixturesPreview({ value, selectedMatchIndex, onSelectMatch }) {
                       </div>
                       <div style={{ position: 'absolute', left: 286, top: 29, width: 220, height: 37, fontSize: homeFontSize, lineHeight: '37px', fontWeight: 900, letterSpacing: -0.31, textAlign: 'right', whiteSpace: 'nowrap', overflow: 'hidden' }}>{match.home_team}</div>
                       <FixtureFlagBadge code={match.home_code} imageUrl={match.home_image_url} size={56} style={{ position: 'absolute', left: 522, top: 19.5 }} />
-                      <div style={{ position: 'absolute', left: 595.61, top: 32, width: 28, height: 31, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'rgba(255,255,255,0.46)', fontFamily: '"Bebas Neue", "Pretendard", sans-serif', fontSize: 26, lineHeight: 1, fontWeight: 400, letterSpacing: 2.08, textAlign: 'center' }}>VS</div>
+                      <div style={{ position: 'absolute', left: isResults ? 585.61 : 595.61, top: 32, width: isResults ? 48 : 28, height: 31, display: 'flex', alignItems: 'center', justifyContent: 'center', color: isResults ? '#fff' : 'rgba(255,255,255,0.46)', fontFamily: '"Bebas Neue", "Pretendard", sans-serif', fontSize: isResults ? 32 : 26, lineHeight: 1, fontWeight: 400, letterSpacing: isResults ? 1.2 : 2.08, textAlign: 'center', whiteSpace: 'nowrap' }}>{isResults ? fixtureScoreText(match) : 'VS'}</div>
                       <FixtureFlagBadge code={match.away_code} imageUrl={match.away_image_url} size={56} style={{ position: 'absolute', left: 637.38, top: 19.5 }} />
                       <div style={{ position: 'absolute', left: 709.38, top: 29, width: 220, height: 37, fontSize: awayFontSize, lineHeight: '37px', fontWeight: 900, letterSpacing: -0.31, whiteSpace: 'nowrap', overflow: 'hidden' }}>{match.away_team}</div>
                     </button>
@@ -2644,7 +2759,7 @@ function TodayFixturesPreview({ value, selectedMatchIndex, onSelectMatch }) {
                 <div style={{ position: 'absolute', left: 200, top: 33, width: 720, height: 150 }}>
                   <div style={{ position: 'absolute', left: 0, top: 15, width: 225, height: 54, fontSize: homeFontSize, lineHeight: '48px', fontWeight: 900, textAlign: 'right', whiteSpace: 'nowrap', overflow: 'hidden' }}>{match.home_team}</div>
                   <FixtureFlagBadge code={match.home_code} imageUrl={match.home_image_url} style={{ position: 'absolute', left: 240.61, top: 0 }} />
-                  <div style={{ position: 'absolute', left: 321.5, top: 0, width: 54, height: 78, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'rgba(255,255,255,0.46)', fontFamily: '"Bebas Neue", "Pretendard", sans-serif', fontSize: 26, lineHeight: 1, fontWeight: 400, textAlign: 'center' }}>VS</div>
+                  <div style={{ position: 'absolute', left: isResults ? 310.5 : 321.5, top: 0, width: isResults ? 76 : 54, height: 78, display: 'flex', alignItems: 'center', justifyContent: 'center', color: isResults ? '#fff' : 'rgba(255,255,255,0.46)', fontFamily: '"Bebas Neue", "Pretendard", sans-serif', fontSize: isResults ? 42 : 26, lineHeight: 1, fontWeight: 400, letterSpacing: isResults ? 1.2 : 0, textAlign: 'center', whiteSpace: 'nowrap' }}>{isResults ? fixtureScoreText(match) : 'VS'}</div>
                   <FixtureFlagBadge code={match.away_code} imageUrl={match.away_image_url} style={{ position: 'absolute', left: 378.38, top: 0 }} />
                   <div style={{ position: 'absolute', left: 472.38, top: 15, width: 225, height: 54, fontSize: awayFontSize, lineHeight: '48px', fontWeight: 900, whiteSpace: 'nowrap', overflow: 'hidden' }}>{match.away_team}</div>
                   <div style={{ position: 'absolute', left: 0, top: 92, width: 680, height: 25, color: 'rgba(255,255,255,0.46)', fontSize: 21, lineHeight: '25px', fontWeight: 900, whiteSpace: 'nowrap', overflow: 'hidden' }}>
@@ -2684,6 +2799,10 @@ function CardNewsWorkspace({ headers, adminToken, seedItem, onNotify }) {
   const [selectedTodayFixtureIndex, setSelectedTodayFixtureIndex] = useState(0);
   const [todayFixtureFocusRequest, setTodayFixtureFocusRequest] = useState(null);
   const [showTodayFixturesValidation, setShowTodayFixturesValidation] = useState(false);
+  const [matchResults, setMatchResults] = useState(() => cloneMatchResultsDefaults());
+  const [selectedMatchResultIndex, setSelectedMatchResultIndex] = useState(0);
+  const [matchResultFocusRequest, setMatchResultFocusRequest] = useState(null);
+  const [showMatchResultsValidation, setShowMatchResultsValidation] = useState(false);
 
   const selectedItem = useMemo(() => {
     const matched = publishedItems.find(item => String(item.id) === String(selectedId));
@@ -2727,6 +2846,30 @@ function CardNewsWorkspace({ headers, adminToken, seedItem, onNotify }) {
       return { ...current, matches };
     });
     setSelectedTodayFixtureIndex(current => {
+      if (current === fromIndex) return toIndex;
+      if (fromIndex < current && current <= toIndex) return current - 1;
+      if (toIndex <= current && current < fromIndex) return current + 1;
+      return current;
+    });
+  };
+
+  const selectMatchResultMatch = index => {
+    const maxIndex = Math.max((matchResults.matches || []).length - 1, 0);
+    setSelectedMatchResultIndex(Math.max(0, Math.min(index, maxIndex)));
+  };
+  const focusMatchResultMatch = index => {
+    selectMatchResultMatch(index);
+    setMatchResultFocusRequest({ index, nonce: Date.now() });
+  };
+  const reorderMatchResultMatch = (fromIndex, toIndex) => {
+    setMatchResults(current => {
+      const matches = [...(current.matches || [])];
+      if (fromIndex < 0 || toIndex < 0 || fromIndex >= matches.length || toIndex >= matches.length) return current;
+      const [moved] = matches.splice(fromIndex, 1);
+      matches.splice(toIndex, 0, moved);
+      return { ...current, matches };
+    });
+    setSelectedMatchResultIndex(current => {
       if (current === fromIndex) return toIndex;
       if (fromIndex < current && current <= toIndex) return current - 1;
       if (toIndex <= current && current < fromIndex) return current + 1;
@@ -3092,8 +3235,8 @@ function CardNewsWorkspace({ headers, adminToken, seedItem, onNotify }) {
   };
 
   const renderTodayFixtures = async () => {
-    const payload = todayFixturesPayload(todayFixtures);
-    const validationIssues = todayFixturesValidationIssues(payload);
+    const payload = todayFixturesPayload(todayFixtures, 'fixtures');
+    const validationIssues = todayFixturesValidationIssues(payload, 'fixtures');
     const validationMessage = validationIssues[0]?.message || '';
 
     if (validationMessage) {
@@ -3111,9 +3254,8 @@ function CardNewsWorkspace({ headers, adminToken, seedItem, onNotify }) {
     setShowTodayFixturesValidation(false);
     const jobId = renderJobId();
     const scheduleTitle = scheduleTitleForPayload(payload);
-    const isWeekly = payload.schedule_type === 'weekly';
-    const templateId = isWeekly ? WEEKLY_FIXTURES_TEMPLATE_ID : TODAY_FIXTURES_TEMPLATE_ID;
-    const filenamePrefix = isWeekly ? 'cardnews-weekly-fixtures' : 'cardnews-today-fixtures';
+    const templateId = fixtureTemplateIdForPayload(payload, 'fixtures');
+    const filenamePrefix = fixtureFilenamePrefixForPayload(payload, 'fixtures');
     const filename = `${filenamePrefix}-${payload.date_label.replace(/\s+/g, '-')}.zip`;
     const startedAt = Date.now();
     setRenderNow(startedAt);
@@ -3241,8 +3383,8 @@ function CardNewsWorkspace({ headers, adminToken, seedItem, onNotify }) {
   };
 
   const publishTodayFixtures = async () => {
-    const payload = todayFixturesPayload(todayFixtures);
-    const validationIssues = todayFixturesValidationIssues(payload);
+    const payload = todayFixturesPayload(todayFixtures, 'fixtures');
+    const validationIssues = todayFixturesValidationIssues(payload, 'fixtures');
     const validationMessage = validationIssues[0]?.message || '';
 
     if (validationMessage) {
@@ -3259,9 +3401,70 @@ function CardNewsWorkspace({ headers, adminToken, seedItem, onNotify }) {
     setLocalMessage('');
     setShowTodayFixturesValidation(false);
     const jobId = renderJobId();
-    const isWeekly = payload.schedule_type === 'weekly';
-    const templateId = isWeekly ? WEEKLY_FIXTURES_TEMPLATE_ID : TODAY_FIXTURES_TEMPLATE_ID;
-    const filenamePrefix = isWeekly ? 'cardnews-weekly-fixtures' : 'cardnews-today-fixtures';
+    const templateId = fixtureTemplateIdForPayload(payload, 'fixtures');
+    const filenamePrefix = fixtureFilenamePrefixForPayload(payload, 'fixtures');
+    const filename = `${filenamePrefix}-${payload.date_label.replace(/\s+/g, '-')}.zip`;
+    const title = `${payload.date_label} ${scheduleTitleForPayload(payload)}`;
+    const startedAt = Date.now();
+    setRenderNow(startedAt);
+    setRenderJobs(prev => [{
+      id: jobId,
+      status: 'running',
+      title,
+      filename,
+      startedAt,
+      phase: 'R2 업로드 작업 등록 중',
+    }, ...prev].slice(0, 5));
+
+    try {
+      const publication = await startCardPublication({
+        jobId,
+        kind: 'today_fixtures',
+        contentItemId: null,
+        title,
+        caption: '',
+        sourcePayload: {
+          filename,
+          today_fixtures: payload,
+        },
+        renderRequest: {
+          template_id: templateId,
+          today_fixtures: payload,
+        },
+      });
+      setNotice('good', `${publication.title || filename} 업로드 작업을 시작했습니다.`);
+    } catch (error) {
+      updateRenderJob(jobId, {
+        status: 'error',
+        phase: '업로드 실패',
+        finishedAt: Date.now(),
+        error: error.message,
+      });
+      setNotice('bad', error.message);
+    }
+  };
+
+  const publishMatchResults = async () => {
+    const payload = todayFixturesPayload(matchResults, 'results');
+    const validationIssues = todayFixturesValidationIssues(payload, 'results');
+    const validationMessage = validationIssues[0]?.message || '';
+
+    if (validationMessage) {
+      setShowMatchResultsValidation(true);
+      if (Number.isInteger(validationIssues[0]?.index)) focusMatchResultMatch(validationIssues[0].index);
+      setNotice('warn', validationMessage);
+      return;
+    }
+    if (isRenderingZip) {
+      setNotice('warn', '이미 카드뉴스 업로드 작업이 진행 중입니다.');
+      return;
+    }
+
+    setLocalMessage('');
+    setShowMatchResultsValidation(false);
+    const jobId = renderJobId();
+    const templateId = fixtureTemplateIdForPayload(payload, 'results');
+    const filenamePrefix = fixtureFilenamePrefixForPayload(payload, 'results');
     const filename = `${filenamePrefix}-${payload.date_label.replace(/\s+/g, '-')}.zip`;
     const title = `${payload.date_label} ${scheduleTitleForPayload(payload)}`;
     const startedAt = Date.now();
@@ -3769,7 +3972,7 @@ function CardNewsWorkspace({ headers, adminToken, seedItem, onNotify }) {
 
         <CardNewsPreview fields={fields} imageSource={previewSource} />
       </div>
-      ) : (
+      ) : cardMode === TODAY_FIXTURES_MODE ? (
       <div className="grid min-w-0 gap-5 xl:grid-cols-[minmax(0,0.9fr)_minmax(520px,1.1fr)]">
         <TodayFixturesEditor
           value={todayFixtures}
@@ -3782,11 +3985,35 @@ function CardNewsWorkspace({ headers, adminToken, seedItem, onNotify }) {
           focusRequest={todayFixtureFocusRequest}
           onReorderMatch={reorderTodayFixtureMatch}
           showValidation={showTodayFixturesValidation}
+          variant="fixtures"
         />
         <TodayFixturesPreview
           value={todayFixtures}
           selectedMatchIndex={selectedTodayFixtureIndex}
           onSelectMatch={focusTodayFixtureMatch}
+          variant="fixtures"
+        />
+      </div>
+      ) : (
+      <div className="grid min-w-0 gap-5 xl:grid-cols-[minmax(0,0.9fr)_minmax(520px,1.1fr)]">
+        <TodayFixturesEditor
+          value={matchResults}
+          onChange={setMatchResults}
+          onRender={publishMatchResults}
+          disabled={!adminToken || busy}
+          rendering={isRenderingZip}
+          selectedMatchIndex={selectedMatchResultIndex}
+          onSelectMatch={selectMatchResultMatch}
+          focusRequest={matchResultFocusRequest}
+          onReorderMatch={reorderMatchResultMatch}
+          showValidation={showMatchResultsValidation}
+          variant="results"
+        />
+        <TodayFixturesPreview
+          value={matchResults}
+          selectedMatchIndex={selectedMatchResultIndex}
+          onSelectMatch={focusMatchResultMatch}
+          variant="results"
         />
       </div>
       )}
