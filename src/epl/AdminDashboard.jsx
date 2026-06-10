@@ -5,7 +5,10 @@ import todayFixturesTemplateUrl from './assets/today-fixtures-template.png';
 const CARD_NEWS_TAB = 'card_news_workspace';
 const ARTICLE_CARD_MODE = 'article';
 const TODAY_FIXTURES_MODE = 'today_fixtures';
+const ARTICLE_CARD_TEMPLATE_ID = 'plick_transfer_v1';
 const TODAY_FIXTURES_TEMPLATE_ID = 'plick_today_fixtures_v1';
+const TODAY_FIXTURES_MATCHES_PER_PAGE = 4;
+const TODAY_FIXTURES_MAX_MATCHES = 40;
 const CARD_WORKSPACE_MODES = [
   { id: ARTICLE_CARD_MODE, label: '기사 기반' },
   { id: TODAY_FIXTURES_MODE, label: '오늘의 경기 일정' },
@@ -400,6 +403,16 @@ function renderJobId() {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
+function isPublicationRunning(status) {
+  return ['pending', 'queued', 'running'].includes(String(status || ''));
+}
+
+function publicationStatusTone(status) {
+  if (status === 'completed') return '#48d99a';
+  if (status === 'failed') return '#ff8f8f';
+  return '#ffd166';
+}
+
 function cloneTodayFixturesDefaults() {
   return {
     ...DEFAULT_TODAY_FIXTURES,
@@ -418,6 +431,14 @@ function emptyTodayFixtureMatch() {
     group_label: '',
     venue: '',
   };
+}
+
+function chunkItems(items, size) {
+  const chunks = [];
+  for (let index = 0; index < items.length; index += size) {
+    chunks.push(items.slice(index, index + size));
+  }
+  return chunks.length > 0 ? chunks : [[]];
 }
 
 function todayFixturesPayload(value) {
@@ -440,7 +461,7 @@ function todayFixturesPayload(value) {
 
 function validateTodayFixturesPayload(payload) {
   if (!payload.date_label) return '날짜를 입력해주세요.';
-  if (payload.matches.length < 1 || payload.matches.length > 4) return '경기는 1개 이상 4개 이하로 입력해주세요.';
+  if (payload.matches.length < 1 || payload.matches.length > TODAY_FIXTURES_MAX_MATCHES) return `경기는 1개 이상 ${TODAY_FIXTURES_MAX_MATCHES}개 이하로 입력해주세요.`;
   const requiredKeys = ['kickoff_time', 'home_team', 'home_code', 'away_team', 'away_code'];
   for (let index = 0; index < payload.matches.length; index += 1) {
     const match = payload.matches[index];
@@ -1364,7 +1385,7 @@ function TodayFixturesEditor({ value, onChange, onRender, disabled, rendering })
     onChange({ ...value, matches });
   };
   const addMatch = () => {
-    if (value.matches.length >= 4) return;
+    if (value.matches.length >= TODAY_FIXTURES_MAX_MATCHES) return;
     onChange({ ...value, matches: [...value.matches, emptyTodayFixtureMatch()] });
   };
   const removeMatch = index => {
@@ -1405,7 +1426,7 @@ function TodayFixturesEditor({ value, onChange, onRender, disabled, rendering })
             <button
               type="button"
               onClick={addMatch}
-              disabled={value.matches.length >= 4}
+              disabled={value.matches.length >= TODAY_FIXTURES_MAX_MATCHES}
               className="rounded px-2 py-1 text-xs font-bold disabled:opacity-50"
               style={{ background: '#171923', color: '#cbd3e8', border: '1px solid #2a3040' }}>
               경기 추가
@@ -1445,7 +1466,7 @@ function TodayFixturesEditor({ value, onChange, onRender, disabled, rendering })
           disabled={disabled || rendering}
           className="w-full rounded-md px-4 py-3 text-sm font-black disabled:opacity-50"
           style={{ background: '#21c17a', color: '#03130c' }}>
-          {rendering ? 'ZIP 생성 중' : '오늘의 경기 일정 ZIP 생성'}
+          {rendering ? '발행 중' : '오늘의 경기 일정 발행'}
         </button>
       </div>
     </section>
@@ -1455,6 +1476,7 @@ function TodayFixturesEditor({ value, onChange, onRender, disabled, rendering })
 function TodayFixturesPreview({ value }) {
   const wrapperRef = useRef(null);
   const [previewWidth, setPreviewWidth] = useState(360);
+  const [pageIndex, setPageIndex] = useState(0);
   const scale = previewWidth / CARD_PREVIEW_WIDTH;
 
   useEffect(() => {
@@ -1478,6 +1500,13 @@ function TodayFixturesPreview({ value }) {
   }, []);
 
   const payload = todayFixturesPayload(value);
+  const fixturePages = chunkItems(payload.matches, TODAY_FIXTURES_MATCHES_PER_PAGE);
+  const activePageIndex = Math.min(pageIndex, fixturePages.length - 1);
+  const activeMatches = fixturePages[activePageIndex] || [];
+
+  useEffect(() => {
+    setPageIndex(current => Math.min(current, fixturePages.length - 1));
+  }, [fixturePages.length]);
 
   return (
     <aside className="min-w-0 rounded-md p-4" style={{ background: '#0b0d14', border: '1px solid #202635' }}>
@@ -1486,7 +1515,28 @@ function TodayFixturesPreview({ value }) {
           <div className="text-xs font-bold uppercase" style={{ color: '#687086' }}>Live preview</div>
           <div className="mt-1 text-sm font-bold text-white">오늘의 경기 일정</div>
         </div>
-        <Badge tone="warn">4:5</Badge>
+        <div className="flex items-center gap-2">
+          {fixturePages.length > 1 && (
+            <div className="flex items-center gap-1">
+              {fixturePages.map((_, index) => (
+                <button
+                  key={`fixture-page-${index + 1}`}
+                  type="button"
+                  onClick={() => setPageIndex(index)}
+                  className="h-7 min-w-7 rounded-md px-2 text-xs font-black transition"
+                  style={{
+                    background: index === activePageIndex ? '#f8fafc' : '#151b27',
+                    color: index === activePageIndex ? '#0b0d14' : '#b8c0d4',
+                    border: '1px solid #2b3447',
+                  }}
+                >
+                  {index + 1}
+                </button>
+              ))}
+            </div>
+          )}
+          <Badge tone="warn">4:5</Badge>
+        </div>
       </div>
       <div ref={wrapperRef} className="mx-auto w-full" style={{ maxWidth: CARD_PREVIEW_MAX_WIDTH }}>
         <div style={{ position: 'relative', width: '100%', height: CARD_PREVIEW_HEIGHT * scale }}>
@@ -1509,22 +1559,22 @@ function TodayFixturesPreview({ value }) {
               alt=""
               style={{ position: 'absolute', inset: 0, width: CARD_PREVIEW_WIDTH, height: CARD_PREVIEW_HEIGHT, display: 'block' }}
             />
-            <div style={{ position: 'absolute', left: 72, top: 430, width: 360, height: 38, color: 'rgba(255,255,255,0.72)', fontSize: 31.1, lineHeight: '38px', fontWeight: 900, whiteSpace: 'nowrap', overflow: 'hidden' }}>
+            <div style={{ position: 'absolute', left: 72, top: 383.66, width: 360, height: 38, color: 'rgba(255,255,255,0.72)', fontSize: 31.1, lineHeight: '38px', fontWeight: 900, whiteSpace: 'nowrap', overflow: 'hidden' }}>
               {payload.date_label}
             </div>
-            {payload.matches.map((match, index) => (
-              <div key={index} style={{ position: 'absolute', left: 72, top: 462 + (index * 205), width: 936, height: 183, overflow: 'hidden' }}>
-                <div style={{ position: 'absolute', left: 39, top: 51, width: 132, height: 81 }}>
+            {activeMatches.map((match, index) => (
+              <div key={`${activePageIndex}-${index}`} style={{ position: 'absolute', left: 72, top: 461.66 + (index * 205), width: 936, height: 183, overflow: 'hidden' }}>
+                <div style={{ position: 'absolute', left: 44, top: 51.29, width: 132, height: 81 }}>
                   <div style={{ width: 84, height: 26, color: 'rgba(255,255,255,0.46)', fontSize: 22, lineHeight: '26px', fontWeight: 900, whiteSpace: 'nowrap', overflow: 'hidden' }}>{match.time_period}</div>
                   <div style={{ width: 170, height: 67, fontFamily: '"Bebas Neue", "Pretendard", sans-serif', fontSize: 56, lineHeight: '50.4px', fontWeight: 400, letterSpacing: 1.12, whiteSpace: 'nowrap', overflow: 'hidden' }}>{match.kickoff_time}</div>
                 </div>
-                <div style={{ position: 'absolute', left: 195, top: 33, width: 720, height: 116 }}>
-                  <div style={{ position: 'absolute', left: 0, top: 15, width: 228, height: 54, fontSize: 39.8, lineHeight: '48px', fontWeight: 900, textAlign: 'right', whiteSpace: 'nowrap', overflow: 'hidden' }}>{match.home_team}</div>
-                  <div style={{ position: 'absolute', left: 243, top: 0, width: 78, height: 78, border: '1px dashed rgba(255,255,255,0.28)', borderRadius: '50%', background: 'linear-gradient(180deg, rgba(255,255,255,0.025), rgba(255,255,255,0)), rgba(255,255,255,0.04)', color: 'rgba(255,255,255,0.72)', fontFamily: '"Bebas Neue", "Pretendard", sans-serif', fontSize: 24.3, lineHeight: '78px', fontWeight: 400, textAlign: 'center', letterSpacing: 0.973, overflow: 'hidden' }}>{match.home_code}</div>
-                  <div style={{ position: 'absolute', left: 322, top: 17, width: 54, height: 40, color: 'rgba(255,255,255,0.46)', fontFamily: '"Bebas Neue", "Pretendard", sans-serif', fontSize: 26, lineHeight: '31px', fontWeight: 400, textAlign: 'center' }}>VS</div>
-                  <div style={{ position: 'absolute', left: 381, top: 0, width: 78, height: 78, border: '1px dashed rgba(255,255,255,0.28)', borderRadius: '50%', background: 'linear-gradient(180deg, rgba(255,255,255,0.025), rgba(255,255,255,0)), rgba(255,255,255,0.04)', color: 'rgba(255,255,255,0.72)', fontFamily: '"Bebas Neue", "Pretendard", sans-serif', fontSize: 24.3, lineHeight: '78px', fontWeight: 400, textAlign: 'center', letterSpacing: 0.973, overflow: 'hidden' }}>{match.away_code}</div>
-                  <div style={{ position: 'absolute', left: 474, top: 15, width: 206, height: 54, fontSize: 39.8, lineHeight: '48px', fontWeight: 900, whiteSpace: 'nowrap', overflow: 'hidden' }}>{match.away_team}</div>
-                  <div style={{ position: 'absolute', left: 0, top: 84, width: 680, height: 25, color: 'rgba(255,255,255,0.46)', fontSize: 21, lineHeight: '25px', fontWeight: 900, whiteSpace: 'nowrap', overflow: 'hidden' }}>
+                <div style={{ position: 'absolute', left: 200, top: 33, width: 720, height: 150 }}>
+                  <div style={{ position: 'absolute', left: 0, top: 15, width: 225, height: 54, fontSize: 39.8, lineHeight: '48px', fontWeight: 900, textAlign: 'right', whiteSpace: 'nowrap', overflow: 'hidden' }}>{match.home_team}</div>
+                  <div style={{ position: 'absolute', left: 240.61, top: 0, width: 78, height: 78, border: '1px dashed rgba(255,255,255,0.28)', borderRadius: '50%', background: 'linear-gradient(180deg, rgba(255,255,255,0.025), rgba(255,255,255,0)), rgba(255,255,255,0.04)', color: 'rgba(255,255,255,0.72)', fontFamily: '"Bebas Neue", "Pretendard", sans-serif', fontSize: 24.3, lineHeight: '78px', fontWeight: 400, textAlign: 'center', letterSpacing: 0.973, overflow: 'hidden' }}>{match.home_code}</div>
+                  <div style={{ position: 'absolute', left: 336.61, top: 17, width: 54, height: 40, color: 'rgba(255,255,255,0.46)', fontFamily: '"Bebas Neue", "Pretendard", sans-serif', fontSize: 26, lineHeight: '31px', fontWeight: 400, textAlign: 'center' }}>VS</div>
+                  <div style={{ position: 'absolute', left: 378.38, top: 0, width: 78, height: 78, border: '1px dashed rgba(255,255,255,0.28)', borderRadius: '50%', background: 'linear-gradient(180deg, rgba(255,255,255,0.025), rgba(255,255,255,0)), rgba(255,255,255,0.04)', color: 'rgba(255,255,255,0.72)', fontFamily: '"Bebas Neue", "Pretendard", sans-serif', fontSize: 24.3, lineHeight: '78px', fontWeight: 400, textAlign: 'center', letterSpacing: 0.973, overflow: 'hidden' }}>{match.away_code}</div>
+                  <div style={{ position: 'absolute', left: 472.38, top: 15, width: 225, height: 54, fontSize: 39.8, lineHeight: '48px', fontWeight: 900, whiteSpace: 'nowrap', overflow: 'hidden' }}>{match.away_team}</div>
+                  <div style={{ position: 'absolute', left: 0, top: 92, width: 680, height: 25, color: 'rgba(255,255,255,0.46)', fontSize: 21, lineHeight: '25px', fontWeight: 900, whiteSpace: 'nowrap', overflow: 'hidden' }}>
                     {[match.group_label, match.venue].filter(Boolean).join(' · ')}
                   </div>
                 </div>
@@ -1552,6 +1602,7 @@ function CardNewsWorkspace({ headers, adminToken, seedItem, onNotify }) {
   const [imagePreviewUrl, setImagePreviewUrl] = useState('');
   const [busy, setBusy] = useState(false);
   const [renderJobs, setRenderJobs] = useState([]);
+  const [publications, setPublications] = useState([]);
   const [renderNow, setRenderNow] = useState(Date.now());
   const [localMessage, setLocalMessage] = useState('');
   const [localTone, setLocalTone] = useState('neutral');
@@ -1569,7 +1620,9 @@ function CardNewsWorkspace({ headers, adminToken, seedItem, onNotify }) {
   const currentSubjectColor = normalizeSubjectColor(fields.subject_color);
   const previewSource = imagePreviewUrl || imageUrl.trim();
   const activeRenderJobs = renderJobs.filter(job => job.status === 'running');
-  const isRenderingZip = activeRenderJobs.length > 0;
+  const activePublications = publications.filter(publication => isPublicationRunning(publication.status));
+  const activePublicationKey = activePublications.map(publication => publication.id).join('|');
+  const isRenderingZip = activeRenderJobs.length > 0 || activePublications.length > 0;
 
   const setNotice = (tone, text) => {
     setLocalTone(tone);
@@ -1620,12 +1673,72 @@ function CardNewsWorkspace({ headers, adminToken, seedItem, onNotify }) {
     }
   };
 
+  const upsertPublication = publication => {
+    if (!publication?.id) return;
+    setPublications(prev => {
+      const next = prev.filter(row => row.id !== publication.id);
+      return [publication, ...next].slice(0, 30);
+    });
+  };
+
+  const loadPublications = async () => {
+    if (!adminToken) {
+      setPublications([]);
+      return;
+    }
+    try {
+      const response = await fetch('/api/admin/card-publications?limit=30', { headers });
+      const data = await readJsonResponse(response);
+      if (!response.ok) throw new Error(data.error || 'Failed to load card news publications');
+      setPublications(data.publications || []);
+    } catch (error) {
+      setNotice('bad', error.message);
+    }
+  };
+
+  const syncPublication = async (publicationId, localJobId = null) => {
+    const response = await fetch('/api/admin/card-publications-sync', {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ id: publicationId, actor: 'admin-ui' }),
+    });
+    const data = await readJsonResponse(response);
+    if (!response.ok) throw new Error(data.error || 'Failed to sync card news publication');
+    const publication = data.publication;
+    upsertPublication(publication);
+    if (localJobId && publication) {
+      if (publication.status === 'completed') {
+        updateRenderJob(localJobId, {
+          status: 'success',
+          phase: 'R2 발행 완료',
+          finishedAt: Date.now(),
+          zipUrl: publication.zip_url,
+        });
+        setNotice('good', `${publication.title || '카드뉴스'} 발행이 완료됐습니다.`);
+      } else if (publication.status === 'failed') {
+        updateRenderJob(localJobId, {
+          status: 'error',
+          phase: '발행 실패',
+          finishedAt: Date.now(),
+          error: publication.error_message || 'Render job failed',
+        });
+        setNotice('bad', publication.error_message || '카드뉴스 발행에 실패했습니다.');
+      } else {
+        updateRenderJob(localJobId, {
+          phase: `R2 발행 중 (${publication.status})`,
+        });
+      }
+    }
+    return publication;
+  };
+
   useEffect(() => {
     if (seedItem?.id) setSelectedId(seedItem.id);
   }, [seedItem?.id]);
 
   useEffect(() => {
     loadPublishedItems();
+    loadPublications();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [adminToken]);
 
@@ -1650,12 +1763,62 @@ function CardNewsWorkspace({ headers, adminToken, seedItem, onNotify }) {
     return () => window.clearInterval(timer);
   }, [activeRenderJobs.length]);
 
+  useEffect(() => {
+    if (!adminToken || activePublications.length === 0) return undefined;
+    const tick = () => {
+      activePublications.forEach(publication => {
+        const localJob = renderJobs.find(job => job.publicationId === publication.id && job.status === 'running');
+        syncPublication(publication.id, localJob?.id).catch(error => setNotice('bad', error.message));
+      });
+    };
+    const timer = window.setInterval(tick, 3000);
+    tick();
+    return () => window.clearInterval(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [adminToken, activePublicationKey]);
+
   const updateField = (name, value) => {
     setFields(prev => ({ ...prev, [name]: value }));
   };
 
   const updateRenderJob = (jobId, patch) => {
     setRenderJobs(prev => prev.map(job => (job.id === jobId ? { ...job, ...patch } : job)).slice(0, 5));
+  };
+
+  const uploadCardImageFile = async file => {
+    const response = await fetch('/api/admin/upload', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${adminToken}`, 'Content-Type': file.type },
+      body: file,
+    });
+    const data = await readJsonResponse(response);
+    if (!response.ok) throw new Error(data.error || 'Image upload failed');
+    return data.url;
+  };
+
+  const startCardPublication = async ({ jobId, kind, contentItemId, title, caption: publicationCaption, sourcePayload, renderRequest }) => {
+    const response = await fetch('/api/admin/card-publications', {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        actor: 'admin-ui',
+        kind,
+        content_item_id: contentItemId || null,
+        title,
+        caption: publicationCaption || '',
+        source_payload: sourcePayload || {},
+        render_request: renderRequest,
+      }),
+    });
+    const data = await readJsonResponse(response);
+    if (!response.ok) throw new Error(data.error || 'Failed to start card news publication');
+    const publication = data.publication;
+    upsertPublication(publication);
+    updateRenderJob(jobId, {
+      publicationId: publication.id,
+      phase: `R2 발행 중 (${publication.status})`,
+    });
+    return publication;
   };
 
   const generateDraft = async () => {
@@ -1880,6 +2043,260 @@ function CardNewsWorkspace({ headers, adminToken, seedItem, onNotify }) {
     }
   };
 
+  const publishCardNews = async () => {
+    const item = selectedItem;
+    const file = imageFile;
+    const imageUrlValue = imageUrl.trim();
+    const card = cardFromFields(fields);
+
+    if (!item) {
+      setNotice('warn', '먼저 발행 기사를 선택해주세요.');
+      return;
+    }
+    if (isRenderingZip) {
+      setNotice('warn', '이미 카드뉴스 발행 작업이 진행 중입니다.');
+      return;
+    }
+    if (!file && !imageUrlValue) {
+      setNotice('warn', '이미지 파일을 업로드하거나 이미지 URL을 입력해주세요.');
+      return;
+    }
+    if (!card.cover.headline || !card.cover.summary || !card.detail.paragraphs) {
+      setNotice('warn', 'headline, summary, paragraphs는 비워둘 수 없습니다.');
+      return;
+    }
+
+    setLocalMessage('');
+    const jobId = renderJobId();
+    const filename = `cardnews-${item.raw_post_id || item.id}.zip`;
+    const startedAt = Date.now();
+    setRenderNow(startedAt);
+    setRenderJobs(prev => [{
+      id: jobId,
+      status: 'running',
+      title: compactText(item.title_ko || item.raw_text, 72, 'Card news'),
+      filename,
+      startedAt,
+      phase: file ? '이미지 업로드 중' : 'R2 발행 요청 중',
+    }, ...prev].slice(0, 5));
+
+    try {
+      let finalImageUrl = imageUrlValue;
+      if (file) {
+        finalImageUrl = await uploadCardImageFile(file);
+        setImageUrl(finalImageUrl);
+        setImageFile(null);
+      }
+
+      updateRenderJob(jobId, { phase: 'R2 발행 작업 등록 중' });
+      const publication = await startCardPublication({
+        jobId,
+        kind: 'article',
+        contentItemId: item.id,
+        title: compactText(item.title_ko || item.raw_text, 120, 'Card news'),
+        caption,
+        sourcePayload: {
+          item_id: item.id,
+          image_url: finalImageUrl,
+          card,
+        },
+        renderRequest: {
+          template_id: ARTICLE_CARD_TEMPLATE_ID,
+          image_url: finalImageUrl,
+          card,
+        },
+      });
+      setNotice('good', `${publication.title || filename} 발행 작업을 시작했습니다.`);
+    } catch (error) {
+      updateRenderJob(jobId, {
+        status: 'error',
+        phase: '발행 실패',
+        finishedAt: Date.now(),
+        error: error.message,
+      });
+      setNotice('bad', error.message);
+    }
+  };
+
+  const publishTodayFixtures = async () => {
+    const payload = todayFixturesPayload(todayFixtures);
+    const validationMessage = validateTodayFixturesPayload(payload);
+
+    if (validationMessage) {
+      setNotice('warn', validationMessage);
+      return;
+    }
+    if (isRenderingZip) {
+      setNotice('warn', '이미 카드뉴스 발행 작업이 진행 중입니다.');
+      return;
+    }
+
+    setLocalMessage('');
+    const jobId = renderJobId();
+    const filename = `cardnews-today-fixtures-${payload.date_label.replace(/\s+/g, '-')}.zip`;
+    const title = `${payload.date_label} 오늘의 경기 일정`;
+    const startedAt = Date.now();
+    setRenderNow(startedAt);
+    setRenderJobs(prev => [{
+      id: jobId,
+      status: 'running',
+      title,
+      filename,
+      startedAt,
+      phase: 'R2 발행 작업 등록 중',
+    }, ...prev].slice(0, 5));
+
+    try {
+      const publication = await startCardPublication({
+        jobId,
+        kind: 'today_fixtures',
+        contentItemId: null,
+        title,
+        caption: '',
+        sourcePayload: {
+          today_fixtures: payload,
+        },
+        renderRequest: {
+          template_id: TODAY_FIXTURES_TEMPLATE_ID,
+          today_fixtures: payload,
+        },
+      });
+      setNotice('good', `${publication.title || filename} 발행 작업을 시작했습니다.`);
+    } catch (error) {
+      updateRenderJob(jobId, {
+        status: 'error',
+        phase: '발행 실패',
+        finishedAt: Date.now(),
+        error: error.message,
+      });
+      setNotice('bad', error.message);
+    }
+  };
+
+  const publishCardNewsModalUnused = async () => {
+    let card;
+    try {
+      card = JSON.parse(cardJson);
+    } catch {
+      setNotice('bad', '카드뉴스 JSON 형식이 올바르지 않습니다.');
+      return;
+    }
+
+    if (!imageFile && !imageUrl.trim()) {
+      setNotice('warn', '이미지 파일 또는 이미지 URL이 필요합니다.');
+      return;
+    }
+
+    setBusy(true);
+    setLocalMessage('');
+    try {
+      let finalImageUrl = imageUrl.trim();
+      if (imageFile) {
+        const upload = await fetch('/api/admin/upload', {
+          method: 'POST',
+          headers: { Authorization: headers.Authorization, 'Content-Type': imageFile.type },
+          body: imageFile,
+        });
+        const uploadData = await readJsonResponse(upload);
+        if (!upload.ok) throw new Error(uploadData.error || 'Image upload failed');
+        finalImageUrl = uploadData.url;
+        setImageUrl(finalImageUrl);
+        setImageFile(null);
+      }
+
+      const response = await fetch('/api/admin/card-publications', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          actor: 'admin-ui',
+          kind: 'article',
+          content_item_id: item.id,
+          title: compactText(item.title_ko || item.raw_text, 120, 'Card news'),
+          caption: '',
+          source_payload: {
+            item_id: item.id,
+            image_url: finalImageUrl,
+            card,
+          },
+          render_request: {
+            template_id: ARTICLE_CARD_TEMPLATE_ID,
+            image_url: finalImageUrl,
+            card,
+          },
+        }),
+      });
+      const data = await readJsonResponse(response);
+      if (!response.ok) throw new Error(data.error || 'Failed to start card news publication');
+      setNotice('good', '카드뉴스 발행 작업을 시작했습니다.');
+    } catch (error) {
+      setNotice('bad', error.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const publishCardNewsModalUnused2 = async () => {
+    let card;
+    try {
+      card = JSON.parse(cardJson);
+    } catch {
+      setNotice('bad', '카드뉴스 JSON 형식이 올바르지 않습니다.');
+      return;
+    }
+
+    if (!imageFile && !imageUrl.trim()) {
+      setNotice('warn', '이미지 파일 또는 이미지 URL이 필요합니다.');
+      return;
+    }
+
+    setBusy(true);
+    setLocalMessage('');
+    try {
+      let finalImageUrl = imageUrl.trim();
+      if (imageFile) {
+        const upload = await fetch('/api/admin/upload', {
+          method: 'POST',
+          headers: { Authorization: headers.Authorization, 'Content-Type': imageFile.type },
+          body: imageFile,
+        });
+        const uploadData = await readJsonResponse(upload);
+        if (!upload.ok) throw new Error(uploadData.error || 'Image upload failed');
+        finalImageUrl = uploadData.url;
+        setImageUrl(finalImageUrl);
+        setImageFile(null);
+      }
+
+      const response = await fetch('/api/admin/card-publications', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          actor: 'admin-ui',
+          kind: 'article',
+          content_item_id: item.id,
+          title: compactText(item.title_ko || item.raw_text, 120, 'Card news'),
+          caption: '',
+          source_payload: {
+            item_id: item.id,
+            image_url: finalImageUrl,
+            card,
+          },
+          render_request: {
+            template_id: ARTICLE_CARD_TEMPLATE_ID,
+            image_url: finalImageUrl,
+            card,
+          },
+        }),
+      });
+      const data = await readJsonResponse(response);
+      if (!response.ok) throw new Error(data.error || 'Failed to start card news publication');
+      setNotice('good', '카드뉴스 발행 작업을 시작했습니다.');
+    } catch (error) {
+      setNotice('bad', error.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
   return (
     <div className="min-w-0 space-y-4">
       {localMessage && <Notice tone={localTone}>{localMessage}</Notice>}
@@ -1887,7 +2304,7 @@ function CardNewsWorkspace({ headers, adminToken, seedItem, onNotify }) {
       {renderJobs.length > 0 && (
         <div className="space-y-2 rounded-md p-3" style={{ background: '#080a10', border: '1px solid #202635' }} aria-live="polite">
           <div className="flex items-center justify-between gap-3">
-            <div className="text-xs font-bold uppercase" style={{ color: '#687086' }}>ZIP jobs</div>
+            <div className="text-xs font-bold uppercase" style={{ color: '#687086' }}>Publish jobs</div>
             <div className="text-xs font-bold" style={{ color: isRenderingZip ? '#ffd166' : '#8791aa' }}>
               {isRenderingZip ? '생성 중' : '대기 작업 없음'}
             </div>
@@ -1931,6 +2348,95 @@ function CardNewsWorkspace({ headers, adminToken, seedItem, onNotify }) {
           })}
         </div>
       )}
+
+      <section className="space-y-3 rounded-md p-3" style={{ background: '#080a10', border: '1px solid #202635' }}>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <div className="text-xs font-bold uppercase" style={{ color: '#687086' }}>Published card news</div>
+            <div className="mt-1 text-sm font-bold text-white">발행된 카드뉴스</div>
+          </div>
+          <button
+            type="button"
+            onClick={loadPublications}
+            disabled={!adminToken}
+            className="rounded px-3 py-1.5 text-xs font-bold disabled:opacity-50"
+            style={{ background: '#171923', color: '#cbd3e8', border: '1px solid #2a3040' }}>
+            새로고침
+          </button>
+        </div>
+        {publications.length === 0 ? (
+          <div className="rounded px-3 py-2 text-sm" style={{ background: '#11141d', color: '#8791aa', border: '1px solid #283040' }}>
+            아직 발행된 카드뉴스가 없습니다.
+          </div>
+        ) : (
+          <div className="grid min-w-0 gap-3 lg:grid-cols-2">
+            {publications.map(publication => {
+              const pages = Array.isArray(publication.pages) ? publication.pages : [];
+              const running = isPublicationRunning(publication.status);
+              const statusColor = publicationStatusTone(publication.status);
+              return (
+                <article key={publication.id} className="min-w-0 rounded-md p-3" style={{ background: '#11141d', border: '1px solid #283040' }}>
+                  <div className="flex min-w-0 items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="flex min-w-0 items-center gap-2">
+                        <span className={running ? 'inline-block h-2.5 w-2.5 shrink-0 rounded-full animate-pulse' : 'inline-block h-2.5 w-2.5 shrink-0 rounded-full'} style={{ background: statusColor }} />
+                        <span className="min-w-0 break-words text-sm font-black text-white" style={{ overflowWrap: 'anywhere' }}>
+                          {publication.title || 'Card news'}
+                        </span>
+                      </div>
+                      <div className="mt-1 text-xs" style={{ color: '#8791aa' }}>
+                        {publication.kind} · {publication.status} · {publication.created_at ? fmtKST(publication.created_at) : ''}
+                      </div>
+                    </div>
+                    {running && (
+                      <button
+                        type="button"
+                        onClick={() => syncPublication(publication.id).catch(error => setNotice('bad', error.message))}
+                        className="shrink-0 rounded px-2 py-1 text-xs font-bold"
+                        style={{ background: '#171923', color: '#ffd166', border: '1px solid #2a3040' }}>
+                        sync
+                      </button>
+                    )}
+                  </div>
+                  {publication.error_message && (
+                    <div className="mt-2 break-words text-xs" style={{ color: '#ff8f8f', overflowWrap: 'anywhere' }}>
+                      {publication.error_message}
+                    </div>
+                  )}
+                  {pages.length > 0 && (
+                    <div className="mt-3 grid grid-cols-3 gap-2">
+                      {pages.map(page => (
+                        <a key={page.url || page.key || page.page} href={page.url} target="_blank" rel="noreferrer" className="block overflow-hidden rounded" style={{ border: '1px solid #2a3040', background: '#05070d' }}>
+                          <img src={page.url} alt={`${publication.title || 'card'} ${page.page}p`} className="block w-full" style={{ aspectRatio: '4 / 5', objectFit: 'cover' }} />
+                        </a>
+                      ))}
+                    </div>
+                  )}
+                  {publication.zip_url && (
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      <a
+                        href={publication.zip_url}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="rounded px-3 py-1.5 text-xs font-bold"
+                        style={{ background: '#21c17a', color: '#03130c' }}>
+                        ZIP 다운로드
+                      </a>
+                      <button
+                        type="button"
+                        onClick={() => copyTextToClipboard(publication.zip_url).then(ok => setNotice(ok ? 'good' : 'warn', ok ? 'ZIP URL을 복사했습니다.' : '복사할 URL이 없습니다.'))}
+                        className="rounded px-3 py-1.5 text-xs font-bold"
+                        style={{ background: '#171923', color: '#cbd3e8', border: '1px solid #2a3040' }}>
+                        URL 복사
+                      </button>
+                    </div>
+                  )}
+                </article>
+              );
+            })}
+          </div>
+        )}
+      </section>
 
       <div className="flex flex-wrap gap-2 rounded-md p-2" style={{ background: '#080a10', border: '1px solid #202635' }}>
         {CARD_WORKSPACE_MODES.map(mode => {
@@ -2187,11 +2693,11 @@ function CardNewsWorkspace({ headers, adminToken, seedItem, onNotify }) {
 
             <button
               type="button"
-              onClick={renderCardNews}
+              onClick={publishCardNews}
               disabled={!adminToken || !selectedItem || busy || isRenderingZip}
               className="w-full rounded-md px-4 py-3 text-sm font-black disabled:opacity-50"
               style={{ background: '#21c17a', color: '#03130c' }}>
-              {isRenderingZip ? 'ZIP 생성 중' : '카드뉴스 ZIP 생성'}
+              {isRenderingZip ? '발행 중' : '카드뉴스 발행'}
             </button>
           </div>
         </section>
@@ -2203,7 +2709,7 @@ function CardNewsWorkspace({ headers, adminToken, seedItem, onNotify }) {
         <TodayFixturesEditor
           value={todayFixtures}
           onChange={setTodayFixtures}
-          onRender={renderTodayFixtures}
+          onRender={publishTodayFixtures}
           disabled={!adminToken || busy}
           rendering={isRenderingZip}
         />

@@ -13,6 +13,9 @@ const API_ROUTES = {
   '/api/admin/regenerate': './api/admin/regenerate',
   '/api/admin/card-news-draft': './api/admin/card-news-draft',
   '/api/admin/card-news-caption': './api/admin/card-news-caption',
+  '/api/admin/card-publications': './api/admin/card-publications',
+  '/api/admin/card-publications-sync': './api/admin/card-publications-sync',
+  '/api/admin/upload': './api/admin/upload',
   '/api/admin/card-template-render': './api/admin/card-template-render',
   '/api/admin/card-news-render': './api/admin/card-news-render',
 };
