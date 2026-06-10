@@ -415,6 +415,7 @@ function formatRenderTimings(timings) {
 function formatRenderTimingDetails(timings) {
   if (!timings || typeof timings !== 'object') return '';
   const fields = [
+    ['prefetch', timings.image_prefetch_ms],
     ['browser', timings.browser_launch_ms],
     ['image', timings.image_wait_ms],
     ['shot', timings.screenshot_ms],
