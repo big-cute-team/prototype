@@ -13,6 +13,34 @@ const TODAY_FIXTURES_MATCHES_PER_PAGE = 4;
 const TODAY_FIXTURES_MAX_MATCHES = 40;
 const TODAY_FIXTURES_TIME_PERIODS = ['오전', '오후'];
 const TODAY_FIXTURES_GROUPS = Array.from({ length: 8 }, (_, index) => `Group ${String.fromCharCode(65 + index)}`);
+const EPL_MATCHWEEK_OPTIONS = Array.from({ length: 38 }, (_, index) => `Matchweek ${index + 1}`);
+const UCL_ROUND_OPTIONS = ['League Phase', 'Round of 16', 'Quarter-final', 'Semi-final', 'Final'];
+const TODAY_FIXTURES_PRESETS = [
+  {
+    id: 'world_cup',
+    label: '월드컵',
+    eyebrow: 'WORLD CUP 2026 · TODAY',
+    title: '오늘의\n경기 일정',
+    groupOptions: TODAY_FIXTURES_GROUPS,
+    defaultGroupLabel: 'Group A',
+  },
+  {
+    id: 'epl',
+    label: 'EPL',
+    eyebrow: 'PREMIER LEAGUE · TODAY',
+    title: '오늘의\n경기 일정',
+    groupOptions: EPL_MATCHWEEK_OPTIONS,
+    defaultGroupLabel: 'Matchweek 1',
+  },
+  {
+    id: 'champions_league',
+    label: '챔스',
+    eyebrow: 'CHAMPIONS LEAGUE · TODAY',
+    title: '오늘의\n경기 일정',
+    groupOptions: UCL_ROUND_OPTIONS,
+    defaultGroupLabel: 'League Phase',
+  },
+];
 const CARD_WORKSPACE_MODES = [
   { id: ARTICLE_CARD_MODE, label: '기사 기반' },
   { id: TODAY_FIXTURES_MODE, label: '오늘의 경기 일정' },
@@ -54,6 +82,7 @@ const CARD_DETAIL_EDITOR_MAX_WIDTH = CARD_DETAIL_TEXT_WIDTH * (CARD_PREVIEW_MAX_
 const CARD_WORKSPACE_TEXTAREA_HEIGHT = 300;
 const CARD_WORKSPACE_EDITOR_MAX_WIDTH = CARD_DETAIL_EDITOR_MAX_WIDTH;
 const DEFAULT_TODAY_FIXTURES = {
+  preset_id: 'world_cup',
   eyebrow: 'WORLD CUP 2026 · TODAY',
   title: '오늘의\n경기 일정',
   date: '2026-06-12',
@@ -537,6 +566,10 @@ function formatTodayFixtureDateLabel(dateValue) {
   return `${month}월 ${day}일 (${weekdays[date.getDay()]})`;
 }
 
+function getTodayFixturesPreset(presetId) {
+  return TODAY_FIXTURES_PRESETS.find(preset => preset.id === presetId) || TODAY_FIXTURES_PRESETS[0];
+}
+
 function chunkItems(items, size) {
   const chunks = [];
   for (let index = 0; index < items.length; index += size) {
@@ -569,16 +602,37 @@ function todayFixturesPayload(value) {
   };
 }
 
-function validateTodayFixturesPayload(payload) {
-  if (!payload.date_label) return '날짜를 입력해주세요.';
-  if (payload.matches.length < 1 || payload.matches.length > TODAY_FIXTURES_MAX_MATCHES) return `경기는 1개 이상 ${TODAY_FIXTURES_MAX_MATCHES}개 이하로 입력해주세요.`;
-  const requiredKeys = ['kickoff_time', 'home_team', 'home_code', 'away_team', 'away_code'];
+function todayFixturesValidationIssues(payload) {
+  const issues = [];
+  if (!payload.date_label) issues.push({ key: 'date', message: '날짜를 선택해주세요.' });
+  if (payload.matches.length < 1 || payload.matches.length > TODAY_FIXTURES_MAX_MATCHES) {
+    issues.push({ key: 'matches', message: `경기는 1개 이상 ${TODAY_FIXTURES_MAX_MATCHES}개 이하로 입력해주세요.` });
+  }
+  const requiredKeys = [
+    ['kickoff_time', '시간'],
+    ['home_code', '홈 국가'],
+    ['away_code', '원정 국가'],
+    ['group_label', '그룹/라운드'],
+    ['venue', '경기장'],
+  ];
   for (let index = 0; index < payload.matches.length; index += 1) {
     const match = payload.matches[index];
-    const missing = requiredKeys.find(key => !match[key]);
-    if (missing) return `${index + 1}번째 경기의 필수 정보를 입력해주세요.`;
+    requiredKeys.forEach(([key, label]) => {
+      if (!match[key]) {
+        issues.push({
+          key: `match-${index}-${key}`,
+          index,
+          field: key,
+          message: `${index + 1}번째 경기의 ${label}을 입력해주세요.`,
+        });
+      }
+    });
   }
-  return '';
+  return issues;
+}
+
+function validateTodayFixturesPayload(payload) {
+  return todayFixturesValidationIssues(payload)[0]?.message || '';
 }
 
 function Metric({ label, value, warn }) {
@@ -1486,7 +1540,7 @@ function CardNewsPreview({ fields, imageSource }) {
   );
 }
 
-function CompactSelect({ value, options, onChange, ariaLabel, placeholder }) {
+function CompactSelect({ value, options, optionLabels = {}, onChange, ariaLabel, placeholder }) {
   return (
     <select
       aria-label={ariaLabel}
@@ -1502,7 +1556,7 @@ function CompactSelect({ value, options, onChange, ariaLabel, placeholder }) {
             key={option}
             value={option}
           >
-            {option}
+            {optionLabels[option] || option}
           </option>
         );
       })}
@@ -1617,12 +1671,42 @@ function FixtureFlagBadge({ code, imageUrl, style }) {
   );
 }
 
-function TodayFixturesEditor({ value, onChange, onRender, disabled, rendering }) {
+function TodayFixturesEditor({
+  value,
+  onChange,
+  onRender,
+  disabled,
+  rendering,
+  selectedMatchIndex,
+  onSelectMatch,
+  focusRequest,
+  onReorderMatch,
+  showValidation,
+}) {
+  const rowRefs = useRef([]);
+  const [dragIndex, setDragIndex] = useState(null);
+  const currentPreset = getTodayFixturesPreset(value.preset_id);
+  const groupOptions = currentPreset.groupOptions;
+  const payload = todayFixturesPayload(value);
+  const validationIssues = todayFixturesValidationIssues(payload);
   const updateDate = nextDate => {
     onChange({
       ...value,
       date: nextDate,
       date_label: formatTodayFixtureDateLabel(nextDate),
+    });
+  };
+  const applyPreset = presetId => {
+    const preset = getTodayFixturesPreset(presetId);
+    onChange({
+      ...value,
+      preset_id: preset.id,
+      eyebrow: preset.eyebrow,
+      title: preset.title,
+      matches: value.matches.map(match => ({
+        ...match,
+        group_label: preset.groupOptions.includes(match.group_label) ? match.group_label : preset.defaultGroupLabel,
+      })),
     });
   };
   const updateMatch = (index, name, nextValue) => {
@@ -1652,6 +1736,33 @@ function TodayFixturesEditor({ value, onChange, onRender, disabled, rendering })
     if (value.matches.length <= 1) return;
     onChange({ ...value, matches: value.matches.filter((_, matchIndex) => matchIndex !== index) });
   };
+  const beginDragMatch = (event, index) => {
+    event.preventDefault();
+    event.stopPropagation();
+    setDragIndex(index);
+    onSelectMatch?.(index);
+  };
+  const enterDragTarget = index => {
+    if (dragIndex === null || dragIndex === index) return;
+    onReorderMatch?.(dragIndex, index);
+    setDragIndex(index);
+  };
+
+  useEffect(() => {
+    if (!focusRequest || focusRequest.index < 0) return;
+    const row = rowRefs.current[focusRequest.index];
+    if (!row) return;
+    row.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    const target = row.querySelector('input, select') || row.querySelector('button');
+    target?.focus?.();
+  }, [focusRequest]);
+
+  useEffect(() => {
+    if (dragIndex === null) return undefined;
+    const clearDrag = () => setDragIndex(null);
+    window.addEventListener('mouseup', clearDrag);
+    return () => window.removeEventListener('mouseup', clearDrag);
+  }, [dragIndex]);
 
   return (
     <section className="min-w-0 rounded-md p-4" style={{ background: '#0b0d14', border: '1px solid #202635' }}>
@@ -1670,6 +1781,16 @@ function TodayFixturesEditor({ value, onChange, onRender, disabled, rendering })
       </div>
 
       <div className="space-y-3">
+        <label className="block min-w-0">
+          <span className="mb-1 block text-xs font-bold uppercase" style={{ color: '#687086' }}>preset</span>
+          <CompactSelect
+            value={currentPreset.id}
+            options={TODAY_FIXTURES_PRESETS.map(preset => preset.id)}
+            optionLabels={Object.fromEntries(TODAY_FIXTURES_PRESETS.map(preset => [preset.id, preset.label]))}
+            onChange={applyPreset}
+            ariaLabel="경기 일정 프리셋"
+          />
+        </label>
         <div className="grid min-w-0 gap-2 sm:grid-cols-[180px_minmax(0,1fr)]">
           <label className="block min-w-0">
             <span className="mb-1 block text-xs font-bold uppercase" style={{ color: '#687086' }}>date</span>
@@ -1702,11 +1823,42 @@ function TodayFixturesEditor({ value, onChange, onRender, disabled, rendering })
               경기 추가
             </button>
           </div>
+          {showValidation && validationIssues.length > 0 && (
+            <div className="rounded-md px-3 py-2 text-xs font-bold" style={{ background: '#2b2108', color: '#ffd166', border: '1px solid #665017' }}>
+              {validationIssues.slice(0, 3).map(issue => (
+                <div key={issue.key}>{issue.message}</div>
+              ))}
+              {validationIssues.length > 3 && <div>외 {validationIssues.length - 3}개 항목을 더 확인해주세요.</div>}
+            </div>
+          )}
 
-          {value.matches.map((match, index) => (
-            <div key={index} className="rounded-md p-3" style={{ background: '#080a10', border: '1px solid #202635' }}>
+          {value.matches.map((match, index) => {
+            const selected = selectedMatchIndex === index;
+            const rowIssues = validationIssues.filter(issue => issue.index === index);
+            return (
+            <div
+              key={index}
+              ref={node => { rowRefs.current[index] = node; }}
+              onClick={() => onSelectMatch?.(index)}
+              onMouseOver={() => enterDragTarget(index)}
+              className="rounded-md p-3 transition"
+              style={{
+                background: selected ? '#0f1722' : '#080a10',
+                border: `1px solid ${selected ? '#35d48a' : rowIssues.length && showValidation ? '#665017' : '#202635'}`,
+                boxShadow: selected ? '0 0 0 1px rgba(53,212,138,0.35)' : 'none',
+              }}
+            >
               <div className="grid min-w-0 items-end gap-2 sm:grid-cols-[34px_86px_104px_minmax(0,1fr)_40px]">
-                <div className="pb-2 text-sm font-black text-white">{index + 1}</div>
+                <button
+                  type="button"
+                  onMouseDown={event => beginDragMatch(event, index)}
+                  className="h-10 rounded text-xs font-black"
+                  style={{ background: '#11141d', color: '#aab4cc', border: '1px solid #283040', cursor: dragIndex === index ? 'grabbing' : 'grab' }}
+                  aria-label={`${index + 1}번째 경기 드래그 정렬`}
+                  title="드래그해서 순서 변경"
+                >
+                  {index + 1}
+                </button>
 
                 <label className="block min-w-0 space-y-1">
                   <span className="block text-xs font-bold uppercase" style={{ color: '#687086' }}>period</span>
@@ -1733,7 +1885,7 @@ function TodayFixturesEditor({ value, onChange, onRender, disabled, rendering })
                   <span className="block text-xs font-bold uppercase" style={{ color: '#687086' }}>group</span>
                   <CompactSelect
                     value={match.group_label}
-                    options={TODAY_FIXTURES_GROUPS}
+                    options={groupOptions}
                     onChange={nextValue => updateMatch(index, 'group_label', nextValue)}
                     ariaLabel={`${index + 1}번째 경기 그룹`}
                     placeholder="선택"
@@ -1778,8 +1930,14 @@ function TodayFixturesEditor({ value, onChange, onRender, disabled, rendering })
                   style={{ background: '#11141d', color: '#fff', border: '1px solid #283040' }}
                 />
               </label>
+              {showValidation && rowIssues.length > 0 && (
+                <div className="mt-2 text-xs font-bold" style={{ color: '#ffd166' }}>
+                  {rowIssues.map(issue => issue.message).join(' · ')}
+                </div>
+              )}
             </div>
-          ))}
+            );
+          })}
         </div>
 
         <button
@@ -1795,7 +1953,7 @@ function TodayFixturesEditor({ value, onChange, onRender, disabled, rendering })
   );
 }
 
-function TodayFixturesPreview({ value }) {
+function TodayFixturesPreview({ value, selectedMatchIndex, onSelectMatch }) {
   const wrapperRef = useRef(null);
   const [previewWidth, setPreviewWidth] = useState(360);
   const [pageIndex, setPageIndex] = useState(0);
@@ -1829,6 +1987,12 @@ function TodayFixturesPreview({ value }) {
   useEffect(() => {
     setPageIndex(current => Math.min(current, fixturePages.length - 1));
   }, [fixturePages.length]);
+
+  useEffect(() => {
+    if (selectedMatchIndex < 0) return;
+    const selectedPage = Math.floor(selectedMatchIndex / TODAY_FIXTURES_MATCHES_PER_PAGE);
+    if (selectedPage >= 0 && selectedPage < fixturePages.length) setPageIndex(selectedPage);
+  }, [fixturePages.length, selectedMatchIndex]);
 
   return (
     <aside className="min-w-0 rounded-md p-4" style={{ background: '#0b0d14', border: '1px solid #202635' }}>
@@ -1884,8 +2048,31 @@ function TodayFixturesPreview({ value }) {
             <div style={{ position: 'absolute', left: 72, top: 383.66, width: 360, height: 38, color: 'rgba(255,255,255,0.72)', fontSize: 31.1, lineHeight: '38px', fontWeight: 900, whiteSpace: 'nowrap', overflow: 'hidden' }}>
               {payload.date_label}
             </div>
-            {activeMatches.map((match, index) => (
-              <div key={`${activePageIndex}-${index}`} style={{ position: 'absolute', left: 72, top: 461.66 + (index * 205), width: 936, height: 183, overflow: 'hidden' }}>
+            {activeMatches.map((match, index) => {
+              const absoluteIndex = activePageIndex * TODAY_FIXTURES_MATCHES_PER_PAGE + index;
+              const selected = selectedMatchIndex === absoluteIndex;
+              return (
+              <button
+                key={`${activePageIndex}-${index}`}
+                type="button"
+                onClick={() => onSelectMatch?.(absoluteIndex)}
+                style={{
+                  position: 'absolute',
+                  left: 72,
+                  top: 461.66 + (index * 205),
+                  width: 936,
+                  height: 183,
+                  overflow: 'hidden',
+                  appearance: 'none',
+                  padding: 0,
+                  border: selected ? '2px solid rgba(53,212,138,0.85)' : '2px solid transparent',
+                  borderRadius: 12,
+                  background: selected ? 'rgba(53,212,138,0.08)' : 'transparent',
+                  color: '#fff',
+                  textAlign: 'left',
+                  cursor: 'pointer',
+                }}
+              >
                 <div style={{ position: 'absolute', left: 44, top: 51.29, width: 132, height: 81 }}>
                   <div style={{ width: 84, height: 26, color: 'rgba(255,255,255,0.46)', fontSize: 22, lineHeight: '26px', fontWeight: 900, whiteSpace: 'nowrap', overflow: 'hidden' }}>{match.time_period}</div>
                   <div style={{ width: 170, height: 67, fontFamily: '"Bebas Neue", "Pretendard", sans-serif', fontSize: 56, lineHeight: '50.4px', fontWeight: 400, letterSpacing: 1.12, whiteSpace: 'nowrap', overflow: 'hidden' }}>{match.kickoff_time}</div>
@@ -1900,8 +2087,9 @@ function TodayFixturesPreview({ value }) {
                     {[match.group_label, match.venue].filter(Boolean).join(' · ')}
                   </div>
                 </div>
-              </div>
-            ))}
+              </button>
+              );
+            })}
           </div>
         </div>
       </div>
@@ -1929,6 +2117,9 @@ function CardNewsWorkspace({ headers, adminToken, seedItem, onNotify }) {
   const [localMessage, setLocalMessage] = useState('');
   const [localTone, setLocalTone] = useState('neutral');
   const [todayFixtures, setTodayFixtures] = useState(() => cloneTodayFixturesDefaults());
+  const [selectedTodayFixtureIndex, setSelectedTodayFixtureIndex] = useState(0);
+  const [todayFixtureFocusRequest, setTodayFixtureFocusRequest] = useState(null);
+  const [showTodayFixturesValidation, setShowTodayFixturesValidation] = useState(false);
 
   const selectedItem = useMemo(() => {
     const matched = publishedItems.find(item => String(item.id) === String(selectedId));
@@ -1954,6 +2145,30 @@ function CardNewsWorkspace({ headers, adminToken, seedItem, onNotify }) {
     });
     return jobs.slice(0, 5);
   }, [activePublications, renderJobs]);
+
+  const selectTodayFixtureMatch = index => {
+    const maxIndex = Math.max((todayFixtures.matches || []).length - 1, 0);
+    setSelectedTodayFixtureIndex(Math.max(0, Math.min(index, maxIndex)));
+  };
+  const focusTodayFixtureMatch = index => {
+    selectTodayFixtureMatch(index);
+    setTodayFixtureFocusRequest({ index, nonce: Date.now() });
+  };
+  const reorderTodayFixtureMatch = (fromIndex, toIndex) => {
+    setTodayFixtures(current => {
+      const matches = [...(current.matches || [])];
+      if (fromIndex < 0 || toIndex < 0 || fromIndex >= matches.length || toIndex >= matches.length) return current;
+      const [moved] = matches.splice(fromIndex, 1);
+      matches.splice(toIndex, 0, moved);
+      return { ...current, matches };
+    });
+    setSelectedTodayFixtureIndex(current => {
+      if (current === fromIndex) return toIndex;
+      if (fromIndex < current && current <= toIndex) return current - 1;
+      if (toIndex <= current && current < fromIndex) return current + 1;
+      return current;
+    });
+  };
 
   const setNotice = (tone, text) => {
     setLocalTone(tone);
@@ -2314,9 +2529,12 @@ function CardNewsWorkspace({ headers, adminToken, seedItem, onNotify }) {
 
   const renderTodayFixtures = async () => {
     const payload = todayFixturesPayload(todayFixtures);
-    const validationMessage = validateTodayFixturesPayload(payload);
+    const validationIssues = todayFixturesValidationIssues(payload);
+    const validationMessage = validationIssues[0]?.message || '';
 
     if (validationMessage) {
+      setShowTodayFixturesValidation(true);
+      if (Number.isInteger(validationIssues[0]?.index)) focusTodayFixtureMatch(validationIssues[0].index);
       setNotice('warn', validationMessage);
       return;
     }
@@ -2326,6 +2544,7 @@ function CardNewsWorkspace({ headers, adminToken, seedItem, onNotify }) {
     }
 
     setLocalMessage('');
+    setShowTodayFixturesValidation(false);
     const jobId = renderJobId();
     const filename = `cardnews-today-fixtures-${payload.date_label.replace(/\s+/g, '-')}.zip`;
     const startedAt = Date.now();
@@ -2455,9 +2674,12 @@ function CardNewsWorkspace({ headers, adminToken, seedItem, onNotify }) {
 
   const publishTodayFixtures = async () => {
     const payload = todayFixturesPayload(todayFixtures);
-    const validationMessage = validateTodayFixturesPayload(payload);
+    const validationIssues = todayFixturesValidationIssues(payload);
+    const validationMessage = validationIssues[0]?.message || '';
 
     if (validationMessage) {
+      setShowTodayFixturesValidation(true);
+      if (Number.isInteger(validationIssues[0]?.index)) focusTodayFixtureMatch(validationIssues[0].index);
       setNotice('warn', validationMessage);
       return;
     }
@@ -2467,6 +2689,7 @@ function CardNewsWorkspace({ headers, adminToken, seedItem, onNotify }) {
     }
 
     setLocalMessage('');
+    setShowTodayFixturesValidation(false);
     const jobId = renderJobId();
     const filename = `cardnews-today-fixtures-${payload.date_label.replace(/\s+/g, '-')}.zip`;
     const title = `${payload.date_label} 오늘의 경기 일정`;
@@ -2983,8 +3206,17 @@ function CardNewsWorkspace({ headers, adminToken, seedItem, onNotify }) {
           onRender={publishTodayFixtures}
           disabled={!adminToken || busy}
           rendering={isRenderingZip}
+          selectedMatchIndex={selectedTodayFixtureIndex}
+          onSelectMatch={selectTodayFixtureMatch}
+          focusRequest={todayFixtureFocusRequest}
+          onReorderMatch={reorderTodayFixtureMatch}
+          showValidation={showTodayFixturesValidation}
         />
-        <TodayFixturesPreview value={todayFixtures} />
+        <TodayFixturesPreview
+          value={todayFixtures}
+          selectedMatchIndex={selectedTodayFixtureIndex}
+          onSelectMatch={focusTodayFixtureMatch}
+        />
       </div>
       )}
     </div>
