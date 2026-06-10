@@ -1637,10 +1637,9 @@ function FixtureCountrySelect({ value, onSelect, placeholder }) {
   const selectedCountry = getTodayFixtureCountryByCode(value);
   const normalizedQuery = query.trim().toLowerCase();
   const filteredCountries = useMemo(() => {
-    if (!normalizedQuery) return TODAY_FIXTURE_COUNTRIES.slice(0, 10);
+    if (!normalizedQuery) return TODAY_FIXTURE_COUNTRIES;
     return TODAY_FIXTURE_COUNTRIES
-      .filter(country => country.searchText.includes(normalizedQuery))
-      .slice(0, 10);
+      .filter(country => country.searchText.includes(normalizedQuery));
   }, [normalizedQuery]);
   const inputValue = open ? query : (selectedCountry?.nameKo || '');
 
