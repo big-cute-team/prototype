@@ -8,6 +8,7 @@ import react from '@vitejs/plugin-react'
 const require = createRequire(import.meta.url)
 const rootDir = path.dirname(fileURLToPath(import.meta.url))
 const apiDir = path.join(rootDir, 'api')
+const adminRouteHandlerPath = path.join(apiDir, 'admin', '[route].js')
 
 function localApiPlugin() {
   return {
@@ -23,7 +24,11 @@ function localApiPlugin() {
         const url = new URL(req.url, 'http://localhost')
         const route = decodeURIComponent(url.pathname).replace(/^\/api\/?/, '')
         const segments = route.split('/').filter(Boolean)
-        const handlerPath = path.join(apiDir, ...segments) + '.js'
+        let handlerPath = path.join(apiDir, ...segments) + '.js'
+
+        if (!fs.existsSync(handlerPath) && segments[0] === 'admin' && segments.length >= 2) {
+          handlerPath = adminRouteHandlerPath
+        }
 
         if (!handlerPath.startsWith(apiDir + path.sep) || !fs.existsSync(handlerPath)) {
           next()
