@@ -412,6 +412,21 @@ function formatRenderTimings(timings) {
   return parts.join(' · ');
 }
 
+function formatRenderTimingDetails(timings) {
+  if (!timings || typeof timings !== 'object') return '';
+  const fields = [
+    ['browser', timings.browser_launch_ms],
+    ['image', timings.image_wait_ms],
+    ['shot', timings.screenshot_ms],
+    ['zip', timings.zip_write_ms],
+  ];
+  return fields
+    .map(([label, value]) => [label, Number(value)])
+    .filter(([, value]) => Number.isFinite(value) && value >= 0)
+    .map(([label, value]) => `${label} ${(value / 1000).toFixed(1)}s`)
+    .join(' · ');
+}
+
 function renderJobId() {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
@@ -2330,6 +2345,7 @@ function CardNewsWorkspace({ headers, adminToken, seedItem, onNotify }) {
             const isSuccess = job.status === 'success';
             const statusColor = isRunning ? '#ffd166' : isSuccess ? '#48d99a' : '#ff8f8f';
             const timingLabel = formatRenderTimings(job.timings);
+            const timingDetails = formatRenderTimingDetails(job.timings);
             return (
               <div key={job.id} className="min-w-0 rounded px-3 py-2 text-sm" style={{ background: '#11141d', border: '1px solid #283040' }}>
                 <div className="flex min-w-0 items-start justify-between gap-3">
@@ -2347,6 +2363,11 @@ function CardNewsWorkspace({ headers, adminToken, seedItem, onNotify }) {
                     {timingLabel && (
                       <div className="mt-1 break-words text-xs" style={{ color: '#687086', overflowWrap: 'anywhere' }}>
                         {timingLabel}
+                      </div>
+                    )}
+                    {timingDetails && (
+                      <div className="mt-1 break-words text-xs" style={{ color: '#525b70', overflowWrap: 'anywhere' }}>
+                        {timingDetails}
                       </div>
                     )}
                     {job.error && (
@@ -2733,6 +2754,7 @@ function GeneratedCardNewsArchive({ headers, adminToken, onNotify }) {
   const running = isPublicationRunning(activePublication?.status);
   const statusColor = publicationStatusTone(activePublication?.status);
   const renderTimingLabel = formatRenderTimings(activePublication?.source_payload?.render_timings_ms);
+  const renderTimingDetails = formatRenderTimingDetails(activePublication?.source_payload?.render_timings_ms);
 
   useEffect(() => {
     setPageIndex(0);
@@ -2836,6 +2858,11 @@ function GeneratedCardNewsArchive({ headers, adminToken, onNotify }) {
                     {renderTimingLabel && (
                       <div className="mt-1 text-xs" style={{ color: '#687086' }}>
                         {renderTimingLabel}
+                      </div>
+                    )}
+                    {renderTimingDetails && (
+                      <div className="mt-1 text-xs" style={{ color: '#525b70' }}>
+                        {renderTimingDetails}
                       </div>
                     )}
                   </div>
