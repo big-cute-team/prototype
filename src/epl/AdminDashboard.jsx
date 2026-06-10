@@ -474,7 +474,11 @@ function publicationToRenderJob(publication) {
     filename: publicationUploadFilename(publication),
     startedAt: Number.isFinite(startedAt) ? startedAt : Date.now(),
     finishedAt: Number.isFinite(finishedAt) ? finishedAt : null,
-    phase: status === 'running' ? `R2 upload ${publication.status || 'running'}` : status === 'success' ? 'R2 upload completed' : 'R2 upload failed',
+    phase: status === 'running'
+      ? (publication.status === 'zip_pending' ? 'Images ready · ZIP preparing' : `R2 upload ${publication.status || 'running'}`)
+      : status === 'success'
+        ? 'R2 upload completed'
+        : 'R2 upload failed',
     zipUrl: publication.zip_url || null,
     error: publication.error_message || null,
     timings: publication.source_payload?.render_timings_ms || null,
@@ -482,7 +486,7 @@ function publicationToRenderJob(publication) {
 }
 
 function isPublicationRunning(status) {
-  return ['pending', 'queued', 'running'].includes(String(status || ''));
+  return ['pending', 'queued', 'running', 'zip_pending'].includes(String(status || ''));
 }
 
 function publicationStatusTone(status) {
@@ -1814,7 +1818,7 @@ function CardNewsWorkspace({ headers, adminToken, seedItem, onNotify }) {
         setNotice('bad', publication.error_message || '카드뉴스 업로드에 실패했습니다.');
       } else {
         updateRenderJob(localJobId, {
-          phase: `R2 업로드 중 (${publication.status})`,
+          phase: publication.status === 'zip_pending' ? '이미지 준비 완료 · ZIP 준비 중' : `R2 업로드 중 (${publication.status})`,
           timings: publication.source_payload?.render_timings_ms || null,
         });
       }
@@ -2752,6 +2756,7 @@ function GeneratedCardNewsArchive({ headers, adminToken, onNotify }) {
   const [activeIndex, setActiveIndex] = useState(0);
   const [pageIndex, setPageIndex] = useState(0);
   const [busy, setBusy] = useState(false);
+  const [deletingId, setDeletingId] = useState('');
   const [localMessage, setLocalMessage] = useState('');
   const [localTone, setLocalTone] = useState('neutral');
 
@@ -2782,7 +2787,7 @@ function GeneratedCardNewsArchive({ headers, adminToken, onNotify }) {
     }
   };
 
-  const syncPublication = async publication => {
+  const syncPublication = async (publication, { quiet = false } = {}) => {
     if (!publication?.id) return;
     try {
       const response = await fetch('/api/admin/card-publications-sync', {
@@ -2793,9 +2798,32 @@ function GeneratedCardNewsArchive({ headers, adminToken, onNotify }) {
       const data = await readJsonResponse(response);
       if (!response.ok) throw new Error(data.error || '카드뉴스 상태 동기화에 실패했습니다.');
       setPublications(prev => prev.map(row => (row.id === data.publication?.id ? data.publication : row)));
-      setNotice('good', '카드뉴스 상태를 갱신했습니다.');
+      if (!quiet) setNotice('good', '카드뉴스 상태를 갱신했습니다.');
+    } catch (error) {
+      if (!quiet) setNotice('bad', error.message);
+    }
+  };
+
+  const deletePublication = async publication => {
+    if (!publication?.id || isPublicationRunning(publication.status)) return;
+    const ok = window.confirm(`"${publication.title || 'Card news'}" 카드뉴스를 삭제할까요?`);
+    if (!ok) return;
+    setDeletingId(publication.id);
+    try {
+      const response = await fetch(`/api/admin/card-publications?id=${encodeURIComponent(publication.id)}&actor=admin-ui`, {
+        method: 'DELETE',
+        headers,
+      });
+      const data = await readJsonResponse(response);
+      if (!response.ok) throw new Error(data.error || 'Failed to delete card news publication');
+      setPublications(prev => prev.filter(row => row.id !== publication.id));
+      setActiveIndex(prev => Math.max(0, Math.min(prev, publications.length - 2)));
+      setPageIndex(0);
+      setNotice(data.storage_warning ? 'warn' : 'good', data.storage_warning || '카드뉴스를 삭제했습니다.');
     } catch (error) {
       setNotice('bad', error.message);
+    } finally {
+      setDeletingId('');
     }
   };
 
@@ -2803,6 +2831,19 @@ function GeneratedCardNewsArchive({ headers, adminToken, onNotify }) {
     loadPublications();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [adminToken]);
+
+  const activePublications = publications.filter(publication => isPublicationRunning(publication.status));
+  const activePublicationKey = activePublications.map(publication => publication.id).join('|');
+
+  useEffect(() => {
+    if (!adminToken || activePublications.length === 0) return undefined;
+    const tick = () => {
+      activePublications.forEach(publication => syncPublication(publication, { quiet: true }));
+    };
+    const timer = window.setInterval(tick, 3000);
+    return () => window.clearInterval(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [adminToken, activePublicationKey]);
 
   useEffect(() => {
     if (activeIndex >= publications.length) setActiveIndex(Math.max(0, publications.length - 1));
@@ -2964,6 +3005,13 @@ function GeneratedCardNewsArchive({ headers, adminToken, onNotify }) {
                       ZIP 다운로드
                     </a>
                   )}
+                  {!activePublication?.zip_url && pages.length > 0 && (
+                    <span
+                      className="rounded px-3 py-2 text-sm font-bold"
+                      style={{ background: '#332400', color: '#ffd166', border: '1px solid #665017' }}>
+                      ZIP 준비 중
+                    </span>
+                  )}
                   {currentPage?.url && (
                     <a
                       href={currentPage.url}
@@ -2990,6 +3038,16 @@ function GeneratedCardNewsArchive({ headers, adminToken, onNotify }) {
                       className="rounded px-3 py-2 text-sm font-bold"
                       style={{ background: '#332400', color: '#ffd166', border: '1px solid #665017' }}>
                       상태 갱신
+                    </button>
+                  )}
+                  {activePublication && (
+                    <button
+                      type="button"
+                      onClick={() => deletePublication(activePublication)}
+                      disabled={running || deletingId === activePublication.id}
+                      className="rounded px-3 py-2 text-sm font-bold disabled:opacity-50"
+                      style={{ background: '#2a1115', color: '#ff9aa8', border: '1px solid #5c2029' }}>
+                      {deletingId === activePublication.id ? '삭제 중' : '삭제'}
                     </button>
                   )}
                 </div>

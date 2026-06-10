@@ -3,10 +3,10 @@ const { requireToken } = require('../../_lib/auth');
 const { recordAudit } = require('../../_lib/audit');
 const { cardRenderAuthHeaders, cardRenderUrl, readCardRenderError } = require('../../_lib/card-news');
 const { handleError, json, parseJsonBody } = require('../../_lib/http');
-const { insert, select, patch, eq } = require('../../_lib/supabase');
+const { insert, select, patch, eq, supabaseFetch } = require('../../_lib/supabase');
 
 const PUBLICATION_KINDS = new Set(['article', 'today_fixtures']);
-const PUBLICATION_STATUSES = new Set(['pending', 'queued', 'running', 'completed', 'failed']);
+const PUBLICATION_STATUSES = new Set(['pending', 'queued', 'running', 'zip_pending', 'completed', 'failed']);
 
 async function requestRenderJob(renderRequest, publicationId) {
   const response = await fetch(cardRenderUrl('/card/render-jobs'), {
@@ -16,6 +16,18 @@ async function requestRenderJob(renderRequest, publicationId) {
       publication_id: publicationId,
       ...renderRequest,
     }),
+  });
+
+  if (!response.ok) await readCardRenderError(response);
+  return response.json();
+}
+
+async function deleteRenderStorageKeys(keys) {
+  if (!keys.length) return { deleted_count: 0 };
+  const response = await fetch(cardRenderUrl('/card/storage/delete'), {
+    method: 'POST',
+    headers: cardRenderAuthHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify({ keys }),
   });
 
   if (!response.ok) await readCardRenderError(response);
@@ -121,6 +133,44 @@ async function createPublication(req, res) {
   }
 }
 
+function storageKeysForPublication(publication) {
+  const keys = new Set();
+  const pages = Array.isArray(publication.pages) ? publication.pages : [];
+  pages.forEach(page => {
+    if (page?.key) keys.add(String(page.key));
+  });
+  if (publication.r2_prefix) keys.add(`${String(publication.r2_prefix).replace(/\/$/, '')}/cardnews.zip`);
+  return [...keys];
+}
+
+async function deletePublication(req, res) {
+  const id = String(req.query?.id || '').trim();
+  if (!id) throw Object.assign(new Error('id is required'), { statusCode: 400 });
+
+  const rows = await select('card_news_publications', `select=*&${eq('id', id)}&limit=1`);
+  const current = rows[0];
+  if (!current) throw Object.assign(new Error('card news publication not found'), { statusCode: 404 });
+
+  let storageWarning = null;
+  try {
+    await deleteRenderStorageKeys(storageKeysForPublication(current));
+  } catch (error) {
+    storageWarning = error.message || 'R2 cleanup failed';
+  }
+
+  await supabaseFetch('card_news_publications', {
+    method: 'DELETE',
+    query: eq('id', id),
+  });
+  await recordAudit('card_news_publication_deleted', {
+    content_item_id: current.content_item_id,
+    actor: req.query?.actor || 'admin',
+    publication_id: id,
+    storage_warning: storageWarning,
+  }).catch(() => {});
+  json(res, 200, { ok: true, storage_warning: storageWarning });
+}
+
 module.exports = async function handler(req, res) {
   try {
     requireToken(req, 'ADMIN_TOKEN', 'admin');
@@ -130,6 +180,10 @@ module.exports = async function handler(req, res) {
     }
     if (req.method === 'POST') {
       await createPublication(req, res);
+      return;
+    }
+    if (req.method === 'DELETE') {
+      await deletePublication(req, res);
       return;
     }
     json(res, 405, { error: 'Method not allowed' });

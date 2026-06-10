@@ -4,7 +4,7 @@ const { cardRenderAuthHeaders, cardRenderUrl, readCardRenderError } = require('.
 const { handleError, json, parseJsonBody } = require('../../_lib/http');
 const { select, patch, eq } = require('../../_lib/supabase');
 
-const PUBLICATION_STATUSES = new Set(['pending', 'queued', 'running', 'completed', 'failed']);
+const PUBLICATION_STATUSES = new Set(['pending', 'queued', 'running', 'zip_pending', 'completed', 'failed']);
 
 async function requestRenderJobStatus(jobId) {
   const response = await fetch(cardRenderUrl(`/card/render-jobs/${encodeURIComponent(jobId)}`), {
