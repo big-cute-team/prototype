@@ -11,9 +11,13 @@ admin project.
 
 ## Card News Work
 
-When creating or refactoring card news, consult `CARD_NEWS_IMPLEMENTATION.md`
-for the current admin-to-render-server architecture, payload shapes, template
-ids, preview behavior, and testing checklist.
+When creating or refactoring card news, first read
+`CARD_NEWS_PREVIEW_RENDER_RULES.md`. It is the required checklist for keeping
+the admin live preview and actual render-server output in sync.
+
+After that, consult `CARD_NEWS_IMPLEMENTATION.md` for the current
+admin-to-render-server architecture, payload shapes, template ids, preview
+behavior, and testing checklist.
 
 ## Start The Admin Server
 
