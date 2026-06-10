@@ -2080,7 +2080,7 @@ function TodayFixturesPreview({ value, selectedMatchIndex, onSelectMatch }) {
                 <div style={{ position: 'absolute', left: 200, top: 33, width: 720, height: 150 }}>
                   <div style={{ position: 'absolute', left: 0, top: 15, width: 225, height: 54, fontSize: 39.8, lineHeight: '48px', fontWeight: 900, textAlign: 'right', whiteSpace: 'nowrap', overflow: 'hidden' }}>{match.home_team}</div>
                   <FixtureFlagBadge code={match.home_code} imageUrl={match.home_image_url} style={{ position: 'absolute', left: 240.61, top: 0 }} />
-                  <div style={{ position: 'absolute', left: 321.5, top: 17, width: 54, height: 40, color: 'rgba(255,255,255,0.46)', fontFamily: '"Bebas Neue", "Pretendard", sans-serif', fontSize: 26, lineHeight: '31px', fontWeight: 400, textAlign: 'center' }}>VS</div>
+                  <div style={{ position: 'absolute', left: 321.5, top: 0, width: 54, height: 78, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'rgba(255,255,255,0.46)', fontFamily: '"Bebas Neue", "Pretendard", sans-serif', fontSize: 26, lineHeight: 1, fontWeight: 400, textAlign: 'center' }}>VS</div>
                   <FixtureFlagBadge code={match.away_code} imageUrl={match.away_image_url} style={{ position: 'absolute', left: 378.38, top: 0 }} />
                   <div style={{ position: 'absolute', left: 472.38, top: 15, width: 225, height: 54, fontSize: 39.8, lineHeight: '48px', fontWeight: 900, whiteSpace: 'nowrap', overflow: 'hidden' }}>{match.away_team}</div>
                   <div style={{ position: 'absolute', left: 0, top: 92, width: 680, height: 25, color: 'rgba(255,255,255,0.46)', fontSize: 21, lineHeight: '25px', fontWeight: 900, whiteSpace: 'nowrap', overflow: 'hidden' }}>
