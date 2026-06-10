@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 
 import todayFixturesTemplateUrl from './assets/today-fixtures-template.png';
-import { TODAY_FIXTURE_COUNTRIES, getTodayFixtureCountryByCode } from './todayFixtureCountries';
+import { TODAY_FIXTURE_COUNTRIES, getTodayFixtureCountryByCode, getTodayFixtureCountryCardName } from './todayFixtureCountries';
 
 const CARD_NEWS_TAB = 'card_news_workspace';
 const GENERATED_CARD_NEWS_TAB = 'generated_card_news';
@@ -65,6 +65,9 @@ const TEAM_SUBJECT_COLORS = {
 const CARD_PREVIEW_WIDTH = 1080;
 const CARD_PREVIEW_HEIGHT = 1350;
 const CARD_PREVIEW_MAX_WIDTH = 360;
+const FIXTURE_TEAM_NAME_WIDTH = 225;
+const FIXTURE_TEAM_NAME_BASE_FONT_SIZE = 39.8;
+const FIXTURE_TEAM_NAME_MIN_FONT_SIZE = 20;
 const CARD_COVER_SUMMARY_WIDTH = 826;
 const CARD_COVER_SUMMARY_FONT_SIZE = 40;
 const CARD_PREVIEW_SCALE = CARD_PREVIEW_MAX_WIDTH / CARD_PREVIEW_WIDTH;
@@ -600,6 +603,23 @@ function getScheduleTypeOption(typeId) {
   return SCHEDULE_TYPE_OPTIONS.find(option => option.id === typeId) || SCHEDULE_TYPE_OPTIONS[0];
 }
 
+function fixtureTeamNameUnits(text) {
+  return Array.from(String(text || '')).reduce((sum, char) => {
+    if (/\s/.test(char)) return sum + 0.34;
+    if (/[-'.·]/.test(char)) return sum + 0.3;
+    if (/[\u1100-\u11ff\u3130-\u318f\uac00-\ud7af\u3040-\u30ff\u3400-\u9fff]/.test(char)) return sum + 1;
+    return sum + 0.58;
+  }, 0);
+}
+
+function fixtureTeamNameFontSize(text) {
+  const units = fixtureTeamNameUnits(text);
+  if (units <= 0) return FIXTURE_TEAM_NAME_BASE_FONT_SIZE;
+  const fitSize = (FIXTURE_TEAM_NAME_WIDTH / units) * 0.96;
+  const size = Math.min(FIXTURE_TEAM_NAME_BASE_FONT_SIZE, fitSize);
+  return Math.max(FIXTURE_TEAM_NAME_MIN_FONT_SIZE, Number(size.toFixed(1)));
+}
+
 function scheduleEyebrowForValue(value) {
   const preset = getTodayFixturesPreset(value.preset_id);
   const scheduleType = getScheduleTypeOption(value.schedule_type);
@@ -625,14 +645,18 @@ function todayFixturesPayload(value) {
     matches: (value.matches || []).map(match => {
       const homeImageUrl = String(match.home_image_url || '').trim();
       const awayImageUrl = String(match.away_image_url || '').trim();
+      const homeCode = String(match.home_code || '').trim().toUpperCase();
+      const awayCode = String(match.away_code || '').trim().toUpperCase();
+      const homeTeam = String(match.home_team || '').trim();
+      const awayTeam = String(match.away_team || '').trim();
       return {
         time_period: String(match.time_period || '오전').trim(),
         kickoff_time: String(match.kickoff_time || '').trim(),
-        home_team: String(match.home_team || '').trim(),
-        home_code: String(match.home_code || '').trim().toUpperCase(),
+        home_team: getTodayFixtureCountryCardName(homeCode, homeTeam),
+        home_code: homeCode,
         ...(homeImageUrl ? { home_image_url: homeImageUrl } : {}),
-        away_team: String(match.away_team || '').trim(),
-        away_code: String(match.away_code || '').trim().toUpperCase(),
+        away_team: getTodayFixtureCountryCardName(awayCode, awayTeam),
+        away_code: awayCode,
         ...(awayImageUrl ? { away_image_url: awayImageUrl } : {}),
         group_label: String(match.group_label || '').trim(),
         venue: String(match.venue || '').trim(),
@@ -2186,6 +2210,8 @@ function TodayFixturesPreview({ value, selectedMatchIndex, onSelectMatch }) {
             {activeMatches.map((match, index) => {
               const absoluteIndex = activePageIndex * TODAY_FIXTURES_MATCHES_PER_PAGE + index;
               const selected = selectedMatchIndex === absoluteIndex;
+              const homeFontSize = fixtureTeamNameFontSize(match.home_team);
+              const awayFontSize = fixtureTeamNameFontSize(match.away_team);
               return (
               <button
                 key={`${activePageIndex}-${index}`}
@@ -2213,11 +2239,11 @@ function TodayFixturesPreview({ value, selectedMatchIndex, onSelectMatch }) {
                   <div style={{ width: 170, height: 67, fontFamily: '"Bebas Neue", "Pretendard", sans-serif', fontSize: 56, lineHeight: '50.4px', fontWeight: 400, letterSpacing: 1.12, whiteSpace: 'nowrap', overflow: 'hidden' }}>{match.kickoff_time}</div>
                 </div>
                 <div style={{ position: 'absolute', left: 200, top: 33, width: 720, height: 150 }}>
-                  <div style={{ position: 'absolute', left: 0, top: 15, width: 225, height: 54, fontSize: 39.8, lineHeight: '48px', fontWeight: 900, textAlign: 'right', whiteSpace: 'nowrap', overflow: 'hidden' }}>{match.home_team}</div>
+                  <div style={{ position: 'absolute', left: 0, top: 15, width: 225, height: 54, fontSize: homeFontSize, lineHeight: '48px', fontWeight: 900, textAlign: 'right', whiteSpace: 'nowrap', overflow: 'hidden' }}>{match.home_team}</div>
                   <FixtureFlagBadge code={match.home_code} imageUrl={match.home_image_url} style={{ position: 'absolute', left: 240.61, top: 0 }} />
                   <div style={{ position: 'absolute', left: 321.5, top: 0, width: 54, height: 78, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'rgba(255,255,255,0.46)', fontFamily: '"Bebas Neue", "Pretendard", sans-serif', fontSize: 26, lineHeight: 1, fontWeight: 400, textAlign: 'center' }}>VS</div>
                   <FixtureFlagBadge code={match.away_code} imageUrl={match.away_image_url} style={{ position: 'absolute', left: 378.38, top: 0 }} />
-                  <div style={{ position: 'absolute', left: 472.38, top: 15, width: 225, height: 54, fontSize: 39.8, lineHeight: '48px', fontWeight: 900, whiteSpace: 'nowrap', overflow: 'hidden' }}>{match.away_team}</div>
+                  <div style={{ position: 'absolute', left: 472.38, top: 15, width: 225, height: 54, fontSize: awayFontSize, lineHeight: '48px', fontWeight: 900, whiteSpace: 'nowrap', overflow: 'hidden' }}>{match.away_team}</div>
                   <div style={{ position: 'absolute', left: 0, top: 92, width: 680, height: 25, color: 'rgba(255,255,255,0.46)', fontSize: 21, lineHeight: '25px', fontWeight: 900, whiteSpace: 'nowrap', overflow: 'hidden' }}>
                     {[match.group_label, match.venue].filter(Boolean).join(' · ')}
                   </div>

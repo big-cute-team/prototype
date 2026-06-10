@@ -214,9 +214,15 @@ const COUNTRY_ROWS = [
   ['Zimbabwe', '짐바브웨', 'ZIM', 'zw'],
 ];
 
+const COUNTRY_CARD_NAME_BY_CODE = {
+  BIH: '보스니아',
+  COD: 'DR 콩고',
+};
+
 export const TODAY_FIXTURE_COUNTRIES = COUNTRY_ROWS.map(([nameEn, nameKo, code, flagCode]) => ({
   nameEn,
   nameKo,
+  cardNameKo: COUNTRY_CARD_NAME_BY_CODE[code] || nameKo,
   code,
   flagCode,
   flagUrl: `${FLAG_BASE_URL}/${flagCode}.png`,
@@ -226,4 +232,9 @@ export const TODAY_FIXTURE_COUNTRIES = COUNTRY_ROWS.map(([nameEn, nameKo, code, 
 export function getTodayFixtureCountryByCode(code) {
   const normalized = String(code || '').trim().toUpperCase();
   return TODAY_FIXTURE_COUNTRIES.find(country => country.code === normalized) || null;
+}
+
+export function getTodayFixtureCountryCardName(code, fallback = '') {
+  const country = getTodayFixtureCountryByCode(code);
+  return country?.cardNameKo || String(fallback || '').trim();
 }
