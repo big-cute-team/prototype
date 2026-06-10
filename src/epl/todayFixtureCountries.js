@@ -1,0 +1,66 @@
+const FLAG_BASE_URL = 'https://flagcdn.com/w160';
+
+const COUNTRY_ROWS = [
+  ['Argentina', '아르헨티나', 'ARG', 'ar'],
+  ['Australia', '호주', 'AUS', 'au'],
+  ['Austria', '오스트리아', 'AUT', 'at'],
+  ['Belgium', '벨기에', 'BEL', 'be'],
+  ['Brazil', '브라질', 'BRA', 'br'],
+  ['Cameroon', '카메룬', 'CMR', 'cm'],
+  ['Canada', '캐나다', 'CAN', 'ca'],
+  ['Chile', '칠레', 'CHI', 'cl'],
+  ['Colombia', '콜롬비아', 'COL', 'co'],
+  ['Costa Rica', '코스타리카', 'CRC', 'cr'],
+  ['Croatia', '크로아티아', 'CRO', 'hr'],
+  ['Denmark', '덴마크', 'DEN', 'dk'],
+  ['Ecuador', '에콰도르', 'ECU', 'ec'],
+  ['Egypt', '이집트', 'EGY', 'eg'],
+  ['England', '잉글랜드', 'ENG', 'gb-eng'],
+  ['France', '프랑스', 'FRA', 'fr'],
+  ['Germany', '독일', 'GER', 'de'],
+  ['Ghana', '가나', 'GHA', 'gh'],
+  ['Iran', '이란', 'IRN', 'ir'],
+  ['Italy', '이탈리아', 'ITA', 'it'],
+  ['Ivory Coast', '코트디부아르', 'CIV', 'ci'],
+  ['Japan', '일본', 'JPN', 'jp'],
+  ['Mexico', '멕시코', 'MEX', 'mx'],
+  ['Morocco', '모로코', 'MAR', 'ma'],
+  ['Netherlands', '네덜란드', 'NED', 'nl'],
+  ['New Zealand', '뉴질랜드', 'NZL', 'nz'],
+  ['Nigeria', '나이지리아', 'NGA', 'ng'],
+  ['Norway', '노르웨이', 'NOR', 'no'],
+  ['Paraguay', '파라과이', 'PAR', 'py'],
+  ['Peru', '페루', 'PER', 'pe'],
+  ['Poland', '폴란드', 'POL', 'pl'],
+  ['Portugal', '포르투갈', 'POR', 'pt'],
+  ['Qatar', '카타르', 'QAT', 'qa'],
+  ['Saudi Arabia', '사우디아라비아', 'KSA', 'sa'],
+  ['Scotland', '스코틀랜드', 'SCO', 'gb-sct'],
+  ['Senegal', '세네갈', 'SEN', 'sn'],
+  ['Serbia', '세르비아', 'SRB', 'rs'],
+  ['South Africa', '남아공', 'RSA', 'za'],
+  ['South Korea', '대한민국', 'KOR', 'kr'],
+  ['Spain', '스페인', 'ESP', 'es'],
+  ['Sweden', '스웨덴', 'SWE', 'se'],
+  ['Switzerland', '스위스', 'SUI', 'ch'],
+  ['Tunisia', '튀니지', 'TUN', 'tn'],
+  ['Turkey', '튀르키예', 'TUR', 'tr'],
+  ['Ukraine', '우크라이나', 'UKR', 'ua'],
+  ['United States', '미국', 'USA', 'us'],
+  ['Uruguay', '우루과이', 'URU', 'uy'],
+  ['Wales', '웨일스', 'WAL', 'gb-wls'],
+];
+
+export const TODAY_FIXTURE_COUNTRIES = COUNTRY_ROWS.map(([nameEn, nameKo, code, flagCode]) => ({
+  nameEn,
+  nameKo,
+  code,
+  flagCode,
+  flagUrl: `${FLAG_BASE_URL}/${flagCode}.png`,
+  searchText: `${nameKo} ${nameEn} ${code}`.toLowerCase(),
+}));
+
+export function getTodayFixtureCountryByCode(code) {
+  const normalized = String(code || '').trim().toUpperCase();
+  return TODAY_FIXTURE_COUNTRIES.find(country => country.code === normalized) || null;
+}

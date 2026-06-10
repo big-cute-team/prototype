@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 
 import todayFixturesTemplateUrl from './assets/today-fixtures-template.png';
+import { TODAY_FIXTURE_COUNTRIES, getTodayFixtureCountryByCode } from './todayFixtureCountries';
 
 const CARD_NEWS_TAB = 'card_news_workspace';
 const GENERATED_CARD_NEWS_TAB = 'generated_card_news';
@@ -10,6 +11,8 @@ const ARTICLE_CARD_TEMPLATE_ID = 'plick_transfer_v1';
 const TODAY_FIXTURES_TEMPLATE_ID = 'plick_today_fixtures_v1';
 const TODAY_FIXTURES_MATCHES_PER_PAGE = 4;
 const TODAY_FIXTURES_MAX_MATCHES = 40;
+const TODAY_FIXTURES_TIME_PERIODS = ['오전', '오후'];
+const TODAY_FIXTURES_GROUPS = Array.from({ length: 8 }, (_, index) => `Group ${String.fromCharCode(65 + index)}`);
 const CARD_WORKSPACE_MODES = [
   { id: ARTICLE_CARD_MODE, label: '기사 기반' },
   { id: TODAY_FIXTURES_MODE, label: '오늘의 경기 일정' },
@@ -53,6 +56,7 @@ const CARD_WORKSPACE_EDITOR_MAX_WIDTH = CARD_DETAIL_EDITOR_MAX_WIDTH;
 const DEFAULT_TODAY_FIXTURES = {
   eyebrow: 'WORLD CUP 2026 · TODAY',
   title: '오늘의\n경기 일정',
+  date: '2026-06-12',
   date_label: '6월 12일 (금)',
   matches: [
     {
@@ -60,8 +64,10 @@ const DEFAULT_TODAY_FIXTURES = {
       kickoff_time: '04:00',
       home_team: '브라질',
       home_code: 'BRA',
+      home_image_url: getTodayFixtureCountryByCode('BRA')?.flagUrl || '',
       away_team: '세네갈',
       away_code: 'SEN',
+      away_image_url: getTodayFixtureCountryByCode('SEN')?.flagUrl || '',
       group_label: 'Group F',
       venue: '마이애미 · 하드록 스타디움',
     },
@@ -70,8 +76,10 @@ const DEFAULT_TODAY_FIXTURES = {
       kickoff_time: '08:00',
       home_team: '프랑스',
       home_code: 'FRA',
+      home_image_url: getTodayFixtureCountryByCode('FRA')?.flagUrl || '',
       away_team: '크로아티아',
       away_code: 'CRO',
+      away_image_url: getTodayFixtureCountryByCode('CRO')?.flagUrl || '',
       group_label: 'Group H',
       venue: '뉴욕 · 메트라이프 스타디움',
     },
@@ -80,8 +88,10 @@ const DEFAULT_TODAY_FIXTURES = {
       kickoff_time: '11:00',
       home_team: '캐나다',
       home_code: 'CAN',
+      home_image_url: getTodayFixtureCountryByCode('CAN')?.flagUrl || '',
       away_team: '일본',
       away_code: 'JPN',
+      away_image_url: getTodayFixtureCountryByCode('JPN')?.flagUrl || '',
       group_label: 'Group B',
       venue: '토론토 · BMO 필드',
     },
@@ -90,8 +100,10 @@ const DEFAULT_TODAY_FIXTURES = {
       kickoff_time: '14:00',
       home_team: '포르투갈',
       home_code: 'POR',
+      home_image_url: getTodayFixtureCountryByCode('POR')?.flagUrl || '',
       away_team: '모로코',
       away_code: 'MAR',
+      away_image_url: getTodayFixtureCountryByCode('MAR')?.flagUrl || '',
       group_label: 'Group C',
       venue: 'LA · 소파이 스타디움',
     },
@@ -508,11 +520,21 @@ function emptyTodayFixtureMatch() {
     kickoff_time: '',
     home_team: '',
     home_code: '',
+    home_image_url: '',
     away_team: '',
     away_code: '',
+    away_image_url: '',
     group_label: '',
     venue: '',
   };
+}
+
+function formatTodayFixtureDateLabel(dateValue) {
+  const [year, month, day] = String(dateValue || '').split('-').map(Number);
+  if (!year || !month || !day) return '';
+  const date = new Date(year, month - 1, day);
+  const weekdays = ['일', '월', '화', '수', '목', '금', '토'];
+  return `${month}월 ${day}일 (${weekdays[date.getDay()]})`;
 }
 
 function chunkItems(items, size) {
@@ -528,16 +550,22 @@ function todayFixturesPayload(value) {
     eyebrow: String(value.eyebrow || '').trim(),
     title: String(value.title || '').replace(/\r\n/g, '\n').replace(/\r/g, '\n').trim(),
     date_label: String(value.date_label || '').trim(),
-    matches: (value.matches || []).map(match => ({
-      time_period: String(match.time_period || '').trim(),
-      kickoff_time: String(match.kickoff_time || '').trim(),
-      home_team: String(match.home_team || '').trim(),
-      home_code: String(match.home_code || '').trim().toUpperCase(),
-      away_team: String(match.away_team || '').trim(),
-      away_code: String(match.away_code || '').trim().toUpperCase(),
-      group_label: String(match.group_label || '').trim(),
-      venue: String(match.venue || '').trim(),
-    })),
+    matches: (value.matches || []).map(match => {
+      const homeImageUrl = String(match.home_image_url || '').trim();
+      const awayImageUrl = String(match.away_image_url || '').trim();
+      return {
+        time_period: String(match.time_period || '오전').trim(),
+        kickoff_time: String(match.kickoff_time || '').trim(),
+        home_team: String(match.home_team || '').trim(),
+        home_code: String(match.home_code || '').trim().toUpperCase(),
+        ...(homeImageUrl ? { home_image_url: homeImageUrl } : {}),
+        away_team: String(match.away_team || '').trim(),
+        away_code: String(match.away_code || '').trim().toUpperCase(),
+        ...(awayImageUrl ? { away_image_url: awayImageUrl } : {}),
+        group_label: String(match.group_label || '').trim(),
+        venue: String(match.venue || '').trim(),
+      };
+    }),
   };
 }
 
@@ -1458,13 +1486,163 @@ function CardNewsPreview({ fields, imageSource }) {
   );
 }
 
+function CompactSelect({ value, options, onChange, ariaLabel, placeholder }) {
+  return (
+    <select
+      aria-label={ariaLabel}
+      value={value || ''}
+      onChange={event => onChange(event.target.value)}
+      className="h-10 w-full rounded-md px-3 text-sm font-black outline-none"
+      style={{ background: '#11141d', color: '#fff', border: '1px solid #283040' }}
+    >
+      {placeholder && <option value="">{placeholder}</option>}
+      {options.map(option => {
+        return (
+          <option
+            key={option}
+            value={option}
+          >
+            {option}
+          </option>
+        );
+      })}
+    </select>
+  );
+}
+
+function FixtureCountrySelect({ value, onSelect, placeholder }) {
+  const [query, setQuery] = useState('');
+  const [open, setOpen] = useState(false);
+  const selectedCountry = getTodayFixtureCountryByCode(value);
+  const normalizedQuery = query.trim().toLowerCase();
+  const filteredCountries = useMemo(() => {
+    if (!normalizedQuery) return TODAY_FIXTURE_COUNTRIES.slice(0, 10);
+    return TODAY_FIXTURE_COUNTRIES
+      .filter(country => country.searchText.includes(normalizedQuery))
+      .slice(0, 10);
+  }, [normalizedQuery]);
+  const inputValue = open ? query : (selectedCountry?.nameKo || '');
+
+  const chooseCountry = country => {
+    onSelect(country);
+    setQuery('');
+    setOpen(false);
+  };
+
+  return (
+    <div className="relative min-w-0">
+      <div className="flex min-w-0 items-center gap-2 rounded-md px-3 py-2" style={{ background: '#11141d', border: '1px solid #283040' }}>
+        {selectedCountry?.flagUrl ? (
+          <img src={selectedCountry.flagUrl} alt="" className="h-6 w-6 shrink-0 rounded-full object-cover" />
+        ) : (
+          <span className="h-6 w-6 shrink-0 rounded-full" style={{ background: '#1f2635' }} />
+        )}
+        <input
+          value={inputValue}
+          onFocus={event => {
+            setOpen(true);
+            setQuery(selectedCountry?.nameKo || '');
+            event.currentTarget.select();
+          }}
+          onChange={event => {
+            setQuery(event.target.value);
+            setOpen(true);
+          }}
+          onKeyDown={event => {
+            if (event.key === 'Enter' && filteredCountries[0]) {
+              event.preventDefault();
+              chooseCountry(filteredCountries[0]);
+            }
+            if (event.key === 'Escape') setOpen(false);
+          }}
+          onBlur={() => window.setTimeout(() => setOpen(false), 120)}
+          placeholder={placeholder}
+          className="min-w-0 flex-1 bg-transparent text-sm font-bold outline-none"
+          style={{ color: '#fff' }}
+        />
+      </div>
+      {open && (
+        <div className="absolute left-0 right-0 top-[calc(100%+4px)] z-30 max-h-60 overflow-auto rounded-md shadow-xl" style={{ background: '#0d1018', border: '1px solid #2b3447' }}>
+          {filteredCountries.length > 0 ? filteredCountries.map(country => (
+            <button
+              key={country.code}
+              type="button"
+              onMouseDown={event => {
+                event.preventDefault();
+                chooseCountry(country);
+              }}
+              className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm font-bold transition hover:bg-[#151b27]"
+              style={{ color: '#eef3ff' }}
+            >
+              <img src={country.flagUrl} alt="" className="h-6 w-6 shrink-0 rounded-full object-cover" />
+              <span className="min-w-0 flex-1 truncate">{country.nameKo}</span>
+            </button>
+          )) : (
+            <div className="px-3 py-3 text-sm font-bold" style={{ color: '#687086' }}>일치하는 국가가 없습니다.</div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function FixtureFlagBadge({ code, imageUrl, style }) {
+  const fallbackUrl = getTodayFixtureCountryByCode(code)?.flagUrl || '';
+  const flagUrl = imageUrl || fallbackUrl;
+  return (
+    <div
+      style={{
+        width: 78,
+        height: 78,
+        borderRadius: '50%',
+        overflow: 'hidden',
+        background: flagUrl ? 'transparent' : 'linear-gradient(180deg, rgba(255,255,255,0.025), rgba(255,255,255,0)), rgba(255,255,255,0.04)',
+        border: flagUrl ? '0' : '1px dashed rgba(255,255,255,0.28)',
+        color: 'rgba(255,255,255,0.72)',
+        fontFamily: '"Bebas Neue", "Pretendard", sans-serif',
+        fontSize: 24.3,
+        lineHeight: '78px',
+        fontWeight: 400,
+        textAlign: 'center',
+        letterSpacing: 0.973,
+        ...style,
+      }}
+    >
+      {flagUrl ? (
+        <img src={flagUrl} alt="" style={{ display: 'block', width: 78, height: 78, objectFit: 'cover' }} />
+      ) : (
+        code
+      )}
+    </div>
+  );
+}
+
 function TodayFixturesEditor({ value, onChange, onRender, disabled, rendering }) {
-  const updateField = (name, nextValue) => onChange({ ...value, [name]: nextValue });
+  const updateDate = nextDate => {
+    onChange({
+      ...value,
+      date: nextDate,
+      date_label: formatTodayFixtureDateLabel(nextDate),
+    });
+  };
   const updateMatch = (index, name, nextValue) => {
     const matches = value.matches.map((match, matchIndex) => (
       matchIndex === index ? { ...match, [name]: nextValue } : match
     ));
     onChange({ ...value, matches });
+  };
+  const updateMatchFields = (index, updates) => {
+    const matches = value.matches.map((match, matchIndex) => (
+      matchIndex === index ? { ...match, ...updates } : match
+    ));
+    onChange({ ...value, matches });
+  };
+  const selectMatchCountry = (index, side, country) => {
+    updateMatchFields(index, {
+      [`${side}_team`]: country.nameKo,
+      [`${side}_code`]: country.code,
+      [`${side}_image_url`]: country.flagUrl,
+    });
   };
   const addMatch = () => {
     if (value.matches.length >= TODAY_FIXTURES_MAX_MATCHES) return;
@@ -1492,15 +1670,25 @@ function TodayFixturesEditor({ value, onChange, onRender, disabled, rendering })
       </div>
 
       <div className="space-y-3">
-        <label className="block min-w-0">
-          <span className="mb-1 block text-xs font-bold uppercase" style={{ color: '#687086' }}>date label</span>
-          <input
-            value={value.date_label}
-            onChange={event => updateField('date_label', event.target.value)}
-            className="w-full rounded-md px-3 py-2 text-sm outline-none"
-            style={{ background: '#11141d', color: '#fff', border: '1px solid #283040' }}
-          />
-        </label>
+        <div className="grid min-w-0 gap-2 sm:grid-cols-[180px_minmax(0,1fr)]">
+          <label className="block min-w-0">
+            <span className="mb-1 block text-xs font-bold uppercase" style={{ color: '#687086' }}>date</span>
+            <input
+              type="date"
+              value={value.date || ''}
+              onInput={event => updateDate(event.currentTarget.value)}
+              onChange={event => updateDate(event.target.value)}
+              className="h-10 w-full rounded-md px-3 text-sm font-bold outline-none"
+              style={{ background: '#11141d', color: '#fff', border: '1px solid #283040' }}
+            />
+          </label>
+          <div className="min-w-0">
+            <span className="mb-1 block text-xs font-bold uppercase" style={{ color: '#687086' }}>date label</span>
+            <div className="flex h-10 items-center rounded-md px-3 text-sm font-black" style={{ background: '#11141d', color: '#fff', border: '1px solid #283040' }}>
+              {value.date_label || '날짜를 선택하세요'}
+            </div>
+          </div>
+        </div>
 
         <div className="space-y-3">
           <div className="flex items-center justify-between gap-3">
@@ -1517,27 +1705,79 @@ function TodayFixturesEditor({ value, onChange, onRender, disabled, rendering })
 
           {value.matches.map((match, index) => (
             <div key={index} className="rounded-md p-3" style={{ background: '#080a10', border: '1px solid #202635' }}>
-              <div className="mb-3 flex items-center justify-between gap-3">
-                <div className="text-sm font-black text-white">{index + 1}번째 경기</div>
+              <div className="grid min-w-0 items-end gap-2 sm:grid-cols-[34px_86px_104px_minmax(0,1fr)_40px]">
+                <div className="pb-2 text-sm font-black text-white">{index + 1}</div>
+
+                <label className="block min-w-0 space-y-1">
+                  <span className="block text-xs font-bold uppercase" style={{ color: '#687086' }}>period</span>
+                  <CompactSelect
+                    value={match.time_period || '오전'}
+                    options={TODAY_FIXTURES_TIME_PERIODS}
+                    onChange={nextValue => updateMatch(index, 'time_period', nextValue)}
+                    ariaLabel={`${index + 1}번째 경기 오전 오후`}
+                  />
+                </label>
+
+                <label className="block min-w-0 space-y-1">
+                  <span className="block text-xs font-bold uppercase" style={{ color: '#687086' }}>time</span>
+                  <input
+                    value={match.kickoff_time}
+                    onChange={event => updateMatch(index, 'kickoff_time', event.target.value)}
+                    placeholder="04:00"
+                    className="h-10 w-full rounded-md px-3 text-sm font-bold outline-none"
+                    style={{ background: '#11141d', color: '#fff', border: '1px solid #283040' }}
+                  />
+                </label>
+
+                <label className="block min-w-0 space-y-1">
+                  <span className="block text-xs font-bold uppercase" style={{ color: '#687086' }}>group</span>
+                  <CompactSelect
+                    value={match.group_label}
+                    options={TODAY_FIXTURES_GROUPS}
+                    onChange={nextValue => updateMatch(index, 'group_label', nextValue)}
+                    ariaLabel={`${index + 1}번째 경기 그룹`}
+                    placeholder="선택"
+                  />
+                </label>
+
                 <button
                   type="button"
                   onClick={() => removeMatch(index)}
                   disabled={value.matches.length <= 1}
-                  className="rounded px-2 py-1 text-xs font-bold disabled:opacity-50"
+                  className="h-10 rounded px-2 text-xs font-bold disabled:opacity-50"
                   style={{ background: '#351111', color: '#ffb0b0', border: '1px solid #5c2424' }}>
                   삭제
                 </button>
               </div>
-              <div className="grid min-w-0 gap-2 md:grid-cols-4">
-                <input value={match.time_period} onChange={event => updateMatch(index, 'time_period', event.target.value)} placeholder="오전" className="rounded-md px-3 py-2 text-sm outline-none" style={{ background: '#11141d', color: '#fff', border: '1px solid #283040' }} />
-                <input value={match.kickoff_time} onChange={event => updateMatch(index, 'kickoff_time', event.target.value)} placeholder="04:00" className="rounded-md px-3 py-2 text-sm outline-none" style={{ background: '#11141d', color: '#fff', border: '1px solid #283040' }} />
-                <input value={match.home_team} onChange={event => updateMatch(index, 'home_team', event.target.value)} placeholder="홈팀" className="rounded-md px-3 py-2 text-sm outline-none" style={{ background: '#11141d', color: '#fff', border: '1px solid #283040' }} />
-                <input value={match.home_code} onChange={event => updateMatch(index, 'home_code', event.target.value)} placeholder="HOME" className="rounded-md px-3 py-2 text-sm uppercase outline-none" style={{ background: '#11141d', color: '#fff', border: '1px solid #283040' }} />
-                <input value={match.away_team} onChange={event => updateMatch(index, 'away_team', event.target.value)} placeholder="원정팀" className="rounded-md px-3 py-2 text-sm outline-none" style={{ background: '#11141d', color: '#fff', border: '1px solid #283040' }} />
-                <input value={match.away_code} onChange={event => updateMatch(index, 'away_code', event.target.value)} placeholder="AWAY" className="rounded-md px-3 py-2 text-sm uppercase outline-none" style={{ background: '#11141d', color: '#fff', border: '1px solid #283040' }} />
-                <input value={match.group_label} onChange={event => updateMatch(index, 'group_label', event.target.value)} placeholder="Group F" className="rounded-md px-3 py-2 text-sm outline-none" style={{ background: '#11141d', color: '#fff', border: '1px solid #283040' }} />
-                <input value={match.venue} onChange={event => updateMatch(index, 'venue', event.target.value)} placeholder="경기장" className="rounded-md px-3 py-2 text-sm outline-none" style={{ background: '#11141d', color: '#fff', border: '1px solid #283040' }} />
+              <div className="mt-2 grid min-w-0 gap-2 sm:grid-cols-2">
+                <label className="block min-w-0 space-y-1">
+                  <span className="block text-xs font-bold uppercase" style={{ color: '#687086' }}>home</span>
+                  <FixtureCountrySelect
+                    value={match.home_code}
+                    onSelect={country => selectMatchCountry(index, 'home', country)}
+                    placeholder="홈 국가 검색"
+                  />
+                </label>
+
+                <label className="block min-w-0 space-y-1">
+                  <span className="block text-xs font-bold uppercase" style={{ color: '#687086' }}>away</span>
+                  <FixtureCountrySelect
+                    value={match.away_code}
+                    onSelect={country => selectMatchCountry(index, 'away', country)}
+                    placeholder="원정 국가 검색"
+                  />
+                </label>
               </div>
+              <label className="mt-2 block min-w-0 space-y-1">
+                <span className="block text-xs font-bold uppercase" style={{ color: '#687086' }}>venue</span>
+                <input
+                  value={match.venue}
+                  onChange={event => updateMatch(index, 'venue', event.target.value)}
+                  placeholder="경기장"
+                  className="h-10 w-full rounded-md px-3 text-sm outline-none"
+                  style={{ background: '#11141d', color: '#fff', border: '1px solid #283040' }}
+                />
+              </label>
             </div>
           ))}
         </div>
@@ -1652,9 +1892,9 @@ function TodayFixturesPreview({ value }) {
                 </div>
                 <div style={{ position: 'absolute', left: 200, top: 33, width: 720, height: 150 }}>
                   <div style={{ position: 'absolute', left: 0, top: 15, width: 225, height: 54, fontSize: 39.8, lineHeight: '48px', fontWeight: 900, textAlign: 'right', whiteSpace: 'nowrap', overflow: 'hidden' }}>{match.home_team}</div>
-                  <div style={{ position: 'absolute', left: 240.61, top: 0, width: 78, height: 78, border: '1px dashed rgba(255,255,255,0.28)', borderRadius: '50%', background: 'linear-gradient(180deg, rgba(255,255,255,0.025), rgba(255,255,255,0)), rgba(255,255,255,0.04)', color: 'rgba(255,255,255,0.72)', fontFamily: '"Bebas Neue", "Pretendard", sans-serif', fontSize: 24.3, lineHeight: '78px', fontWeight: 400, textAlign: 'center', letterSpacing: 0.973, overflow: 'hidden' }}>{match.home_code}</div>
-                  <div style={{ position: 'absolute', left: 336.61, top: 17, width: 54, height: 40, color: 'rgba(255,255,255,0.46)', fontFamily: '"Bebas Neue", "Pretendard", sans-serif', fontSize: 26, lineHeight: '31px', fontWeight: 400, textAlign: 'center' }}>VS</div>
-                  <div style={{ position: 'absolute', left: 378.38, top: 0, width: 78, height: 78, border: '1px dashed rgba(255,255,255,0.28)', borderRadius: '50%', background: 'linear-gradient(180deg, rgba(255,255,255,0.025), rgba(255,255,255,0)), rgba(255,255,255,0.04)', color: 'rgba(255,255,255,0.72)', fontFamily: '"Bebas Neue", "Pretendard", sans-serif', fontSize: 24.3, lineHeight: '78px', fontWeight: 400, textAlign: 'center', letterSpacing: 0.973, overflow: 'hidden' }}>{match.away_code}</div>
+                  <FixtureFlagBadge code={match.home_code} imageUrl={match.home_image_url} style={{ position: 'absolute', left: 240.61, top: 0 }} />
+                  <div style={{ position: 'absolute', left: 321.5, top: 17, width: 54, height: 40, color: 'rgba(255,255,255,0.46)', fontFamily: '"Bebas Neue", "Pretendard", sans-serif', fontSize: 26, lineHeight: '31px', fontWeight: 400, textAlign: 'center' }}>VS</div>
+                  <FixtureFlagBadge code={match.away_code} imageUrl={match.away_image_url} style={{ position: 'absolute', left: 378.38, top: 0 }} />
                   <div style={{ position: 'absolute', left: 472.38, top: 15, width: 225, height: 54, fontSize: 39.8, lineHeight: '48px', fontWeight: 900, whiteSpace: 'nowrap', overflow: 'hidden' }}>{match.away_team}</div>
                   <div style={{ position: 'absolute', left: 0, top: 92, width: 680, height: 25, color: 'rgba(255,255,255,0.46)', fontSize: 21, lineHeight: '25px', fontWeight: 900, whiteSpace: 'nowrap', overflow: 'hidden' }}>
                     {[match.group_label, match.venue].filter(Boolean).join(' · ')}
