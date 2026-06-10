@@ -783,6 +783,12 @@ function fixtureScoreText(match) {
   return homeScore || awayScore ? `${homeScore || '-'}:${awayScore || '-'}` : '-:-';
 }
 
+function fixtureScoreParts(match) {
+  const homeScore = String(match?.home_score ?? '').trim() || '-';
+  const awayScore = String(match?.away_score ?? '').trim() || '-';
+  return [homeScore, awayScore];
+}
+
 function todayFixturesPayload(value, variant = 'fixtures') {
   const scheduleType = getFixtureTypeOption(value.schedule_type, variant);
   const isWeekly = scheduleType.id === 'weekly';
@@ -1941,6 +1947,44 @@ function FixtureFlagBadge({ code, imageUrl, size = 78, style }) {
   );
 }
 
+function FixtureResultScore({ match, variant }) {
+  const [homeScore, awayScore] = fixtureScoreParts(match);
+  const scoreText = fixtureScoreText(match);
+  const isWeekly = variant === 'weekly';
+  const containerStyle = isWeekly
+    ? { position: 'absolute', left: 0, top: 0, width: 936, height: 95, color: '#fff', fontFamily: '"Bebas Neue", "Pretendard", sans-serif', fontWeight: 400, pointerEvents: 'none' }
+    : { position: 'absolute', left: 0, top: 0, width: 720, height: 78, color: '#fff', fontFamily: '"Bebas Neue", "Pretendard", sans-serif', fontWeight: 400, pointerEvents: 'none' };
+  const scorePartStyle = {
+    position: 'absolute',
+    top: isWeekly ? 17 : 0,
+    width: 32,
+    height: 56,
+    fontSize: 56,
+    lineHeight: '56px',
+    letterSpacing: 2.24,
+    whiteSpace: 'nowrap',
+  };
+  const colonStyle = {
+    position: 'absolute',
+    left: isWeekly ? 531.17 : 344.17,
+    top: isWeekly ? 28 : 11,
+    width: 12,
+    height: 34,
+    fontSize: 34,
+    lineHeight: '34px',
+    letterSpacing: 2.24,
+    whiteSpace: 'nowrap',
+  };
+
+  return (
+    <div style={containerStyle} aria-label={scoreText}>
+      <span style={{ ...scorePartStyle, left: isWeekly ? 492.53 : 305.53 }}>{homeScore}</span>
+      <span style={colonStyle}>:</span>
+      <span style={{ ...scorePartStyle, left: isWeekly ? 553.81 : 366.81 }}>{awayScore}</span>
+    </div>
+  );
+}
+
 function TodayFixturesEditor({
   value,
   onChange,
@@ -2712,11 +2756,15 @@ function TodayFixturesPreview({ value, selectedMatchIndex, onSelectMatch, varian
                         <div style={{ width: 84, height: 21, color: 'rgba(255,255,255,0.46)', fontSize: 18, lineHeight: '21px', fontWeight: 900, whiteSpace: 'nowrap', overflow: 'hidden' }}>{match.time_period}</div>
                         <div style={{ marginTop: 4, width: 110, height: 36, fontFamily: '"Bebas Neue", "Pretendard", sans-serif', fontSize: 40, lineHeight: '36px', fontWeight: 400, letterSpacing: 0.8, whiteSpace: 'nowrap', overflow: 'hidden' }}>{match.kickoff_time}</div>
                       </div>
-                      <div style={{ position: 'absolute', left: 286, top: 29, width: 220, height: 37, fontSize: homeFontSize, lineHeight: '37px', fontWeight: 900, letterSpacing: -0.31, textAlign: 'right', whiteSpace: 'nowrap', overflow: 'hidden' }}>{match.home_team}</div>
-                      <FixtureFlagBadge code={match.home_code} imageUrl={match.home_image_url} size={56} style={{ position: 'absolute', left: 522, top: 19.5 }} />
-                      <div style={{ position: 'absolute', left: isResults ? 585.61 : 595.61, top: 32, width: isResults ? 48 : 28, height: 31, display: 'flex', alignItems: 'center', justifyContent: 'center', color: isResults ? '#fff' : 'rgba(255,255,255,0.46)', fontFamily: '"Bebas Neue", "Pretendard", sans-serif', fontSize: isResults ? 44 : 26, lineHeight: 1, fontWeight: 400, letterSpacing: isResults ? 1.2 : 2.08, textAlign: 'center', whiteSpace: 'nowrap' }}>{isResults ? fixtureScoreText(match) : 'VS'}</div>
-                      <FixtureFlagBadge code={match.away_code} imageUrl={match.away_image_url} size={56} style={{ position: 'absolute', left: 637.38, top: 19.5 }} />
-                      <div style={{ position: 'absolute', left: 709.38, top: 29, width: 220, height: 37, fontSize: awayFontSize, lineHeight: '37px', fontWeight: 900, letterSpacing: -0.31, whiteSpace: 'nowrap', overflow: 'hidden' }}>{match.away_team}</div>
+                      <div style={{ position: 'absolute', left: isResults ? 182.73 : 286, top: 29, width: 220, height: 37, fontSize: homeFontSize, lineHeight: '37px', fontWeight: 900, letterSpacing: -0.31, textAlign: 'right', whiteSpace: 'nowrap', overflow: 'hidden' }}>{match.home_team}</div>
+                      <FixtureFlagBadge code={match.home_code} imageUrl={match.home_image_url} size={56} style={{ position: 'absolute', left: isResults ? 418.53 : 522, top: 19.5 }} />
+                      {isResults ? (
+                        <FixtureResultScore match={match} variant="weekly" />
+                      ) : (
+                        <div style={{ position: 'absolute', left: 595.61, top: 32, width: 28, height: 31, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'rgba(255,255,255,0.46)', fontFamily: '"Bebas Neue", "Pretendard", sans-serif', fontSize: 26, lineHeight: 1, fontWeight: 400, letterSpacing: 2.08, textAlign: 'center', whiteSpace: 'nowrap' }}>VS</div>
+                      )}
+                      <FixtureFlagBadge code={match.away_code} imageUrl={match.away_image_url} size={56} style={{ position: 'absolute', left: isResults ? 596.45 : 637.38, top: 19.5 }} />
+                      <div style={{ position: 'absolute', left: isResults ? 668.45 : 709.38, top: 29, width: 220, height: 37, fontSize: awayFontSize, lineHeight: '37px', fontWeight: 900, letterSpacing: -0.31, whiteSpace: 'nowrap', overflow: 'hidden' }}>{match.away_team}</div>
                     </button>
                   );
                   rowTop += 106;
@@ -2738,7 +2786,7 @@ function TodayFixturesPreview({ value, selectedMatchIndex, onSelectMatch, varian
                 style={{
                   position: 'absolute',
                   left: 72,
-                  top: 461.66 + (index * 205),
+                  top: (isResults ? 463.66 : 461.66) + (index * 205),
                   width: 936,
                   height: 183,
                   overflow: 'hidden',
@@ -2757,11 +2805,15 @@ function TodayFixturesPreview({ value, selectedMatchIndex, onSelectMatch, varian
                   <div style={{ width: 170, height: 67, fontFamily: '"Bebas Neue", "Pretendard", sans-serif', fontSize: 56, lineHeight: '50.4px', fontWeight: 400, letterSpacing: 1.12, whiteSpace: 'nowrap', overflow: 'hidden' }}>{match.kickoff_time}</div>
                 </div>
                 <div style={{ position: 'absolute', left: 200, top: 33, width: 720, height: 150 }}>
-                  <div style={{ position: 'absolute', left: 0, top: 15, width: 225, height: 54, fontSize: homeFontSize, lineHeight: '48px', fontWeight: 900, textAlign: 'right', whiteSpace: 'nowrap', overflow: 'hidden' }}>{match.home_team}</div>
-                  <FixtureFlagBadge code={match.home_code} imageUrl={match.home_image_url} style={{ position: 'absolute', left: 240.61, top: 0 }} />
-                  <div style={{ position: 'absolute', left: isResults ? 310.5 : 321.5, top: 0, width: isResults ? 76 : 54, height: 78, display: 'flex', alignItems: 'center', justifyContent: 'center', color: isResults ? '#fff' : 'rgba(255,255,255,0.46)', fontFamily: '"Bebas Neue", "Pretendard", sans-serif', fontSize: isResults ? 56 : 26, lineHeight: 1, fontWeight: 400, letterSpacing: isResults ? 1.2 : 0, textAlign: 'center', whiteSpace: 'nowrap' }}>{isResults ? fixtureScoreText(match) : 'VS'}</div>
-                  <FixtureFlagBadge code={match.away_code} imageUrl={match.away_image_url} style={{ position: 'absolute', left: 378.38, top: 0 }} />
-                  <div style={{ position: 'absolute', left: 472.38, top: 15, width: 225, height: 54, fontSize: awayFontSize, lineHeight: '48px', fontWeight: 900, whiteSpace: 'nowrap', overflow: 'hidden' }}>{match.away_team}</div>
+                  <div style={{ position: 'absolute', left: isResults ? -31.27 : 0, top: 15, width: 225, height: 54, fontSize: homeFontSize, lineHeight: '48px', fontWeight: 900, textAlign: 'right', whiteSpace: 'nowrap', overflow: 'hidden' }}>{match.home_team}</div>
+                  <FixtureFlagBadge code={match.home_code} imageUrl={match.home_image_url} style={{ position: 'absolute', left: isResults ? 209.53 : 240.61, top: 0 }} />
+                  {isResults ? (
+                    <FixtureResultScore match={match} variant="today" />
+                  ) : (
+                    <div style={{ position: 'absolute', left: 321.5, top: 0, width: 54, height: 78, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'rgba(255,255,255,0.46)', fontFamily: '"Bebas Neue", "Pretendard", sans-serif', fontSize: 26, lineHeight: 1, fontWeight: 400, letterSpacing: 0, textAlign: 'center', whiteSpace: 'nowrap' }}>VS</div>
+                  )}
+                  <FixtureFlagBadge code={match.away_code} imageUrl={match.away_image_url} style={{ position: 'absolute', left: isResults ? 409.45 : 378.38, top: 0 }} />
+                  <div style={{ position: 'absolute', left: isResults ? 503.45 : 472.38, top: 15, width: 225, height: 54, fontSize: awayFontSize, lineHeight: '48px', fontWeight: 900, whiteSpace: 'nowrap', overflow: 'hidden' }}>{match.away_team}</div>
                   <div style={{ position: 'absolute', left: 0, top: 92, width: 680, height: 25, color: 'rgba(255,255,255,0.46)', fontSize: 21, lineHeight: '25px', fontWeight: 900, whiteSpace: 'nowrap', overflow: 'hidden' }}>
                     {[match.group_label, match.venue].filter(Boolean).join(' · ')}
                   </div>
