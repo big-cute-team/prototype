@@ -419,6 +419,7 @@ function formatRenderTimingDetails(timings) {
     ['browser', timings.browser_launch_ms],
     ['image', timings.image_wait_ms],
     ['shot', timings.screenshot_ms],
+    ['fastshot', timings.screenshot_fast_ms],
     ['zip', timings.zip_write_ms],
   ];
   return fields
