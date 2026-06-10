@@ -15,6 +15,10 @@ const TODAY_FIXTURES_TIME_PERIODS = ['오전', '오후'];
 const TODAY_FIXTURES_GROUPS = Array.from({ length: 8 }, (_, index) => `Group ${String.fromCharCode(65 + index)}`);
 const EPL_MATCHWEEK_OPTIONS = Array.from({ length: 38 }, (_, index) => `Matchweek ${index + 1}`);
 const UCL_ROUND_OPTIONS = ['League Phase', 'Round of 16', 'Quarter-final', 'Semi-final', 'Final'];
+const TODAY_FIXTURES_TITLE_PRESETS = [
+  { id: 'today', label: '오늘의 경기 일정', title: '오늘의\n경기 일정' },
+  { id: 'weekly', label: '이번주 경기 일정', title: '이번주\n경기 일정' },
+];
 const TODAY_FIXTURES_PRESETS = [
   {
     id: 'world_cup',
@@ -43,7 +47,7 @@ const TODAY_FIXTURES_PRESETS = [
 ];
 const CARD_WORKSPACE_MODES = [
   { id: ARTICLE_CARD_MODE, label: '기사 기반' },
-  { id: TODAY_FIXTURES_MODE, label: '오늘의 경기 일정' },
+  { id: TODAY_FIXTURES_MODE, label: '경기 일정' },
 ];
 const STATUS_OPTIONS = ['review', 'published', 'discarded', 'rejected', 'all'];
 const ADMIN_TAB_OPTIONS = [...STATUS_OPTIONS, CARD_NEWS_TAB, GENERATED_CARD_NEWS_TAB];
@@ -633,6 +637,10 @@ function todayFixturesValidationIssues(payload) {
 
 function validateTodayFixturesPayload(payload) {
   return todayFixturesValidationIssues(payload)[0]?.message || '';
+}
+
+function scheduleTitleForPayload(payload) {
+  return compactText(String(payload.title || '').replace(/\s+/g, ' '), 48, '경기 일정');
 }
 
 function Metric({ label, value, warn }) {
@@ -1702,12 +1710,17 @@ function TodayFixturesEditor({
       ...value,
       preset_id: preset.id,
       eyebrow: preset.eyebrow,
-      title: preset.title,
+      title: value.title || preset.title,
       matches: value.matches.map(match => ({
         ...match,
         group_label: preset.groupOptions.includes(match.group_label) ? match.group_label : preset.defaultGroupLabel,
       })),
     });
+  };
+  const applyTitlePreset = titlePresetId => {
+    const titlePreset = TODAY_FIXTURES_TITLE_PRESETS.find(preset => preset.id === titlePresetId);
+    if (!titlePreset) return;
+    onChange({ ...value, title: titlePreset.title });
   };
   const updateMatch = (index, name, nextValue) => {
     const matches = value.matches.map((match, matchIndex) => (
@@ -1769,7 +1782,7 @@ function TodayFixturesEditor({
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <div>
           <div className="text-xs font-bold uppercase" style={{ color: '#687086' }}>manual template</div>
-          <div className="mt-1 text-sm font-bold text-white">오늘의 경기 일정</div>
+          <div className="mt-1 text-sm font-bold text-white">경기 일정</div>
         </div>
         <button
           type="button"
@@ -1789,6 +1802,40 @@ function TodayFixturesEditor({
             optionLabels={Object.fromEntries(TODAY_FIXTURES_PRESETS.map(preset => [preset.id, preset.label]))}
             onChange={applyPreset}
             ariaLabel="경기 일정 프리셋"
+          />
+        </label>
+        <div className="grid min-w-0 gap-2 md:grid-cols-[minmax(0,1fr)_180px]">
+          <label className="block min-w-0">
+            <span className="mb-1 block text-xs font-bold uppercase" style={{ color: '#687086' }}>top label</span>
+            <input
+              value={value.eyebrow || ''}
+              onChange={event => onChange({ ...value, eyebrow: event.target.value })}
+              placeholder="WORLD CUP 2026 · TODAY"
+              className="h-10 w-full rounded-md px-3 text-sm font-bold outline-none"
+              style={{ background: '#11141d', color: '#fff', border: '1px solid #283040' }}
+            />
+          </label>
+          <label className="block min-w-0">
+            <span className="mb-1 block text-xs font-bold uppercase" style={{ color: '#687086' }}>title preset</span>
+            <CompactSelect
+              value=""
+              options={TODAY_FIXTURES_TITLE_PRESETS.map(preset => preset.id)}
+              optionLabels={Object.fromEntries(TODAY_FIXTURES_TITLE_PRESETS.map(preset => [preset.id, preset.label]))}
+              onChange={applyTitlePreset}
+              ariaLabel="일정 제목 프리셋"
+              placeholder="직접 입력"
+            />
+          </label>
+        </div>
+        <label className="block min-w-0">
+          <span className="mb-1 block text-xs font-bold uppercase" style={{ color: '#687086' }}>title</span>
+          <textarea
+            value={value.title || ''}
+            onChange={event => onChange({ ...value, title: event.target.value })}
+            rows={2}
+            placeholder={'오늘의\n경기 일정'}
+            className="w-full resize-none rounded-md px-3 py-2 text-sm font-black leading-5 outline-none"
+            style={{ background: '#11141d', color: '#fff', border: '1px solid #283040' }}
           />
         </label>
         <div className="grid min-w-0 gap-2 sm:grid-cols-[180px_minmax(0,1fr)]">
@@ -1946,7 +1993,7 @@ function TodayFixturesEditor({
           disabled={disabled || rendering}
           className="w-full rounded-md px-4 py-3 text-sm font-black disabled:opacity-50"
           style={{ background: '#21c17a', color: '#03130c' }}>
-          {rendering ? '업로드 중' : '오늘의 경기 일정 업로드'}
+          {rendering ? '업로드 중' : '경기 일정 업로드'}
         </button>
       </div>
     </section>
@@ -1999,7 +2046,7 @@ function TodayFixturesPreview({ value, selectedMatchIndex, onSelectMatch }) {
       <div className="mb-4 flex items-center justify-between gap-3">
         <div>
           <div className="text-xs font-bold uppercase" style={{ color: '#687086' }}>Live preview</div>
-          <div className="mt-1 text-sm font-bold text-white">오늘의 경기 일정</div>
+          <div className="mt-1 text-sm font-bold text-white">경기 일정</div>
         </div>
         <div className="flex items-center gap-2">
           {fixturePages.length > 1 && (
@@ -2045,6 +2092,13 @@ function TodayFixturesPreview({ value, selectedMatchIndex, onSelectMatch }) {
               alt=""
               style={{ position: 'absolute', inset: 0, width: CARD_PREVIEW_WIDTH, height: CARD_PREVIEW_HEIGHT, display: 'block' }}
             />
+            <div style={{ position: 'absolute', left: 92, top: 91, width: 420, height: 30, display: 'flex', alignItems: 'center', gap: 14, color: '#fff', fontFamily: '"Bebas Neue", "Pretendard", sans-serif', fontSize: 27, lineHeight: '30px', fontWeight: 400, letterSpacing: 7, whiteSpace: 'nowrap', overflow: 'hidden' }}>
+              <span style={{ width: 7, height: 7, borderRadius: '50%', background: '#35d48a', flex: '0 0 auto' }} />
+              <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{payload.eyebrow}</span>
+            </div>
+            <div style={{ position: 'absolute', left: 72, top: 165, width: 470, height: 190, color: '#fff', fontSize: 78, lineHeight: '1.13', fontWeight: 900, letterSpacing: 0, whiteSpace: 'pre-line', wordBreak: 'keep-all', overflow: 'hidden' }}>
+              {payload.title}
+            </div>
             <div style={{ position: 'absolute', left: 72, top: 383.66, width: 360, height: 38, color: 'rgba(255,255,255,0.72)', fontSize: 31.1, lineHeight: '38px', fontWeight: 900, whiteSpace: 'nowrap', overflow: 'hidden' }}>
               {payload.date_label}
             </div>
@@ -2546,13 +2600,14 @@ function CardNewsWorkspace({ headers, adminToken, seedItem, onNotify }) {
     setLocalMessage('');
     setShowTodayFixturesValidation(false);
     const jobId = renderJobId();
+    const scheduleTitle = scheduleTitleForPayload(payload);
     const filename = `cardnews-today-fixtures-${payload.date_label.replace(/\s+/g, '-')}.zip`;
     const startedAt = Date.now();
     setRenderNow(startedAt);
     setRenderJobs(prev => [{
       id: jobId,
       status: 'running',
-      title: `${payload.date_label} 오늘의 경기 일정`,
+      title: `${payload.date_label} ${scheduleTitle}`,
       filename,
       startedAt,
       phase: '템플릿 카드 생성 요청 중',
@@ -2572,7 +2627,7 @@ function CardNewsWorkspace({ headers, adminToken, seedItem, onNotify }) {
 
       if (!response.ok) {
         const data = await readJsonResponse(response);
-        throw new Error(data.error || '오늘의 경기 일정 카드 생성에 실패했습니다.');
+        throw new Error(data.error || '경기 일정 카드 생성에 실패했습니다.');
       }
 
       updateRenderJob(jobId, { phase: 'ZIP 다운로드 준비 중' });
@@ -2692,7 +2747,7 @@ function CardNewsWorkspace({ headers, adminToken, seedItem, onNotify }) {
     setShowTodayFixturesValidation(false);
     const jobId = renderJobId();
     const filename = `cardnews-today-fixtures-${payload.date_label.replace(/\s+/g, '-')}.zip`;
-    const title = `${payload.date_label} 오늘의 경기 일정`;
+    const title = `${payload.date_label} ${scheduleTitleForPayload(payload)}`;
     const startedAt = Date.now();
     setRenderNow(startedAt);
     setRenderJobs(prev => [{
