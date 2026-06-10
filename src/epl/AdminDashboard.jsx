@@ -1956,7 +1956,7 @@ function FixtureResultScore({ match, variant }) {
     : { position: 'absolute', left: 0, top: 0, width: 720, height: 78, color: '#fff', fontFamily: '"Bebas Neue", "Pretendard", sans-serif', fontWeight: 400, pointerEvents: 'none' };
   const scorePartStyle = {
     position: 'absolute',
-    top: isWeekly ? 17 : 0,
+    top: isWeekly ? 17 : 11,
     width: 32,
     height: 56,
     fontSize: 56,
@@ -1967,7 +1967,7 @@ function FixtureResultScore({ match, variant }) {
   const colonStyle = {
     position: 'absolute',
     left: isWeekly ? 531.17 : 344.17,
-    top: isWeekly ? 28 : 11,
+    top: isWeekly ? 28 : 22,
     width: 12,
     height: 34,
     fontSize: 34,
