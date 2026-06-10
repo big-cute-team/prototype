@@ -420,13 +420,24 @@ function formatRenderTimingDetails(timings) {
     ['image', timings.image_wait_ms],
     ['shot', timings.screenshot_ms],
     ['fastshot', timings.screenshot_fast_ms],
+    ['cdpshot', timings.screenshot_cdp_ms],
+    ['pwshot', timings.screenshot_playwright_ms],
+    ['cdp', timings.cdp_session_ms],
     ['zip', timings.zip_write_ms],
   ];
-  return fields
+  const parts = fields
     .map(([label, value]) => [label, Number(value)])
     .filter(([, value]) => Number.isFinite(value) && value >= 0)
-    .map(([label, value]) => `${label} ${(value / 1000).toFixed(1)}s`)
-    .join(' · ');
+    .map(([label, value]) => `${label} ${(value / 1000).toFixed(1)}s`);
+  const flags = [
+    ['fastfallback', timings.screenshot_fast_fallback],
+    ['cdpfallback', timings.screenshot_cdp_fallback],
+    ['cdpfail', timings.cdp_session_failed],
+  ]
+    .map(([label, value]) => [label, Number(value)])
+    .filter(([, value]) => Number.isFinite(value) && value > 0)
+    .map(([label, value]) => `${label} ${value}`);
+  return [...parts, ...flags].join(' · ');
 }
 
 function renderJobId() {
