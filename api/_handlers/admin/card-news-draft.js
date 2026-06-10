@@ -1,13 +1,13 @@
-const { requireToken } = require('../_lib/auth');
-const { recordAudit } = require('../_lib/audit');
+const { requireToken } = require('../../_lib/auth');
+const { recordAudit } = require('../../_lib/audit');
 const {
   cardDraftPayloadFor,
   cardRenderAuthHeaders,
   cardRenderUrl,
   loadPublishedItem,
   readCardRenderError,
-} = require('../_lib/card-news');
-const { handleError, json, parseJsonBody } = require('../_lib/http');
+} = require('../../_lib/card-news');
+const { handleError, json, parseJsonBody } = require('../../_lib/http');
 
 async function requestCardDraft(item) {
   const response = await fetch(cardRenderUrl('/card/draft'), {

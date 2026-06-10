@@ -1,7 +1,7 @@
-const { requireToken } = require('../_lib/auth');
-const { recordAudit } = require('../_lib/audit');
-const { handleError, json, parseJsonBody } = require('../_lib/http');
-const { eq, patch, select } = require('../_lib/supabase');
+const { requireToken } = require('../../_lib/auth');
+const { recordAudit } = require('../../_lib/audit');
+const { handleError, json, parseJsonBody } = require('../../_lib/http');
+const { eq, patch, select } = require('../../_lib/supabase');
 
 async function loadItem(id) {
   const rows = await select('content_items', `select=*&${eq('id', id)}&limit=1`);

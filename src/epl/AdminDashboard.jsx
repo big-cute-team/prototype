@@ -1,8 +1,21 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 
+import todayFixturesTemplateUrl from './assets/today-fixtures-template.png';
+
 const CARD_NEWS_TAB = 'card_news_workspace';
+const GENERATED_CARD_NEWS_TAB = 'generated_card_news';
+const ARTICLE_CARD_MODE = 'article';
+const TODAY_FIXTURES_MODE = 'today_fixtures';
+const ARTICLE_CARD_TEMPLATE_ID = 'plick_transfer_v1';
+const TODAY_FIXTURES_TEMPLATE_ID = 'plick_today_fixtures_v1';
+const TODAY_FIXTURES_MATCHES_PER_PAGE = 4;
+const TODAY_FIXTURES_MAX_MATCHES = 40;
+const CARD_WORKSPACE_MODES = [
+  { id: ARTICLE_CARD_MODE, label: '기사 기반' },
+  { id: TODAY_FIXTURES_MODE, label: '오늘의 경기 일정' },
+];
 const STATUS_OPTIONS = ['review', 'published', 'discarded', 'rejected', 'all'];
-const ADMIN_TAB_OPTIONS = [...STATUS_OPTIONS, CARD_NEWS_TAB];
+const ADMIN_TAB_OPTIONS = [...STATUS_OPTIONS, CARD_NEWS_TAB, GENERATED_CARD_NEWS_TAB];
 const BRIEFING_STATUS_OPTIONS = ['OFFICIAL', 'CONFIRMED', 'UPDATE', 'RUMOUR', 'DENIED'];
 const TEAM_OPTIONS = ['ARS', 'CHE', 'LIV', 'MCI', 'MUN', 'TOT'];
 const DEFAULT_SUBJECT_COLOR = '#FFFFFF';
@@ -37,6 +50,53 @@ const CARD_DETAIL_STACK_CENTER =
 const CARD_DETAIL_EDITOR_MAX_WIDTH = CARD_DETAIL_TEXT_WIDTH * (CARD_PREVIEW_MAX_WIDTH / CARD_PREVIEW_WIDTH);
 const CARD_WORKSPACE_TEXTAREA_HEIGHT = 300;
 const CARD_WORKSPACE_EDITOR_MAX_WIDTH = CARD_DETAIL_EDITOR_MAX_WIDTH;
+const DEFAULT_TODAY_FIXTURES = {
+  eyebrow: 'WORLD CUP 2026 · TODAY',
+  title: '오늘의\n경기 일정',
+  date_label: '6월 12일 (금)',
+  matches: [
+    {
+      time_period: '오전',
+      kickoff_time: '04:00',
+      home_team: '브라질',
+      home_code: 'BRA',
+      away_team: '세네갈',
+      away_code: 'SEN',
+      group_label: 'Group F',
+      venue: '마이애미 · 하드록 스타디움',
+    },
+    {
+      time_period: '오전',
+      kickoff_time: '08:00',
+      home_team: '프랑스',
+      home_code: 'FRA',
+      away_team: '크로아티아',
+      away_code: 'CRO',
+      group_label: 'Group H',
+      venue: '뉴욕 · 메트라이프 스타디움',
+    },
+    {
+      time_period: '오후',
+      kickoff_time: '11:00',
+      home_team: '캐나다',
+      home_code: 'CAN',
+      away_team: '일본',
+      away_code: 'JPN',
+      group_label: 'Group B',
+      venue: '토론토 · BMO 필드',
+    },
+    {
+      time_period: '오후',
+      kickoff_time: '14:00',
+      home_team: '포르투갈',
+      home_code: 'POR',
+      away_team: '모로코',
+      away_code: 'MAR',
+      group_label: 'Group C',
+      venue: 'LA · 소파이 스타디움',
+    },
+  ],
+};
 const STATUS_LABELS = {
   review: '검수',
   published: '발행',
@@ -340,8 +400,157 @@ function formatDuration(startedAt, now = Date.now()) {
   return `${minutes}:${String(seconds).padStart(2, '0')}`;
 }
 
+function formatRenderTimings(timings) {
+  if (!timings || typeof timings !== 'object') return '';
+  const total = Number(timings.total_ms);
+  const render = Number(timings.render_pages_ms);
+  const upload = Number(timings.upload_pages_ms || 0) + Number(timings.upload_zip_ms || 0);
+  const parts = [];
+  if (Number.isFinite(total) && total > 0) parts.push(`total ${(total / 1000).toFixed(1)}s`);
+  if (Number.isFinite(render) && render >= 0) parts.push(`render ${(render / 1000).toFixed(1)}s`);
+  if (Number.isFinite(upload) && upload >= 0) parts.push(`upload ${(upload / 1000).toFixed(1)}s`);
+  return parts.join(' · ');
+}
+
+function formatRenderTimingDetails(timings) {
+  if (!timings || typeof timings !== 'object') return '';
+  const fields = [
+    ['prefetch', timings.image_prefetch_ms],
+    ['browser', timings.browser_launch_ms],
+    ['image', timings.image_wait_ms],
+    ['shot', timings.screenshot_ms],
+    ['fastshot', timings.screenshot_fast_ms],
+    ['cdpshot', timings.screenshot_cdp_ms],
+    ['pwshot', timings.screenshot_playwright_ms],
+    ['cdp', timings.cdp_session_ms],
+    ['zip', timings.zip_write_ms],
+  ];
+  const parts = fields
+    .map(([label, value]) => [label, Number(value)])
+    .filter(([, value]) => Number.isFinite(value) && value >= 0)
+    .map(([label, value]) => `${label} ${(value / 1000).toFixed(1)}s`);
+  const flags = [
+    ['fastfallback', timings.screenshot_fast_fallback],
+    ['cdpfallback', timings.screenshot_cdp_fallback],
+    ['cdpfail', timings.cdp_session_failed],
+  ]
+    .map(([label, value]) => [label, Number(value)])
+    .filter(([, value]) => Number.isFinite(value) && value > 0)
+    .map(([label, value]) => `${label} ${value}`);
+  return [...parts, ...flags].join(' · ');
+}
+
 function renderJobId() {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function publicationUploadFilename(publication) {
+  if (publication?.source_payload?.filename) return publication.source_payload.filename;
+  if (publication?.zip_url) {
+    try {
+      const name = decodeURIComponent(new URL(publication.zip_url).pathname.split('/').filter(Boolean).pop() || '');
+      if (name) return name;
+    } catch {
+      // Ignore malformed stored URLs and fall through to a stable fallback.
+    }
+  }
+  return `cardnews-${publication?.id || 'upload'}.zip`;
+}
+
+function publicationToRenderJob(publication) {
+  const status = publication?.status === 'failed'
+    ? 'error'
+    : publication?.status === 'completed'
+      ? 'success'
+      : 'running';
+  const startedAt = publication?.created_at ? Date.parse(publication.created_at) : Date.now();
+  const finishedAt = publication?.completed_at ? Date.parse(publication.completed_at) : null;
+  return {
+    id: `publication-${publication.id}`,
+    publicationBacked: true,
+    publicationId: publication.id,
+    status,
+    title: publication.title || 'Card news',
+    filename: publicationUploadFilename(publication),
+    startedAt: Number.isFinite(startedAt) ? startedAt : Date.now(),
+    finishedAt: Number.isFinite(finishedAt) ? finishedAt : null,
+    phase: status === 'running'
+      ? (publication.status === 'zip_pending' ? 'Images ready · ZIP preparing' : `R2 upload ${publication.status || 'running'}`)
+      : status === 'success'
+        ? 'R2 upload completed'
+        : 'R2 upload failed',
+    zipUrl: publication.zip_url || null,
+    error: publication.error_message || null,
+    timings: publication.source_payload?.render_timings_ms || null,
+  };
+}
+
+function isPublicationRunning(status) {
+  return ['pending', 'queued', 'running', 'zip_pending'].includes(String(status || ''));
+}
+
+function publicationStatusTone(status) {
+  if (status === 'completed') return '#48d99a';
+  if (status === 'failed') return '#ff8f8f';
+  return '#ffd166';
+}
+
+function cloneTodayFixturesDefaults() {
+  return {
+    ...DEFAULT_TODAY_FIXTURES,
+    matches: DEFAULT_TODAY_FIXTURES.matches.map(match => ({ ...match })),
+  };
+}
+
+function emptyTodayFixtureMatch() {
+  return {
+    time_period: '오전',
+    kickoff_time: '',
+    home_team: '',
+    home_code: '',
+    away_team: '',
+    away_code: '',
+    group_label: '',
+    venue: '',
+  };
+}
+
+function chunkItems(items, size) {
+  const chunks = [];
+  for (let index = 0; index < items.length; index += size) {
+    chunks.push(items.slice(index, index + size));
+  }
+  return chunks.length > 0 ? chunks : [[]];
+}
+
+function todayFixturesPayload(value) {
+  return {
+    eyebrow: String(value.eyebrow || '').trim(),
+    title: String(value.title || '').replace(/\r\n/g, '\n').replace(/\r/g, '\n').trim(),
+    date_label: String(value.date_label || '').trim(),
+    matches: (value.matches || []).map(match => ({
+      time_period: String(match.time_period || '').trim(),
+      kickoff_time: String(match.kickoff_time || '').trim(),
+      home_team: String(match.home_team || '').trim(),
+      home_code: String(match.home_code || '').trim().toUpperCase(),
+      away_team: String(match.away_team || '').trim(),
+      away_code: String(match.away_code || '').trim().toUpperCase(),
+      group_label: String(match.group_label || '').trim(),
+      venue: String(match.venue || '').trim(),
+    })),
+  };
+}
+
+function validateTodayFixturesPayload(payload) {
+  if (!payload.date_label) return '날짜를 입력해주세요.';
+  if (payload.matches.length < 1 || payload.matches.length > TODAY_FIXTURES_MAX_MATCHES) return `경기는 1개 이상 ${TODAY_FIXTURES_MAX_MATCHES}개 이하로 입력해주세요.`;
+  const requiredKeys = ['kickoff_time', 'home_team', 'home_code', 'away_team', 'away_code'];
+  for (let index = 0; index < payload.matches.length; index += 1) {
+    const match = payload.matches[index];
+    const missing = requiredKeys.find(key => !match[key]);
+    if (missing) return `${index + 1}번째 경기의 필수 정보를 입력해주세요.`;
+  }
+  return '';
 }
 
 function Metric({ label, value, warn }) {
@@ -1249,7 +1458,219 @@ function CardNewsPreview({ fields, imageSource }) {
   );
 }
 
+function TodayFixturesEditor({ value, onChange, onRender, disabled, rendering }) {
+  const updateField = (name, nextValue) => onChange({ ...value, [name]: nextValue });
+  const updateMatch = (index, name, nextValue) => {
+    const matches = value.matches.map((match, matchIndex) => (
+      matchIndex === index ? { ...match, [name]: nextValue } : match
+    ));
+    onChange({ ...value, matches });
+  };
+  const addMatch = () => {
+    if (value.matches.length >= TODAY_FIXTURES_MAX_MATCHES) return;
+    onChange({ ...value, matches: [...value.matches, emptyTodayFixtureMatch()] });
+  };
+  const removeMatch = index => {
+    if (value.matches.length <= 1) return;
+    onChange({ ...value, matches: value.matches.filter((_, matchIndex) => matchIndex !== index) });
+  };
+
+  return (
+    <section className="min-w-0 rounded-md p-4" style={{ background: '#0b0d14', border: '1px solid #202635' }}>
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <div className="text-xs font-bold uppercase" style={{ color: '#687086' }}>manual template</div>
+          <div className="mt-1 text-sm font-bold text-white">오늘의 경기 일정</div>
+        </div>
+        <button
+          type="button"
+          onClick={() => onChange(cloneTodayFixturesDefaults())}
+          className="rounded-md px-3 py-2 text-xs font-bold"
+          style={{ background: '#171923', color: '#cbd3e8', border: '1px solid #2a3040' }}>
+          샘플 복원
+        </button>
+      </div>
+
+      <div className="space-y-3">
+        <label className="block min-w-0">
+          <span className="mb-1 block text-xs font-bold uppercase" style={{ color: '#687086' }}>date label</span>
+          <input
+            value={value.date_label}
+            onChange={event => updateField('date_label', event.target.value)}
+            className="w-full rounded-md px-3 py-2 text-sm outline-none"
+            style={{ background: '#11141d', color: '#fff', border: '1px solid #283040' }}
+          />
+        </label>
+
+        <div className="space-y-3">
+          <div className="flex items-center justify-between gap-3">
+            <span className="text-xs font-bold uppercase" style={{ color: '#687086' }}>matches</span>
+            <button
+              type="button"
+              onClick={addMatch}
+              disabled={value.matches.length >= TODAY_FIXTURES_MAX_MATCHES}
+              className="rounded px-2 py-1 text-xs font-bold disabled:opacity-50"
+              style={{ background: '#171923', color: '#cbd3e8', border: '1px solid #2a3040' }}>
+              경기 추가
+            </button>
+          </div>
+
+          {value.matches.map((match, index) => (
+            <div key={index} className="rounded-md p-3" style={{ background: '#080a10', border: '1px solid #202635' }}>
+              <div className="mb-3 flex items-center justify-between gap-3">
+                <div className="text-sm font-black text-white">{index + 1}번째 경기</div>
+                <button
+                  type="button"
+                  onClick={() => removeMatch(index)}
+                  disabled={value.matches.length <= 1}
+                  className="rounded px-2 py-1 text-xs font-bold disabled:opacity-50"
+                  style={{ background: '#351111', color: '#ffb0b0', border: '1px solid #5c2424' }}>
+                  삭제
+                </button>
+              </div>
+              <div className="grid min-w-0 gap-2 md:grid-cols-4">
+                <input value={match.time_period} onChange={event => updateMatch(index, 'time_period', event.target.value)} placeholder="오전" className="rounded-md px-3 py-2 text-sm outline-none" style={{ background: '#11141d', color: '#fff', border: '1px solid #283040' }} />
+                <input value={match.kickoff_time} onChange={event => updateMatch(index, 'kickoff_time', event.target.value)} placeholder="04:00" className="rounded-md px-3 py-2 text-sm outline-none" style={{ background: '#11141d', color: '#fff', border: '1px solid #283040' }} />
+                <input value={match.home_team} onChange={event => updateMatch(index, 'home_team', event.target.value)} placeholder="홈팀" className="rounded-md px-3 py-2 text-sm outline-none" style={{ background: '#11141d', color: '#fff', border: '1px solid #283040' }} />
+                <input value={match.home_code} onChange={event => updateMatch(index, 'home_code', event.target.value)} placeholder="HOME" className="rounded-md px-3 py-2 text-sm uppercase outline-none" style={{ background: '#11141d', color: '#fff', border: '1px solid #283040' }} />
+                <input value={match.away_team} onChange={event => updateMatch(index, 'away_team', event.target.value)} placeholder="원정팀" className="rounded-md px-3 py-2 text-sm outline-none" style={{ background: '#11141d', color: '#fff', border: '1px solid #283040' }} />
+                <input value={match.away_code} onChange={event => updateMatch(index, 'away_code', event.target.value)} placeholder="AWAY" className="rounded-md px-3 py-2 text-sm uppercase outline-none" style={{ background: '#11141d', color: '#fff', border: '1px solid #283040' }} />
+                <input value={match.group_label} onChange={event => updateMatch(index, 'group_label', event.target.value)} placeholder="Group F" className="rounded-md px-3 py-2 text-sm outline-none" style={{ background: '#11141d', color: '#fff', border: '1px solid #283040' }} />
+                <input value={match.venue} onChange={event => updateMatch(index, 'venue', event.target.value)} placeholder="경기장" className="rounded-md px-3 py-2 text-sm outline-none" style={{ background: '#11141d', color: '#fff', border: '1px solid #283040' }} />
+              </div>
+            </div>
+          ))}
+        </div>
+
+        <button
+          type="button"
+          onClick={onRender}
+          disabled={disabled || rendering}
+          className="w-full rounded-md px-4 py-3 text-sm font-black disabled:opacity-50"
+          style={{ background: '#21c17a', color: '#03130c' }}>
+          {rendering ? '업로드 중' : '오늘의 경기 일정 업로드'}
+        </button>
+      </div>
+    </section>
+  );
+}
+
+function TodayFixturesPreview({ value }) {
+  const wrapperRef = useRef(null);
+  const [previewWidth, setPreviewWidth] = useState(360);
+  const [pageIndex, setPageIndex] = useState(0);
+  const scale = previewWidth / CARD_PREVIEW_WIDTH;
+
+  useEffect(() => {
+    const node = wrapperRef.current;
+    if (!node) return undefined;
+    const updateWidth = width => {
+      if (width > 0) setPreviewWidth(Math.min(width, CARD_PREVIEW_MAX_WIDTH));
+    };
+    updateWidth(node.getBoundingClientRect().width);
+    if (typeof ResizeObserver === 'undefined') {
+      const onResize = () => updateWidth(node.getBoundingClientRect().width);
+      window.addEventListener('resize', onResize);
+      return () => window.removeEventListener('resize', onResize);
+    }
+    const observer = new ResizeObserver(entries => {
+      const nextWidth = entries[0]?.contentRect?.width;
+      updateWidth(nextWidth || node.getBoundingClientRect().width);
+    });
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, []);
+
+  const payload = todayFixturesPayload(value);
+  const fixturePages = chunkItems(payload.matches, TODAY_FIXTURES_MATCHES_PER_PAGE);
+  const activePageIndex = Math.min(pageIndex, fixturePages.length - 1);
+  const activeMatches = fixturePages[activePageIndex] || [];
+
+  useEffect(() => {
+    setPageIndex(current => Math.min(current, fixturePages.length - 1));
+  }, [fixturePages.length]);
+
+  return (
+    <aside className="min-w-0 rounded-md p-4" style={{ background: '#0b0d14', border: '1px solid #202635' }}>
+      <div className="mb-4 flex items-center justify-between gap-3">
+        <div>
+          <div className="text-xs font-bold uppercase" style={{ color: '#687086' }}>Live preview</div>
+          <div className="mt-1 text-sm font-bold text-white">오늘의 경기 일정</div>
+        </div>
+        <div className="flex items-center gap-2">
+          {fixturePages.length > 1 && (
+            <div className="flex items-center gap-1">
+              {fixturePages.map((_, index) => (
+                <button
+                  key={`fixture-page-${index + 1}`}
+                  type="button"
+                  onClick={() => setPageIndex(index)}
+                  className="h-7 min-w-7 rounded-md px-2 text-xs font-black transition"
+                  style={{
+                    background: index === activePageIndex ? '#f8fafc' : '#151b27',
+                    color: index === activePageIndex ? '#0b0d14' : '#b8c0d4',
+                    border: '1px solid #2b3447',
+                  }}
+                >
+                  {index + 1}
+                </button>
+              ))}
+            </div>
+          )}
+          <Badge tone="warn">4:5</Badge>
+        </div>
+      </div>
+      <div ref={wrapperRef} className="mx-auto w-full" style={{ maxWidth: CARD_PREVIEW_MAX_WIDTH }}>
+        <div style={{ position: 'relative', width: '100%', height: CARD_PREVIEW_HEIGHT * scale }}>
+          <div
+            style={{
+              position: 'absolute',
+              left: 0,
+              top: 0,
+              width: CARD_PREVIEW_WIDTH,
+              height: CARD_PREVIEW_HEIGHT,
+              transform: `scale(${scale})`,
+              transformOrigin: 'top left',
+              overflow: 'hidden',
+              color: '#fff',
+              background: '#06090f',
+              fontFamily: '"Pretendard", "Malgun Gothic", "Apple SD Gothic Neo", sans-serif',
+            }}>
+            <img
+              src={todayFixturesTemplateUrl}
+              alt=""
+              style={{ position: 'absolute', inset: 0, width: CARD_PREVIEW_WIDTH, height: CARD_PREVIEW_HEIGHT, display: 'block' }}
+            />
+            <div style={{ position: 'absolute', left: 72, top: 383.66, width: 360, height: 38, color: 'rgba(255,255,255,0.72)', fontSize: 31.1, lineHeight: '38px', fontWeight: 900, whiteSpace: 'nowrap', overflow: 'hidden' }}>
+              {payload.date_label}
+            </div>
+            {activeMatches.map((match, index) => (
+              <div key={`${activePageIndex}-${index}`} style={{ position: 'absolute', left: 72, top: 461.66 + (index * 205), width: 936, height: 183, overflow: 'hidden' }}>
+                <div style={{ position: 'absolute', left: 44, top: 51.29, width: 132, height: 81 }}>
+                  <div style={{ width: 84, height: 26, color: 'rgba(255,255,255,0.46)', fontSize: 22, lineHeight: '26px', fontWeight: 900, whiteSpace: 'nowrap', overflow: 'hidden' }}>{match.time_period}</div>
+                  <div style={{ width: 170, height: 67, fontFamily: '"Bebas Neue", "Pretendard", sans-serif', fontSize: 56, lineHeight: '50.4px', fontWeight: 400, letterSpacing: 1.12, whiteSpace: 'nowrap', overflow: 'hidden' }}>{match.kickoff_time}</div>
+                </div>
+                <div style={{ position: 'absolute', left: 200, top: 33, width: 720, height: 150 }}>
+                  <div style={{ position: 'absolute', left: 0, top: 15, width: 225, height: 54, fontSize: 39.8, lineHeight: '48px', fontWeight: 900, textAlign: 'right', whiteSpace: 'nowrap', overflow: 'hidden' }}>{match.home_team}</div>
+                  <div style={{ position: 'absolute', left: 240.61, top: 0, width: 78, height: 78, border: '1px dashed rgba(255,255,255,0.28)', borderRadius: '50%', background: 'linear-gradient(180deg, rgba(255,255,255,0.025), rgba(255,255,255,0)), rgba(255,255,255,0.04)', color: 'rgba(255,255,255,0.72)', fontFamily: '"Bebas Neue", "Pretendard", sans-serif', fontSize: 24.3, lineHeight: '78px', fontWeight: 400, textAlign: 'center', letterSpacing: 0.973, overflow: 'hidden' }}>{match.home_code}</div>
+                  <div style={{ position: 'absolute', left: 336.61, top: 17, width: 54, height: 40, color: 'rgba(255,255,255,0.46)', fontFamily: '"Bebas Neue", "Pretendard", sans-serif', fontSize: 26, lineHeight: '31px', fontWeight: 400, textAlign: 'center' }}>VS</div>
+                  <div style={{ position: 'absolute', left: 378.38, top: 0, width: 78, height: 78, border: '1px dashed rgba(255,255,255,0.28)', borderRadius: '50%', background: 'linear-gradient(180deg, rgba(255,255,255,0.025), rgba(255,255,255,0)), rgba(255,255,255,0.04)', color: 'rgba(255,255,255,0.72)', fontFamily: '"Bebas Neue", "Pretendard", sans-serif', fontSize: 24.3, lineHeight: '78px', fontWeight: 400, textAlign: 'center', letterSpacing: 0.973, overflow: 'hidden' }}>{match.away_code}</div>
+                  <div style={{ position: 'absolute', left: 472.38, top: 15, width: 225, height: 54, fontSize: 39.8, lineHeight: '48px', fontWeight: 900, whiteSpace: 'nowrap', overflow: 'hidden' }}>{match.away_team}</div>
+                  <div style={{ position: 'absolute', left: 0, top: 92, width: 680, height: 25, color: 'rgba(255,255,255,0.46)', fontSize: 21, lineHeight: '25px', fontWeight: 900, whiteSpace: 'nowrap', overflow: 'hidden' }}>
+                    {[match.group_label, match.venue].filter(Boolean).join(' · ')}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </aside>
+  );
+}
+
 function CardNewsWorkspace({ headers, adminToken, seedItem, onNotify }) {
+  const [cardMode, setCardMode] = useState(ARTICLE_CARD_MODE);
   const [publishedItems, setPublishedItems] = useState([]);
   const [selectedId, setSelectedId] = useState(seedItem?.id || '');
   const [fields, setFields] = useState(() => fieldsFromCard(
@@ -1263,9 +1684,11 @@ function CardNewsWorkspace({ headers, adminToken, seedItem, onNotify }) {
   const [imagePreviewUrl, setImagePreviewUrl] = useState('');
   const [busy, setBusy] = useState(false);
   const [renderJobs, setRenderJobs] = useState([]);
+  const [publications, setPublications] = useState([]);
   const [renderNow, setRenderNow] = useState(Date.now());
   const [localMessage, setLocalMessage] = useState('');
   const [localTone, setLocalTone] = useState('neutral');
+  const [todayFixtures, setTodayFixtures] = useState(() => cloneTodayFixturesDefaults());
 
   const selectedItem = useMemo(() => {
     const matched = publishedItems.find(item => String(item.id) === String(selectedId));
@@ -1279,7 +1702,18 @@ function CardNewsWorkspace({ headers, adminToken, seedItem, onNotify }) {
   const currentSubjectColor = normalizeSubjectColor(fields.subject_color);
   const previewSource = imagePreviewUrl || imageUrl.trim();
   const activeRenderJobs = renderJobs.filter(job => job.status === 'running');
-  const isRenderingZip = activeRenderJobs.length > 0;
+  const activePublications = publications.filter(publication => isPublicationRunning(publication.status));
+  const activePublicationKey = activePublications.map(publication => publication.id).join('|');
+  const isRenderingZip = activeRenderJobs.length > 0 || activePublications.length > 0;
+  const displayRenderJobs = useMemo(() => {
+    const jobs = [...renderJobs];
+    activePublications.forEach(publication => {
+      if (!jobs.some(job => job.publicationId === publication.id)) {
+        jobs.push(publicationToRenderJob(publication));
+      }
+    });
+    return jobs.slice(0, 5);
+  }, [activePublications, renderJobs]);
 
   const setNotice = (tone, text) => {
     setLocalTone(tone);
@@ -1330,12 +1764,75 @@ function CardNewsWorkspace({ headers, adminToken, seedItem, onNotify }) {
     }
   };
 
+  const upsertPublication = publication => {
+    if (!publication?.id) return;
+    setPublications(prev => {
+      const next = prev.filter(row => row.id !== publication.id);
+      return [publication, ...next].slice(0, 30);
+    });
+  };
+
+  const loadPublications = async () => {
+    if (!adminToken) {
+      setPublications([]);
+      return;
+    }
+    try {
+      const response = await fetch('/api/admin/card-publications?limit=30', { headers });
+      const data = await readJsonResponse(response);
+      if (!response.ok) throw new Error(data.error || 'Failed to load card news publications');
+      setPublications(data.publications || []);
+    } catch (error) {
+      setNotice('bad', error.message);
+    }
+  };
+
+  const syncPublication = async (publicationId, localJobId = null) => {
+    const response = await fetch('/api/admin/card-publications-sync', {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ id: publicationId, actor: 'admin-ui' }),
+    });
+    const data = await readJsonResponse(response);
+    if (!response.ok) throw new Error(data.error || 'Failed to sync card news publication');
+    const publication = data.publication;
+    upsertPublication(publication);
+    if (localJobId && publication) {
+      if (publication.status === 'completed') {
+        updateRenderJob(localJobId, {
+          status: 'success',
+          phase: 'R2 업로드 완료',
+          finishedAt: Date.now(),
+          zipUrl: publication.zip_url,
+          timings: publication.source_payload?.render_timings_ms || null,
+        });
+        setNotice('good', `${publication.title || '카드뉴스'} 업로드가 완료됐습니다.`);
+      } else if (publication.status === 'failed') {
+        updateRenderJob(localJobId, {
+          status: 'error',
+          phase: '업로드 실패',
+          finishedAt: Date.now(),
+          error: publication.error_message || 'Render job failed',
+          timings: publication.source_payload?.render_timings_ms || null,
+        });
+        setNotice('bad', publication.error_message || '카드뉴스 업로드에 실패했습니다.');
+      } else {
+        updateRenderJob(localJobId, {
+          phase: publication.status === 'zip_pending' ? '이미지 준비 완료 · ZIP 준비 중' : `R2 업로드 중 (${publication.status})`,
+          timings: publication.source_payload?.render_timings_ms || null,
+        });
+      }
+    }
+    return publication;
+  };
+
   useEffect(() => {
     if (seedItem?.id) setSelectedId(seedItem.id);
   }, [seedItem?.id]);
 
   useEffect(() => {
     loadPublishedItems();
+    loadPublications();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [adminToken]);
 
@@ -1355,10 +1852,24 @@ function CardNewsWorkspace({ headers, adminToken, seedItem, onNotify }) {
   }, [imageFile]);
 
   useEffect(() => {
-    if (activeRenderJobs.length === 0) return undefined;
+    if (!isRenderingZip) return undefined;
     const timer = window.setInterval(() => setRenderNow(Date.now()), 1000);
     return () => window.clearInterval(timer);
-  }, [activeRenderJobs.length]);
+  }, [isRenderingZip]);
+
+  useEffect(() => {
+    if (!adminToken || activePublications.length === 0) return undefined;
+    const tick = () => {
+      activePublications.forEach(publication => {
+        const localJob = renderJobs.find(job => job.publicationId === publication.id && job.status === 'running');
+        syncPublication(publication.id, localJob?.id).catch(error => setNotice('bad', error.message));
+      });
+    };
+    const timer = window.setInterval(tick, 3000);
+    tick();
+    return () => window.clearInterval(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [adminToken, activePublicationKey]);
 
   const updateField = (name, value) => {
     setFields(prev => ({ ...prev, [name]: value }));
@@ -1366,6 +1877,42 @@ function CardNewsWorkspace({ headers, adminToken, seedItem, onNotify }) {
 
   const updateRenderJob = (jobId, patch) => {
     setRenderJobs(prev => prev.map(job => (job.id === jobId ? { ...job, ...patch } : job)).slice(0, 5));
+  };
+
+  const uploadCardImageFile = async file => {
+    const response = await fetch('/api/admin/upload', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${adminToken}`, 'Content-Type': file.type },
+      body: file,
+    });
+    const data = await readJsonResponse(response);
+    if (!response.ok) throw new Error(data.error || 'Image upload failed');
+    return data.url;
+  };
+
+  const startCardPublication = async ({ jobId, kind, contentItemId, title, caption: publicationCaption, sourcePayload, renderRequest }) => {
+    const response = await fetch('/api/admin/card-publications', {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        actor: 'admin-ui',
+        kind,
+        content_item_id: contentItemId || null,
+        title,
+        caption: publicationCaption || '',
+        source_payload: sourcePayload || {},
+        render_request: renderRequest,
+      }),
+    });
+    const data = await readJsonResponse(response);
+    if (!response.ok) throw new Error(data.error || 'Failed to start card news publication');
+    const publication = data.publication;
+    upsertPublication(publication);
+    updateRenderJob(jobId, {
+      publicationId: publication.id,
+      phase: `R2 업로드 중 (${publication.status})`,
+    });
+    return publication;
   };
 
   const generateDraft = async () => {
@@ -1525,22 +2072,345 @@ function CardNewsWorkspace({ headers, adminToken, seedItem, onNotify }) {
     }
   };
 
+  const renderTodayFixtures = async () => {
+    const payload = todayFixturesPayload(todayFixtures);
+    const validationMessage = validateTodayFixturesPayload(payload);
+
+    if (validationMessage) {
+      setNotice('warn', validationMessage);
+      return;
+    }
+    if (isRenderingZip) {
+      setNotice('warn', '이미 카드뉴스 ZIP 생성이 진행 중입니다. 완료 후 다시 시도해주세요.');
+      return;
+    }
+
+    setLocalMessage('');
+    const jobId = renderJobId();
+    const filename = `cardnews-today-fixtures-${payload.date_label.replace(/\s+/g, '-')}.zip`;
+    const startedAt = Date.now();
+    setRenderNow(startedAt);
+    setRenderJobs(prev => [{
+      id: jobId,
+      status: 'running',
+      title: `${payload.date_label} 오늘의 경기 일정`,
+      filename,
+      startedAt,
+      phase: '템플릿 카드 생성 요청 중',
+    }, ...prev].slice(0, 5));
+
+    try {
+      updateRenderJob(jobId, { phase: '일정 카드 이미지 생성 중' });
+      const response = await fetch('/api/admin/card-template-render', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          actor: 'admin-ui',
+          template_id: TODAY_FIXTURES_TEMPLATE_ID,
+          today_fixtures: payload,
+        }),
+      });
+
+      if (!response.ok) {
+        const data = await readJsonResponse(response);
+        throw new Error(data.error || '오늘의 경기 일정 카드 생성에 실패했습니다.');
+      }
+
+      updateRenderJob(jobId, { phase: 'ZIP 다운로드 준비 중' });
+      const blob = await response.blob();
+      downloadBlob(blob, filename);
+      updateRenderJob(jobId, {
+        status: 'success',
+        phase: '다운로드 시작됨',
+        finishedAt: Date.now(),
+        bytes: blob.size,
+      });
+      setNotice('good', `${filename} 다운로드를 시작했습니다.`);
+    } catch (error) {
+      updateRenderJob(jobId, {
+        status: 'error',
+        phase: '생성 실패',
+        finishedAt: Date.now(),
+        error: error.message,
+      });
+      setNotice('bad', error.message);
+    }
+  };
+
+  const publishCardNews = async () => {
+    const item = selectedItem;
+    const file = imageFile;
+    const imageUrlValue = imageUrl.trim();
+    const card = cardFromFields(fields);
+
+    if (!item) {
+      setNotice('warn', '먼저 발행 기사를 선택해주세요.');
+      return;
+    }
+    if (isRenderingZip) {
+      setNotice('warn', '이미 카드뉴스 업로드 작업이 진행 중입니다.');
+      return;
+    }
+    if (!file && !imageUrlValue) {
+      setNotice('warn', '이미지 파일을 업로드하거나 이미지 URL을 입력해주세요.');
+      return;
+    }
+    if (!card.cover.headline || !card.cover.summary || !card.detail.paragraphs) {
+      setNotice('warn', 'headline, summary, paragraphs는 비워둘 수 없습니다.');
+      return;
+    }
+
+    setLocalMessage('');
+    const jobId = renderJobId();
+    const filename = `cardnews-${item.raw_post_id || item.id}.zip`;
+    const startedAt = Date.now();
+    setRenderNow(startedAt);
+    setRenderJobs(prev => [{
+      id: jobId,
+      status: 'running',
+      title: compactText(item.title_ko || item.raw_text, 72, 'Card news'),
+      filename,
+      startedAt,
+      phase: file ? '이미지 업로드 중' : 'R2 업로드 요청 중',
+    }, ...prev].slice(0, 5));
+
+    try {
+      let finalImageUrl = imageUrlValue;
+      if (file) {
+        finalImageUrl = await uploadCardImageFile(file);
+        setImageUrl(finalImageUrl);
+        setImageFile(null);
+      }
+
+      updateRenderJob(jobId, { phase: 'R2 업로드 작업 등록 중' });
+      const publication = await startCardPublication({
+        jobId,
+        kind: 'article',
+        contentItemId: item.id,
+        title: compactText(item.title_ko || item.raw_text, 120, 'Card news'),
+        caption,
+        sourcePayload: {
+          filename,
+          item_id: item.id,
+          image_url: finalImageUrl,
+          card,
+        },
+        renderRequest: {
+          template_id: ARTICLE_CARD_TEMPLATE_ID,
+          image_url: finalImageUrl,
+          card,
+        },
+      });
+      setNotice('good', `${publication.title || filename} 업로드 작업을 시작했습니다.`);
+    } catch (error) {
+      updateRenderJob(jobId, {
+        status: 'error',
+        phase: '업로드 실패',
+        finishedAt: Date.now(),
+        error: error.message,
+      });
+      setNotice('bad', error.message);
+    }
+  };
+
+  const publishTodayFixtures = async () => {
+    const payload = todayFixturesPayload(todayFixtures);
+    const validationMessage = validateTodayFixturesPayload(payload);
+
+    if (validationMessage) {
+      setNotice('warn', validationMessage);
+      return;
+    }
+    if (isRenderingZip) {
+      setNotice('warn', '이미 카드뉴스 업로드 작업이 진행 중입니다.');
+      return;
+    }
+
+    setLocalMessage('');
+    const jobId = renderJobId();
+    const filename = `cardnews-today-fixtures-${payload.date_label.replace(/\s+/g, '-')}.zip`;
+    const title = `${payload.date_label} 오늘의 경기 일정`;
+    const startedAt = Date.now();
+    setRenderNow(startedAt);
+    setRenderJobs(prev => [{
+      id: jobId,
+      status: 'running',
+      title,
+      filename,
+      startedAt,
+      phase: 'R2 업로드 작업 등록 중',
+    }, ...prev].slice(0, 5));
+
+    try {
+      const publication = await startCardPublication({
+        jobId,
+        kind: 'today_fixtures',
+        contentItemId: null,
+        title,
+        caption: '',
+        sourcePayload: {
+          filename,
+          today_fixtures: payload,
+        },
+        renderRequest: {
+          template_id: TODAY_FIXTURES_TEMPLATE_ID,
+          today_fixtures: payload,
+        },
+      });
+      setNotice('good', `${publication.title || filename} 업로드 작업을 시작했습니다.`);
+    } catch (error) {
+      updateRenderJob(jobId, {
+        status: 'error',
+        phase: '업로드 실패',
+        finishedAt: Date.now(),
+        error: error.message,
+      });
+      setNotice('bad', error.message);
+    }
+  };
+
+  const publishCardNewsModalUnused = async () => {
+    let card;
+    try {
+      card = JSON.parse(cardJson);
+    } catch {
+      setNotice('bad', '카드뉴스 JSON 형식이 올바르지 않습니다.');
+      return;
+    }
+
+    if (!imageFile && !imageUrl.trim()) {
+      setNotice('warn', '이미지 파일 또는 이미지 URL이 필요합니다.');
+      return;
+    }
+
+    setBusy(true);
+    setLocalMessage('');
+    try {
+      let finalImageUrl = imageUrl.trim();
+      if (imageFile) {
+        const upload = await fetch('/api/admin/upload', {
+          method: 'POST',
+          headers: { Authorization: headers.Authorization, 'Content-Type': imageFile.type },
+          body: imageFile,
+        });
+        const uploadData = await readJsonResponse(upload);
+        if (!upload.ok) throw new Error(uploadData.error || 'Image upload failed');
+        finalImageUrl = uploadData.url;
+        setImageUrl(finalImageUrl);
+        setImageFile(null);
+      }
+
+      const response = await fetch('/api/admin/card-publications', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          actor: 'admin-ui',
+          kind: 'article',
+          content_item_id: item.id,
+          title: compactText(item.title_ko || item.raw_text, 120, 'Card news'),
+          caption: '',
+          source_payload: {
+            item_id: item.id,
+            image_url: finalImageUrl,
+            card,
+          },
+          render_request: {
+            template_id: ARTICLE_CARD_TEMPLATE_ID,
+            image_url: finalImageUrl,
+            card,
+          },
+        }),
+      });
+      const data = await readJsonResponse(response);
+      if (!response.ok) throw new Error(data.error || 'Failed to start card news publication');
+      setNotice('good', '카드뉴스 업로드 작업을 시작했습니다.');
+    } catch (error) {
+      setNotice('bad', error.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const publishCardNewsModalUnused2 = async () => {
+    let card;
+    try {
+      card = JSON.parse(cardJson);
+    } catch {
+      setNotice('bad', '카드뉴스 JSON 형식이 올바르지 않습니다.');
+      return;
+    }
+
+    if (!imageFile && !imageUrl.trim()) {
+      setNotice('warn', '이미지 파일 또는 이미지 URL이 필요합니다.');
+      return;
+    }
+
+    setBusy(true);
+    setLocalMessage('');
+    try {
+      let finalImageUrl = imageUrl.trim();
+      if (imageFile) {
+        const upload = await fetch('/api/admin/upload', {
+          method: 'POST',
+          headers: { Authorization: headers.Authorization, 'Content-Type': imageFile.type },
+          body: imageFile,
+        });
+        const uploadData = await readJsonResponse(upload);
+        if (!upload.ok) throw new Error(uploadData.error || 'Image upload failed');
+        finalImageUrl = uploadData.url;
+        setImageUrl(finalImageUrl);
+        setImageFile(null);
+      }
+
+      const response = await fetch('/api/admin/card-publications', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          actor: 'admin-ui',
+          kind: 'article',
+          content_item_id: item.id,
+          title: compactText(item.title_ko || item.raw_text, 120, 'Card news'),
+          caption: '',
+          source_payload: {
+            item_id: item.id,
+            image_url: finalImageUrl,
+            card,
+          },
+          render_request: {
+            template_id: ARTICLE_CARD_TEMPLATE_ID,
+            image_url: finalImageUrl,
+            card,
+          },
+        }),
+      });
+      const data = await readJsonResponse(response);
+      if (!response.ok) throw new Error(data.error || 'Failed to start card news publication');
+      setNotice('good', '카드뉴스 업로드 작업을 시작했습니다.');
+    } catch (error) {
+      setNotice('bad', error.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
   return (
     <div className="min-w-0 space-y-4">
       {localMessage && <Notice tone={localTone}>{localMessage}</Notice>}
 
-      {renderJobs.length > 0 && (
+      {displayRenderJobs.length > 0 && (
         <div className="space-y-2 rounded-md p-3" style={{ background: '#080a10', border: '1px solid #202635' }} aria-live="polite">
           <div className="flex items-center justify-between gap-3">
-            <div className="text-xs font-bold uppercase" style={{ color: '#687086' }}>ZIP jobs</div>
+            <div className="text-xs font-bold uppercase" style={{ color: '#687086' }}>R2 upload jobs</div>
             <div className="text-xs font-bold" style={{ color: isRenderingZip ? '#ffd166' : '#8791aa' }}>
-              {isRenderingZip ? '생성 중' : '대기 작업 없음'}
+              {isRenderingZip ? '업로드 중' : '대기 작업 없음'}
             </div>
           </div>
-          {renderJobs.map(job => {
+          {displayRenderJobs.map(job => {
             const isRunning = job.status === 'running';
             const isSuccess = job.status === 'success';
             const statusColor = isRunning ? '#ffd166' : isSuccess ? '#48d99a' : '#ff8f8f';
+            const timingLabel = formatRenderTimings(job.timings);
+            const timingDetails = formatRenderTimingDetails(job.timings);
             return (
               <div key={job.id} className="min-w-0 rounded px-3 py-2 text-sm" style={{ background: '#11141d', border: '1px solid #283040' }}>
                 <div className="flex min-w-0 items-start justify-between gap-3">
@@ -1555,21 +2425,43 @@ function CardNewsWorkspace({ headers, adminToken, seedItem, onNotify }) {
                     <div className="mt-1 break-words text-xs" style={{ color: '#8791aa', overflowWrap: 'anywhere' }}>
                       {job.filename} · {job.phase} · {formatDuration(job.startedAt, isRunning ? renderNow : (job.finishedAt || renderNow))}
                     </div>
+                    {timingLabel && (
+                      <div className="mt-1 break-words text-xs" style={{ color: '#687086', overflowWrap: 'anywhere' }}>
+                        {timingLabel}
+                      </div>
+                    )}
+                    {timingDetails && (
+                      <div className="mt-1 break-words text-xs" style={{ color: '#525b70', overflowWrap: 'anywhere' }}>
+                        {timingDetails}
+                      </div>
+                    )}
                     {job.error && (
                       <div className="mt-1 break-words text-xs" style={{ color: '#ff8f8f', overflowWrap: 'anywhere' }}>
                         {job.error}
                       </div>
                     )}
                   </div>
-                  {!isRunning && (
-                    <button
-                      type="button"
-                      onClick={() => setRenderJobs(prev => prev.filter(row => row.id !== job.id))}
-                      className="shrink-0 rounded px-2 py-1 text-xs font-bold"
-                      style={{ background: '#171923', color: '#a8b0c7', border: '1px solid #2a3040' }}>
-                      닫기
-                    </button>
-                  )}
+                  <div className="flex shrink-0 flex-wrap justify-end gap-2">
+                    {job.zipUrl && (
+                      <a
+                        href={job.zipUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="rounded px-3 py-1 text-xs font-black"
+                        style={{ background: '#21c17a', color: '#03130c' }}>
+                        카드뉴스 다운로드
+                      </a>
+                    )}
+                    {!isRunning && !job.publicationBacked && (
+                      <button
+                        type="button"
+                        onClick={() => setRenderJobs(prev => prev.filter(row => row.id !== job.id))}
+                        className="rounded px-2 py-1 text-xs font-bold"
+                        style={{ background: '#171923', color: '#a8b0c7', border: '1px solid #2a3040' }}>
+                        닫기
+                      </button>
+                    )}
+                  </div>
                 </div>
               </div>
             );
@@ -1577,6 +2469,27 @@ function CardNewsWorkspace({ headers, adminToken, seedItem, onNotify }) {
         </div>
       )}
 
+      <div className="flex flex-wrap gap-2 rounded-md p-2" style={{ background: '#080a10', border: '1px solid #202635' }}>
+        {CARD_WORKSPACE_MODES.map(mode => {
+          const active = cardMode === mode.id;
+          return (
+            <button
+              key={mode.id}
+              type="button"
+              onClick={() => setCardMode(mode.id)}
+              className="rounded-md px-3 py-2 text-sm font-bold"
+              style={{
+                background: active ? '#e8edf7' : '#11141d',
+                color: active ? '#05070d' : '#cbd3e8',
+                border: active ? '1px solid #e8edf7' : '1px solid #283040',
+              }}>
+              {mode.label}
+            </button>
+          );
+        })}
+      </div>
+
+      {cardMode === ARTICLE_CARD_MODE ? (
       <div className="grid min-w-0 gap-5 xl:grid-cols-[minmax(0,0.9fr)_minmax(520px,1.1fr)]">
         <section className="min-w-0 rounded-md p-4" style={{ background: '#0b0d14', border: '1px solid #202635' }}>
           <div className="mb-4 flex flex-wrap items-end gap-3">
@@ -1811,17 +2724,376 @@ function CardNewsWorkspace({ headers, adminToken, seedItem, onNotify }) {
 
             <button
               type="button"
-              onClick={renderCardNews}
+              onClick={publishCardNews}
               disabled={!adminToken || !selectedItem || busy || isRenderingZip}
               className="w-full rounded-md px-4 py-3 text-sm font-black disabled:opacity-50"
               style={{ background: '#21c17a', color: '#03130c' }}>
-              {isRenderingZip ? 'ZIP 생성 중' : '카드뉴스 ZIP 생성'}
+              {isRenderingZip ? '업로드 중' : '카드뉴스 업로드'}
             </button>
           </div>
         </section>
 
         <CardNewsPreview fields={fields} imageSource={previewSource} />
       </div>
+      ) : (
+      <div className="grid min-w-0 gap-5 xl:grid-cols-[minmax(0,0.9fr)_minmax(520px,1.1fr)]">
+        <TodayFixturesEditor
+          value={todayFixtures}
+          onChange={setTodayFixtures}
+          onRender={publishTodayFixtures}
+          disabled={!adminToken || busy}
+          rendering={isRenderingZip}
+        />
+        <TodayFixturesPreview value={todayFixtures} />
+      </div>
+      )}
+    </div>
+  );
+}
+
+function GeneratedCardNewsArchive({ headers, adminToken, onNotify }) {
+  const [publications, setPublications] = useState([]);
+  const [activeIndex, setActiveIndex] = useState(0);
+  const [pageIndex, setPageIndex] = useState(0);
+  const [busy, setBusy] = useState(false);
+  const [deletingId, setDeletingId] = useState('');
+  const [localMessage, setLocalMessage] = useState('');
+  const [localTone, setLocalTone] = useState('neutral');
+
+  const setNotice = (tone, text) => {
+    setLocalTone(tone);
+    setLocalMessage(text);
+    onNotify?.(tone, text);
+  };
+
+  const loadPublications = async () => {
+    if (!adminToken) {
+      setPublications([]);
+      return;
+    }
+    setBusy(true);
+    setLocalMessage('');
+    try {
+      const response = await fetch('/api/admin/card-publications?limit=50', { headers });
+      const data = await readJsonResponse(response);
+      if (!response.ok) throw new Error(data.error || '생성된 카드뉴스를 불러오지 못했습니다.');
+      setPublications(Array.isArray(data.publications) ? data.publications : []);
+      setActiveIndex(0);
+      setPageIndex(0);
+    } catch (error) {
+      setNotice('bad', error.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const syncPublication = async (publication, { quiet = false } = {}) => {
+    if (!publication?.id) return;
+    try {
+      const response = await fetch('/api/admin/card-publications-sync', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ id: publication.id, actor: 'admin-ui' }),
+      });
+      const data = await readJsonResponse(response);
+      if (!response.ok) throw new Error(data.error || '카드뉴스 상태 동기화에 실패했습니다.');
+      setPublications(prev => prev.map(row => (row.id === data.publication?.id ? data.publication : row)));
+      if (!quiet) setNotice('good', '카드뉴스 상태를 갱신했습니다.');
+    } catch (error) {
+      if (!quiet) setNotice('bad', error.message);
+    }
+  };
+
+  const deletePublication = async publication => {
+    if (!publication?.id || isPublicationRunning(publication.status)) return;
+    const ok = window.confirm(`"${publication.title || 'Card news'}" 카드뉴스를 삭제할까요?`);
+    if (!ok) return;
+    setDeletingId(publication.id);
+    try {
+      const response = await fetch(`/api/admin/card-publications?id=${encodeURIComponent(publication.id)}&actor=admin-ui`, {
+        method: 'DELETE',
+        headers,
+      });
+      const data = await readJsonResponse(response);
+      if (!response.ok) throw new Error(data.error || 'Failed to delete card news publication');
+      setPublications(prev => prev.filter(row => row.id !== publication.id));
+      setActiveIndex(prev => Math.max(0, Math.min(prev, publications.length - 2)));
+      setPageIndex(0);
+      setNotice(data.storage_warning ? 'warn' : 'good', data.storage_warning || '카드뉴스를 삭제했습니다.');
+    } catch (error) {
+      setNotice('bad', error.message);
+    } finally {
+      setDeletingId('');
+    }
+  };
+
+  useEffect(() => {
+    loadPublications();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [adminToken]);
+
+  const activePublications = publications.filter(publication => isPublicationRunning(publication.status));
+  const activePublicationKey = activePublications.map(publication => publication.id).join('|');
+
+  useEffect(() => {
+    if (!adminToken || activePublications.length === 0) return undefined;
+    const tick = () => {
+      activePublications.forEach(publication => syncPublication(publication, { quiet: true }));
+    };
+    const timer = window.setInterval(tick, 3000);
+    return () => window.clearInterval(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [adminToken, activePublicationKey]);
+
+  useEffect(() => {
+    if (activeIndex >= publications.length) setActiveIndex(Math.max(0, publications.length - 1));
+  }, [activeIndex, publications.length]);
+
+  const activePublication = publications[activeIndex] || null;
+  const pages = Array.isArray(activePublication?.pages) ? activePublication.pages : [];
+  const safePageIndex = pages.length > 0 ? Math.min(pageIndex, pages.length - 1) : 0;
+  const currentPage = pages[safePageIndex] || null;
+  const running = isPublicationRunning(activePublication?.status);
+  const statusColor = publicationStatusTone(activePublication?.status);
+  const renderTimingLabel = formatRenderTimings(activePublication?.source_payload?.render_timings_ms);
+  const renderTimingDetails = formatRenderTimingDetails(activePublication?.source_payload?.render_timings_ms);
+
+  useEffect(() => {
+    setPageIndex(0);
+  }, [activePublication?.id]);
+
+  const moveCard = direction => {
+    setActiveIndex(prev => {
+      const next = prev + direction;
+      return Math.max(0, Math.min(publications.length - 1, next));
+    });
+  };
+
+  const movePage = direction => {
+    setPageIndex(prev => {
+      const next = prev + direction;
+      return Math.max(0, Math.min(pages.length - 1, next));
+    });
+  };
+
+  return (
+    <div className="min-w-0 space-y-4">
+      {localMessage && <Notice tone={localTone}>{localMessage}</Notice>}
+
+      <section className="min-w-0 rounded-md p-4" style={{ background: '#0b0d14', border: '1px solid #202635' }}>
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <div className="text-xs font-bold uppercase" style={{ color: '#687086' }}>Generated card news</div>
+            <h2 className="mt-1 text-lg font-black text-white">생성된 카드뉴스</h2>
+          </div>
+          <button
+            type="button"
+            onClick={loadPublications}
+            disabled={!adminToken || busy}
+            className="rounded-md px-3 py-2 text-sm font-bold disabled:opacity-50"
+            style={{ background: '#171923', color: '#cbd3e8', border: '1px solid #2a3040' }}>
+            {busy ? '불러오는 중' : '새로고침'}
+          </button>
+        </div>
+
+        {publications.length === 0 ? (
+          <div className="rounded-md p-8 text-center text-sm" style={{ background: '#11141d', color: '#8791aa', border: '1px solid #283040' }}>
+            아직 생성된 카드뉴스가 없습니다.
+          </div>
+        ) : (
+          <div className="grid min-w-0 gap-4 xl:grid-cols-[minmax(320px,420px)_minmax(0,1fr)]">
+            <div className="min-w-0">
+              <div className="overflow-hidden rounded-md" style={{ background: '#05070d', border: '1px solid #283040' }}>
+                {currentPage?.url ? (
+                  <a href={currentPage.url} target="_blank" rel="noreferrer" className="block">
+                    <img
+                      src={currentPage.url}
+                      alt={`${activePublication?.title || 'card'} ${currentPage.page || safePageIndex + 1}p`}
+                      className="block w-full"
+                      style={{ aspectRatio: '4 / 5', objectFit: 'cover' }}
+                    />
+                  </a>
+                ) : (
+                  <div className="flex items-center justify-center text-sm" style={{ aspectRatio: '4 / 5', color: '#8791aa' }}>
+                    미리보기 이미지가 없습니다.
+                  </div>
+                )}
+              </div>
+              {pages.length > 1 && (
+                <div className="mt-3 flex items-center justify-center gap-3">
+                  <button
+                    type="button"
+                    onClick={() => movePage(-1)}
+                    disabled={safePageIndex <= 0}
+                    className="h-9 w-9 rounded-md text-sm font-black disabled:opacity-40"
+                    style={{ background: '#171923', color: '#cbd3e8', border: '1px solid #2a3040' }}>
+                    &lt;
+                  </button>
+                  <div className="text-xs font-bold" style={{ color: '#8791aa' }}>
+                    {safePageIndex + 1} / {pages.length}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => movePage(1)}
+                    disabled={safePageIndex >= pages.length - 1}
+                    className="h-9 w-9 rounded-md text-sm font-black disabled:opacity-40"
+                    style={{ background: '#171923', color: '#cbd3e8', border: '1px solid #2a3040' }}>
+                    &gt;
+                  </button>
+                </div>
+              )}
+            </div>
+
+            <div className="min-w-0 space-y-4">
+              <div className="min-w-0 rounded-md p-4" style={{ background: '#11141d', border: '1px solid #283040' }}>
+                <div className="flex min-w-0 items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="flex min-w-0 items-center gap-2">
+                      <span className={running ? 'inline-block h-2.5 w-2.5 shrink-0 rounded-full animate-pulse' : 'inline-block h-2.5 w-2.5 shrink-0 rounded-full'} style={{ background: statusColor }} />
+                      <h3 className="min-w-0 break-words text-base font-black text-white" style={{ overflowWrap: 'anywhere' }}>
+                        {activePublication?.title || 'Card news'}
+                      </h3>
+                    </div>
+                    <div className="mt-1 text-xs" style={{ color: '#8791aa' }}>
+                      {activePublication?.kind || '-'} · {activePublication?.status || '-'} · {activePublication?.created_at ? fmtKST(activePublication.created_at) : '-'}
+                    </div>
+                    {renderTimingLabel && (
+                      <div className="mt-1 text-xs" style={{ color: '#687086' }}>
+                        {renderTimingLabel}
+                      </div>
+                    )}
+                    {renderTimingDetails && (
+                      <div className="mt-1 text-xs" style={{ color: '#525b70' }}>
+                        {renderTimingDetails}
+                      </div>
+                    )}
+                  </div>
+                  <div className="flex shrink-0 items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => moveCard(-1)}
+                      disabled={activeIndex <= 0}
+                      className="h-9 w-9 rounded-md text-sm font-black disabled:opacity-40"
+                      style={{ background: '#171923', color: '#cbd3e8', border: '1px solid #2a3040' }}>
+                      &lt;
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => moveCard(1)}
+                      disabled={activeIndex >= publications.length - 1}
+                      className="h-9 w-9 rounded-md text-sm font-black disabled:opacity-40"
+                      style={{ background: '#171923', color: '#cbd3e8', border: '1px solid #2a3040' }}>
+                      &gt;
+                    </button>
+                  </div>
+                </div>
+
+                {activePublication?.error_message && (
+                  <div className="mt-3 break-words text-xs" style={{ color: '#ff8f8f', overflowWrap: 'anywhere' }}>
+                    {activePublication.error_message}
+                  </div>
+                )}
+
+                <div className="mt-4 flex flex-wrap gap-2">
+                  {activePublication?.zip_url && (
+                    <a
+                      href={activePublication.zip_url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="rounded px-3 py-2 text-sm font-black"
+                      style={{ background: '#21c17a', color: '#03130c' }}>
+                      ZIP 다운로드
+                    </a>
+                  )}
+                  {!activePublication?.zip_url && pages.length > 0 && (
+                    <span
+                      className="rounded px-3 py-2 text-sm font-bold"
+                      style={{ background: '#332400', color: '#ffd166', border: '1px solid #665017' }}>
+                      ZIP 준비 중
+                    </span>
+                  )}
+                  {currentPage?.url && (
+                    <a
+                      href={currentPage.url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="rounded px-3 py-2 text-sm font-bold"
+                      style={{ background: '#171923', color: '#cbd3e8', border: '1px solid #2a3040' }}>
+                      현재 이미지 열기
+                    </a>
+                  )}
+                  {activePublication?.zip_url && (
+                    <button
+                      type="button"
+                      onClick={() => copyTextToClipboard(activePublication.zip_url).then(ok => setNotice(ok ? 'good' : 'warn', ok ? 'ZIP URL을 복사했습니다.' : '복사할 URL이 없습니다.'))}
+                      className="rounded px-3 py-2 text-sm font-bold"
+                      style={{ background: '#171923', color: '#cbd3e8', border: '1px solid #2a3040' }}>
+                      ZIP URL 복사
+                    </button>
+                  )}
+                  {running && (
+                    <button
+                      type="button"
+                      onClick={() => syncPublication(activePublication)}
+                      className="rounded px-3 py-2 text-sm font-bold"
+                      style={{ background: '#332400', color: '#ffd166', border: '1px solid #665017' }}>
+                      상태 갱신
+                    </button>
+                  )}
+                  {activePublication && (
+                    <button
+                      type="button"
+                      onClick={() => deletePublication(activePublication)}
+                      disabled={running || deletingId === activePublication.id}
+                      className="rounded px-3 py-2 text-sm font-bold disabled:opacity-50"
+                      style={{ background: '#2a1115', color: '#ff9aa8', border: '1px solid #5c2029' }}>
+                      {deletingId === activePublication.id ? '삭제 중' : '삭제'}
+                    </button>
+                  )}
+                </div>
+
+                {pages.length > 0 && (
+                  <div className="mt-4 grid grid-cols-4 gap-2 sm:grid-cols-6">
+                    {pages.map((page, index) => (
+                      <button
+                        key={page.url || page.key || page.page || index}
+                        type="button"
+                        onClick={() => setPageIndex(index)}
+                        className="overflow-hidden rounded p-0"
+                        style={{ border: index === safePageIndex ? '2px solid #21c17a' : '1px solid #2a3040', background: '#05070d' }}>
+                        <img src={page.url} alt={`${index + 1}p`} className="block w-full" style={{ aspectRatio: '4 / 5', objectFit: 'cover' }} />
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              <div className="min-w-0 rounded-md p-3" style={{ background: '#080a10', border: '1px solid #202635' }}>
+                <div className="mb-2 text-xs font-bold uppercase" style={{ color: '#687086' }}>Latest</div>
+                <div className="max-h-[360px] space-y-2 overflow-auto pr-1">
+                  {publications.map((publication, index) => (
+                    <button
+                      key={publication.id}
+                      type="button"
+                      onClick={() => { setActiveIndex(index); setPageIndex(0); }}
+                      className="block w-full rounded-md px-3 py-2 text-left"
+                      style={{
+                        background: index === activeIndex ? '#e8edf7' : '#11141d',
+                        color: index === activeIndex ? '#05070d' : '#cbd3e8',
+                        border: '1px solid #283040',
+                      }}>
+                      <div className="truncate text-sm font-black">{publication.title || 'Card news'}</div>
+                      <div className="mt-1 truncate text-xs" style={{ color: index === activeIndex ? '#334155' : '#8791aa' }}>
+                        {publication.status} · {publication.created_at ? fmtKST(publication.created_at) : '-'}
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+      </section>
     </div>
   );
 }
@@ -2805,20 +4077,25 @@ export default function AdminDashboard() {
           <Metric label="Rejected" value={dashboard?.rejected} />
         </section>
 
-        <section className={status === CARD_NEWS_TAB ? 'mt-5 grid min-w-0 gap-5' : 'mt-5 grid min-w-0 gap-5 lg:grid-cols-[minmax(0,1fr)_320px]'}>
+        <section className={[CARD_NEWS_TAB, GENERATED_CARD_NEWS_TAB].includes(status) ? 'mt-5 grid min-w-0 gap-5' : 'mt-5 grid min-w-0 gap-5 lg:grid-cols-[minmax(0,1fr)_320px]'}>
           <div className="min-w-0">
             <div className="mb-3 flex flex-wrap items-center gap-2">
               {ADMIN_TAB_OPTIONS.map(option => {
-                const countMap = { review: dashboard?.review, published: dashboard?.published, discarded: dashboard?.discarded, rejected: dashboard?.rejected, all: dashboard?.total, [CARD_NEWS_TAB]: dashboard?.published };
+                const countMap = { review: dashboard?.review, published: dashboard?.published, discarded: dashboard?.discarded, rejected: dashboard?.rejected, all: dashboard?.total, [CARD_NEWS_TAB]: dashboard?.published, [GENERATED_CARD_NEWS_TAB]: 0 };
                 const count = countMap[option] || 0;
                 const isActive = status === option;
                 const isWarn = option === 'review' && count > 0;
                 const newCount = [...newIds].filter(id => {
-                  if (option === CARD_NEWS_TAB) return false;
+                  if ([CARD_NEWS_TAB, GENERATED_CARD_NEWS_TAB].includes(option)) return false;
                   const it = items.find(i => i.id === id);
                   if (!it) return false;
                   return option === 'all' || it.status === option;
                 }).length;
+                const label = option === CARD_NEWS_TAB
+                  ? '카드뉴스 작업대'
+                  : option === GENERATED_CARD_NEWS_TAB
+                    ? '생성된 카드뉴스'
+                    : STATUS_LABELS[option];
                 return (
                   <button key={option}
                     onClick={() => { setStatus(option); setNewIds(new Set()); }}
@@ -2828,7 +4105,7 @@ export default function AdminDashboard() {
                       color: isActive ? '#05070d' : '#a8b0c7',
                       border: isActive ? '1px solid #283040' : isWarn ? '1px solid #665017' : '1px solid #283040',
                     }}>
-                    {option === CARD_NEWS_TAB ? '카드뉴스 작업대' : STATUS_LABELS[option]}
+                    {label}
                     {count > 0 && (
                       <span className="rounded px-1.5 py-0.5 text-xs font-black leading-none"
                         style={{
@@ -2853,6 +4130,15 @@ export default function AdminDashboard() {
                 headers={headers}
                 adminToken={adminToken}
                 seedItem={cardNewsSeed}
+                onNotify={(tone, text) => {
+                  setMessageTone(tone);
+                  setMessage(text);
+                }}
+              />
+            ) : status === GENERATED_CARD_NEWS_TAB ? (
+              <GeneratedCardNewsArchive
+                headers={headers}
+                adminToken={adminToken}
                 onNotify={(tone, text) => {
                   setMessageTone(tone);
                   setMessage(text);
@@ -2892,7 +4178,7 @@ export default function AdminDashboard() {
             )}
           </div>
 
-          {status !== CARD_NEWS_TAB && (
+          {![CARD_NEWS_TAB, GENERATED_CARD_NEWS_TAB].includes(status) && (
           <aside className="min-w-0 space-y-3">
             <div className="min-w-0 rounded-md p-4" style={{ background: '#0b0d14', border: '1px solid #202635' }}>
               <div className="text-xs font-bold uppercase" style={{ color: '#687086' }}>Last collected</div>

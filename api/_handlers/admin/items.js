@@ -1,6 +1,6 @@
-const { requireToken } = require('../_lib/auth');
-const { handleError, json } = require('../_lib/http');
-const { select } = require('../_lib/supabase');
+const { requireToken } = require('../../_lib/auth');
+const { handleError, json } = require('../../_lib/http');
+const { select } = require('../../_lib/supabase');
 
 function buildDashboard(items, sources) {
   const counts = items.reduce((acc, item) => {

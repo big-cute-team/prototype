@@ -1,6 +1,6 @@
 const crypto = require('crypto');
-const { requireToken } = require('../_lib/auth');
-const { handleError, json } = require('../_lib/http');
+const { requireToken } = require('../../_lib/auth');
+const { handleError, json } = require('../../_lib/http');
 
 const MAX_BYTES = 4 * 1024 * 1024; // 4MB
 const BUCKET = 'cards';

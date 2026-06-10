@@ -69,6 +69,24 @@ create table if not exists public.audit_events (
   created_at timestamptz not null default now()
 );
 
+create table if not exists public.card_news_publications (
+  id uuid primary key default gen_random_uuid(),
+  content_item_id uuid references public.content_items(id) on delete set null,
+  kind text not null check (kind in ('article', 'today_fixtures')),
+  status text not null default 'pending' check (status in ('pending', 'queued', 'running', 'completed', 'failed')),
+  render_job_id text,
+  template_id text not null,
+  title text not null,
+  caption text,
+  source_payload jsonb not null default '{}'::jsonb,
+  pages jsonb not null default '[]'::jsonb,
+  zip_url text,
+  r2_prefix text,
+  error_message text,
+  created_at timestamptz not null default now(),
+  completed_at timestamptz
+);
+
 create index if not exists idx_sources_active on public.sources(active, tier, handle);
 create index if not exists idx_content_items_status_created on public.content_items(status, created_at desc);
 create index if not exists idx_content_items_published on public.content_items(published_at desc) where status = 'published';
@@ -76,11 +94,15 @@ create index if not exists idx_content_items_team_tags on public.content_items u
 create index if not exists idx_content_items_source_raw_post on public.content_items(source_id, raw_post_id);
 create index if not exists idx_team_aliases_active on public.team_aliases(active, team_code, alias);
 create index if not exists idx_audit_events_created on public.audit_events(created_at desc);
+create index if not exists idx_card_news_publications_created on public.card_news_publications(created_at desc);
+create index if not exists idx_card_news_publications_content_item on public.card_news_publications(content_item_id, created_at desc);
+create index if not exists idx_card_news_publications_status on public.card_news_publications(status, created_at desc);
 
 alter table public.sources enable row level security;
 alter table public.team_aliases enable row level security;
 alter table public.content_items enable row level security;
 alter table public.audit_events enable row level security;
+alter table public.card_news_publications enable row level security;
 
 insert into public.team_aliases (team_code, alias, entity_type) values
   ('MUN', 'Manchester United', 'club'),

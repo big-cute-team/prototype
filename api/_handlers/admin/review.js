@@ -1,9 +1,9 @@
-const { requireToken } = require('../_lib/auth');
-const { legacyNewsTypeFromBriefingStatus } = require('../_lib/ai');
-const { recordAudit } = require('../_lib/audit');
-const { handleError, json, parseJsonBody } = require('../_lib/http');
-const { notifyPublished } = require('../_lib/slack');
-const { eq, patch, select } = require('../_lib/supabase');
+const { requireToken } = require('../../_lib/auth');
+const { legacyNewsTypeFromBriefingStatus } = require('../../_lib/ai');
+const { recordAudit } = require('../../_lib/audit');
+const { handleError, json, parseJsonBody } = require('../../_lib/http');
+const { notifyPublished } = require('../../_lib/slack');
+const { eq, patch, select } = require('../../_lib/supabase');
 
 async function loadItem(id) {
   const rows = await select('content_items', `select=*&${eq('id', id)}&limit=1`);
