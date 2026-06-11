@@ -745,7 +745,7 @@ function weeklyFixtureDaysForValue(value) {
       date_label: String(day.date_label || formatTodayFixtureDateLabel(date) || `Day ${index + 1}`).trim(),
       matches: (day.matches || []).map(normalizeTodayFixtureMatch),
     };
-  }).filter(day => day.matches.length > 0);
+  });
 }
 
 function flattenWeeklyFixtureDays(days) {
@@ -771,7 +771,10 @@ function buildWeeklyFixturePreviewPages(days, maxMatches = WEEKLY_FIXTURES_MATCH
       match,
       absoluteIndex: absoluteIndex++,
     }));
-    if (annotatedMatches.length === 0) continue;
+    if (annotatedMatches.length === 0) {
+      current.push({ ...day, matches: [] });
+      continue;
+    }
 
     if (annotatedMatches.length > maxMatches) {
       pushCurrent();
@@ -824,12 +827,16 @@ function todayFixturesPayload(value, variant = 'fixtures') {
   };
 }
 
-function todayFixturesValidationIssues(payload, variant = 'fixtures') {
+function todayFixturesValidationIssues(payload, variant = 'fixtures', options = {}) {
   const issues = [];
+  const requireMatches = Boolean(options.requireMatches);
   const isResults = variant === 'results' || payload.content_type === 'results';
   if (!payload.date_label) issues.push({ key: 'date', message: '날짜를 선택해주세요.' });
-  if (payload.matches.length < 1 || payload.matches.length > TODAY_FIXTURES_MAX_MATCHES) {
-    issues.push({ key: 'matches', message: `경기는 1개 이상 ${TODAY_FIXTURES_MAX_MATCHES}개 이하로 입력해주세요.` });
+  if (requireMatches && payload.matches.length < 1) {
+    issues.push({ key: 'matches', message: '선택한 날짜에 생성할 경기가 없습니다.' });
+  }
+  if (payload.matches.length > TODAY_FIXTURES_MAX_MATCHES) {
+    issues.push({ key: 'matches', message: `경기는 ${TODAY_FIXTURES_MAX_MATCHES}개 이하로 입력해주세요.` });
   }
   const requiredKeys = [
     ['kickoff_time', '시간'],
@@ -884,7 +891,7 @@ function todayFixturesValidationIssues(payload, variant = 'fixtures') {
 }
 
 function validateTodayFixturesPayload(payload) {
-  return todayFixturesValidationIssues(payload)[0]?.message || '';
+  return todayFixturesValidationIssues(payload, 'fixtures', { requireMatches: true })[0]?.message || '';
 }
 
 function scheduleTitleForPayload(payload) {
@@ -968,6 +975,22 @@ function worldCupFixtureRowToMatch(row, variant = 'fixtures') {
   };
 }
 
+function fixtureDateRangeDays(startDate, endDate) {
+  if (!startDate) return [];
+  const days = [];
+  let currentDate = startDate;
+  for (let index = 0; index < 14 && currentDate; index += 1) {
+    days.push({
+      date: currentDate,
+      date_label: formatTodayFixtureDateLabel(currentDate),
+      matches: [],
+    });
+    if (!endDate || currentDate === endDate) break;
+    currentDate = addDaysToDateValue(currentDate, 1);
+  }
+  return days;
+}
+
 function buildWorldCupFixtureEditorValue(baseValue, rows, variant = 'fixtures') {
   const scheduleType = getFixtureTypeOption(baseValue.schedule_type, variant);
   const isWeekly = scheduleType.id === 'weekly';
@@ -996,7 +1019,9 @@ function buildWorldCupFixtureEditorValue(baseValue, rows, variant = 'fixtures') 
     };
   }
 
-  const dayMap = new Map();
+  const dayMap = new Map(
+    fixtureDateRangeDays(startDate, endDate).map(day => [day.date, day])
+  );
   rows.forEach(row => {
     const date = row.kickoff_date_kst;
     if (!date) return;
@@ -1009,7 +1034,7 @@ function buildWorldCupFixtureEditorValue(baseValue, rows, variant = 'fixtures') 
     }
     dayMap.get(date).matches.push(worldCupFixtureRowToMatch(row, variant));
   });
-  const days = [...dayMap.values()].filter(day => day.matches.length > 0);
+  const days = [...dayMap.values()];
   return {
     ...base,
     eyebrow: scheduleEyebrowForValue(base, variant),
@@ -3222,12 +3247,6 @@ function CardNewsWorkspace({ headers, adminToken, seedItem, onNotify }) {
       const data = await readJsonResponse(response);
       if (!response.ok) throw new Error(data.error || '월드컵 경기 데이터를 불러오지 못했습니다.');
       const rows = Array.isArray(data.fixtures) ? data.fixtures : [];
-      if (rows.length === 0) {
-        setNotice('warn', variant === 'results'
-          ? '저장된 월드컵 경기 결과가 없습니다. 먼저 월드컵 결과 동기화를 실행해주세요.'
-          : '저장된 월드컵 경기 일정이 없습니다. 먼저 월드컵 일정 동기화를 실행해주세요.');
-        return;
-      }
       const editorValue = buildWorldCupFixtureEditorValue({
         ...nextValue,
         date: startDate,
@@ -3236,12 +3255,19 @@ function CardNewsWorkspace({ headers, adminToken, seedItem, onNotify }) {
       }, rows, variant);
       if (variant === 'results') {
         setMatchResults(editorValue);
-        setSelectedMatchResultIndex(0);
+        setSelectedMatchResultIndex(rows.length > 0 ? 0 : -1);
+        setShowMatchResultsValidation(false);
       } else {
         setTodayFixtures(editorValue);
-        setSelectedTodayFixtureIndex(0);
+        setSelectedTodayFixtureIndex(rows.length > 0 ? 0 : -1);
+        setShowTodayFixturesValidation(false);
       }
-      setNotice('good', `${editorValue.date_label} 월드컵 경기 ${variant === 'results' ? '결과' : '일정'} ${rows.length}건을 자동 입력했습니다.`);
+      setNotice(
+        rows.length > 0 ? 'good' : 'neutral',
+        rows.length > 0
+          ? `${editorValue.date_label} 월드컵 경기 ${variant === 'results' ? '결과' : '일정'} ${rows.length}건을 자동 입력했습니다.`
+          : `${editorValue.date_label}에 저장된 월드컵 경기 ${variant === 'results' ? '결과' : '일정'}이 없어 빈 상태로 표시합니다.`
+      );
     } catch (error) {
       setNotice('bad', error.message);
     } finally {
