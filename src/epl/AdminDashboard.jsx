@@ -5,6 +5,7 @@ import { TODAY_FIXTURE_COUNTRIES, getTodayFixtureCountryByCode, getTodayFixtureC
 
 const CARD_NEWS_TAB = 'card_news_workspace';
 const GENERATED_CARD_NEWS_TAB = 'generated_card_news';
+const WORLD_CUP_FIXTURES_TAB = 'world_cup_fixtures';
 const ARTICLE_CARD_MODE = 'article';
 const TODAY_FIXTURES_MODE = 'today_fixtures';
 const MATCH_RESULTS_MODE = 'match_results';
@@ -28,6 +29,7 @@ const RESULT_TYPE_OPTIONS = [
   { id: 'today', label: '오늘의 경기 결과', title: '오늘의\n경기 결과' },
   { id: 'weekly', label: '이번주 경기 결과', title: '이번주\n경기 결과' },
 ];
+const WORLD_CUP_COMPLETED_STATUSES = new Set(['FT', 'AET', 'PEN']);
 const TODAY_FIXTURES_PRESETS = [
   {
     id: 'world_cup',
@@ -60,7 +62,7 @@ const CARD_WORKSPACE_MODES = [
   { id: MATCH_RESULTS_MODE, label: '경기 결과' },
 ];
 const STATUS_OPTIONS = ['review', 'published', 'discarded', 'rejected', 'all'];
-const ADMIN_TAB_OPTIONS = [...STATUS_OPTIONS, CARD_NEWS_TAB, GENERATED_CARD_NEWS_TAB];
+const ADMIN_TAB_OPTIONS = [...STATUS_OPTIONS, CARD_NEWS_TAB, GENERATED_CARD_NEWS_TAB, WORLD_CUP_FIXTURES_TAB];
 const BRIEFING_STATUS_OPTIONS = ['OFFICIAL', 'CONFIRMED', 'UPDATE', 'RUMOUR', 'DENIED'];
 const TEAM_OPTIONS = ['ARS', 'CHE', 'LIV', 'MCI', 'MUN', 'TOT'];
 const DEFAULT_SUBJECT_COLOR = '#FFFFFF';
@@ -101,6 +103,7 @@ const CARD_WORKSPACE_EDITOR_MAX_WIDTH = CARD_DETAIL_EDITOR_MAX_WIDTH;
 const DEFAULT_TODAY_FIXTURES = {
   preset_id: 'world_cup',
   schedule_type: 'today',
+  background_image_url: '',
   eyebrow_base: 'WORLD CUP 2026',
   eyebrow: 'WORLD CUP 2026 · TODAY',
   title: '오늘의\n경기 일정',
@@ -604,6 +607,7 @@ function emptyTodayFixtureMatch() {
     away_image_url: '',
     group_label: '',
     venue: '',
+    highlighted: false,
     home_score: '',
     away_score: '',
   };
@@ -691,6 +695,16 @@ function chunkItems(items, size) {
   return chunks.length > 0 ? chunks : [[]];
 }
 
+function normalizeFixtureHighlighted(match) {
+  if (!match) return false;
+  if (typeof match.highlighted === 'boolean') return match.highlighted;
+  if (typeof match.highlighted === 'string') {
+    return ['true', '1', 'yes'].includes(match.highlighted.trim().toLowerCase());
+  }
+  const legacyHighlightSide = String(match.highlight_side || '').trim().toLowerCase();
+  return ['home', 'away'].includes(legacyHighlightSide);
+}
+
 function normalizeTodayFixtureMatch(match) {
   const homeImageUrl = String(match.home_image_url || '').trim();
   const awayImageUrl = String(match.away_image_url || '').trim();
@@ -709,6 +723,7 @@ function normalizeTodayFixtureMatch(match) {
     ...(awayImageUrl ? { away_image_url: awayImageUrl } : {}),
     group_label: String(match.group_label || '').trim(),
     venue: String(match.venue || '').trim(),
+    highlighted: normalizeFixtureHighlighted(match),
     home_score: String(match.home_score ?? '').trim(),
     away_score: String(match.away_score ?? '').trim(),
   };
@@ -803,6 +818,7 @@ function todayFixturesPayload(value, variant = 'fixtures') {
     eyebrow: scheduleEyebrowForValue(value, variant),
     title: String(scheduleType.title || value.title || '').replace(/\r\n/g, '\n').replace(/\r/g, '\n').trim(),
     date_label: String(value.date_label || '').trim(),
+    background_image_url: String(value.background_image_url || '').trim(),
     ...(isWeekly ? { days } : {}),
     matches,
   };
@@ -885,6 +901,121 @@ function fixtureFilenamePrefixForPayload(payload, variant = 'fixtures') {
   const isWeekly = payload.schedule_type === 'weekly';
   if (variant === 'results') return isWeekly ? 'cardnews-weekly-results' : 'cardnews-today-results';
   return isWeekly ? 'cardnews-weekly-fixtures' : 'cardnews-today-fixtures';
+}
+
+function todayKstDateValue() {
+  const parts = new Intl.DateTimeFormat('en', {
+    timeZone: 'Asia/Seoul',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(new Date());
+  const partMap = Object.fromEntries(parts.map(part => [part.type, part.value]));
+  return `${partMap.year}-${partMap.month}-${partMap.day}`;
+}
+
+function fixtureTimePeriodFromKst(timeValue) {
+  const hour = Number(String(timeValue || '').slice(0, 2));
+  return Number.isFinite(hour) && hour >= 12 ? '오후' : '오전';
+}
+
+function worldCupFixtureTeam(row, side) {
+  const code = String(row?.[`${side}_code`] || '').trim().toUpperCase();
+  const country = getTodayFixtureCountryByCode(code);
+  const apiName = String(row?.[`${side}_team_name_api`] || '').trim();
+  const displayName = String(row?.[`${side}_team_name_ko`] || '').trim()
+    || getTodayFixtureCountryCardName(code, apiName)
+    || apiName
+    || code;
+  const imageUrl = country?.flagUrl
+    || String(row?.[`${side}_flag_url`] || '').trim()
+    || String(row?.[`${side}_logo_url`] || '').trim();
+  return { code, name: displayName, imageUrl };
+}
+
+function worldCupFixtureVenue(row) {
+  const city = String(row?.venue_city_ko || row?.venue_city_api || '').trim();
+  const name = String(row?.venue_name_ko || row?.venue_name_api || '').trim();
+  if (city && name) return `${city} · ${name}`;
+  return name || city || '';
+}
+
+function worldCupFixtureRowToMatch(row, variant = 'fixtures') {
+  const home = worldCupFixtureTeam(row, 'home');
+  const away = worldCupFixtureTeam(row, 'away');
+  const match = {
+    time_period: fixtureTimePeriodFromKst(row?.kickoff_time_kst),
+    kickoff_time: String(row?.kickoff_time_kst || '').trim(),
+    home_team: home.name,
+    home_code: home.code,
+    home_image_url: home.imageUrl,
+    away_team: away.name,
+    away_code: away.code,
+    away_image_url: away.imageUrl,
+    group_label: String(row?.group_label || row?.round || '').trim(),
+    venue: worldCupFixtureVenue(row),
+    highlighted: false,
+    home_score: row?.home_score === null || row?.home_score === undefined ? '' : String(row.home_score),
+    away_score: row?.away_score === null || row?.away_score === undefined ? '' : String(row.away_score),
+  };
+  if (variant !== 'results') {
+    return match;
+  }
+  return {
+    ...match,
+    home_score: match.home_score,
+    away_score: match.away_score,
+  };
+}
+
+function buildWorldCupFixtureEditorValue(baseValue, rows, variant = 'fixtures') {
+  const scheduleType = getFixtureTypeOption(baseValue.schedule_type, variant);
+  const isWeekly = scheduleType.id === 'weekly';
+  const startDate = baseValue.date_start || baseValue.date || rows[0]?.kickoff_date_kst || '';
+  const endDate = baseValue.date_end || addDaysToDateValue(startDate, 6);
+  const base = {
+    ...baseValue,
+    preset_id: 'world_cup',
+    eyebrow_base: 'WORLD CUP 2026',
+    schedule_type: scheduleType.id,
+    title: scheduleType.title,
+    date: startDate,
+    date_start: startDate,
+    date_end: endDate,
+    date_label: isWeekly
+      ? formatTodayFixtureDateRangeLabel(startDate, endDate)
+      : formatTodayFixtureDateLabel(startDate),
+  };
+
+  if (!isWeekly) {
+    return {
+      ...base,
+      eyebrow: scheduleEyebrowForValue(base, variant),
+      days: [],
+      matches: rows.map(row => worldCupFixtureRowToMatch(row, variant)),
+    };
+  }
+
+  const dayMap = new Map();
+  rows.forEach(row => {
+    const date = row.kickoff_date_kst;
+    if (!date) return;
+    if (!dayMap.has(date)) {
+      dayMap.set(date, {
+        date,
+        date_label: formatTodayFixtureDateLabel(date),
+        matches: [],
+      });
+    }
+    dayMap.get(date).matches.push(worldCupFixtureRowToMatch(row, variant));
+  });
+  const days = [...dayMap.values()].filter(day => day.matches.length > 0);
+  return {
+    ...base,
+    eyebrow: scheduleEyebrowForValue(base, variant),
+    days,
+    matches: flattenWeeklyFixtureDays(days),
+  };
 }
 
 function Metric({ label, value, warn }) {
@@ -1928,6 +2059,7 @@ function FixtureFlagBadge({ code, imageUrl, size = 78, style }) {
         overflow: 'hidden',
         background: flagUrl ? 'transparent' : 'linear-gradient(180deg, rgba(255,255,255,0.025), rgba(255,255,255,0)), rgba(255,255,255,0.04)',
         border: flagUrl ? '0' : '1px dashed rgba(255,255,255,0.28)',
+        boxShadow: 'none',
         color: 'rgba(255,255,255,0.72)',
         fontFamily: '"Bebas Neue", "Pretendard", sans-serif',
         fontSize: size * 0.312,
@@ -1939,7 +2071,7 @@ function FixtureFlagBadge({ code, imageUrl, size = 78, style }) {
       }}
     >
       {flagUrl ? (
-        <img src={flagUrl} alt="" style={{ display: 'block', width: size, height: size, objectFit: 'cover' }} />
+        <img src={flagUrl} alt="" style={{ display: 'block', width: '100%', height: '100%', objectFit: 'cover' }} />
       ) : (
         code
       )}
@@ -1978,10 +2110,40 @@ function FixtureResultScore({ match, variant }) {
 
   return (
     <div style={containerStyle} aria-label={scoreText}>
-      <span style={{ ...scorePartStyle, left: isWeekly ? 492.53 : 305.53 }}>{homeScore}</span>
+      <span style={{
+        ...scorePartStyle,
+        left: isWeekly ? 492.53 : 305.53,
+        color: '#fff',
+        textShadow: 'none',
+      }}>{homeScore}</span>
       <span style={colonStyle}>:</span>
-      <span style={{ ...scorePartStyle, left: isWeekly ? 553.81 : 366.81 }}>{awayScore}</span>
+      <span style={{
+        ...scorePartStyle,
+        left: isWeekly ? 553.81 : 366.81,
+        color: '#fff',
+        textShadow: 'none',
+      }}>{awayScore}</span>
     </div>
+  );
+}
+
+function FixtureMatchHighlightToggle({ value, onChange }) {
+  const active = Boolean(value);
+  return (
+    <button
+      type="button"
+      onClick={() => onChange(!active)}
+      aria-pressed={active}
+      className="h-10 w-full rounded-md px-3 text-xs font-black transition"
+      style={{
+        background: active ? '#123222' : '#11141d',
+        color: active ? '#35d48a' : '#8791aa',
+        border: `1px solid ${active ? '#35d48a' : '#283040'}`,
+        boxShadow: active ? '0 0 0 1px rgba(53,212,138,0.22)' : 'none',
+      }}
+    >
+      {active ? '강조 중' : '경기 강조'}
+    </button>
   );
 }
 
@@ -1997,9 +2159,13 @@ function TodayFixturesEditor({
   focusRequest,
   onReorderMatch,
   showValidation,
+  onAutoFillDateChange,
+  onUploadBackground,
 }) {
   const rowRefs = useRef([]);
   const [dragIndex, setDragIndex] = useState(null);
+  const [backgroundUploading, setBackgroundUploading] = useState(false);
+  const [backgroundError, setBackgroundError] = useState('');
   const isResults = variant === 'results';
   const currentPreset = getTodayFixturesPreset(value.preset_id);
   const currentScheduleType = getFixtureTypeOption(value.schedule_type, variant);
@@ -2010,23 +2176,27 @@ function TodayFixturesEditor({
   const weeklyDays = isWeekly ? weeklyFixtureDaysForValue(value) : [];
   const totalWeeklyMatches = flattenWeeklyFixtureDays(weeklyDays).length;
   const updateDate = nextDate => {
-    onChange({
+    const nextValue = {
       ...value,
       date: nextDate,
       date_start: nextDate,
       date_end: value.date_end || addDaysToDateValue(nextDate, 6),
       date_label: formatTodayFixtureDateLabel(nextDate),
-    });
+    };
+    onChange(nextValue);
+    onAutoFillDateChange?.(nextValue);
   };
   const updateWeekStart = nextStartDate => {
     const nextEndDate = addDaysToDateValue(nextStartDate, 6);
-    onChange({
+    const nextValue = {
       ...value,
       date: nextStartDate,
       date_start: nextStartDate,
       date_end: nextEndDate,
       date_label: formatTodayFixtureDateRangeLabel(nextStartDate, nextEndDate),
-    });
+    };
+    onChange(nextValue);
+    onAutoFillDateChange?.(nextValue);
   };
   const updateWeekEnd = nextEndDate => {
     onChange({
@@ -2034,6 +2204,23 @@ function TodayFixturesEditor({
       date_end: nextEndDate,
       date_label: formatTodayFixtureDateRangeLabel(value.date_start || value.date, nextEndDate),
     });
+  };
+  const updateBackgroundImageUrl = nextUrl => {
+    setBackgroundError('');
+    onChange({ ...value, background_image_url: nextUrl });
+  };
+  const uploadBackgroundFile = async file => {
+    if (!file || !onUploadBackground) return;
+    setBackgroundUploading(true);
+    setBackgroundError('');
+    try {
+      const url = await onUploadBackground(file);
+      onChange({ ...value, background_image_url: url });
+    } catch (error) {
+      setBackgroundError(error.message || '배경 이미지를 업로드하지 못했습니다.');
+    } finally {
+      setBackgroundUploading(false);
+    }
   };
   const updateScheduleType = nextType => {
     const option = getFixtureTypeOption(nextType, variant);
@@ -2048,7 +2235,7 @@ function TodayFixturesEditor({
               matches: value.matches || [],
             }])
       : value.days || [];
-    onChange({
+    const nextValue = {
       ...value,
       schedule_type: option.id,
       title: option.title,
@@ -2060,7 +2247,9 @@ function TodayFixturesEditor({
       date_label: option.id === 'weekly'
         ? formatTodayFixtureDateRangeLabel(startDate, endDate)
         : formatTodayFixtureDateLabel(startDate),
-    });
+    };
+    onChange(nextValue);
+    onAutoFillDateChange?.(nextValue);
   };
   const applyPreset = presetId => {
     const preset = getTodayFixturesPreset(presetId);
@@ -2249,7 +2438,6 @@ function TodayFixturesEditor({
               <input
                 type="date"
                 value={currentScheduleType.id === 'weekly' ? (value.date_start || value.date || '') : (value.date || '')}
-                onInput={event => (currentScheduleType.id === 'weekly' ? updateWeekStart(event.currentTarget.value) : updateDate(event.currentTarget.value))}
                 onChange={event => (currentScheduleType.id === 'weekly' ? updateWeekStart(event.target.value) : updateDate(event.target.value))}
                 className="h-10 w-full rounded-md px-3 text-sm font-bold outline-none"
                 style={{ background: '#11141d', color: '#fff', border: '1px solid #283040' }}
@@ -2261,7 +2449,6 @@ function TodayFixturesEditor({
                 <input
                   type="date"
                   value={value.date_end || ''}
-                  onInput={event => updateWeekEnd(event.currentTarget.value)}
                   onChange={event => updateWeekEnd(event.target.value)}
                   className="h-10 w-full rounded-md px-3 text-sm font-bold outline-none"
                   style={{ background: '#11141d', color: '#fff', border: '1px solid #283040' }}
@@ -2276,6 +2463,51 @@ function TodayFixturesEditor({
           </div>
           </div>
         </div>
+
+        <div className="grid min-w-0 gap-2 sm:grid-cols-[minmax(0,1fr)_auto_auto]">
+          <label className="block min-w-0">
+            <span className="mb-1 block text-xs font-bold uppercase" style={{ color: '#687086' }}>background image</span>
+            <input
+              value={value.background_image_url || ''}
+              onChange={event => updateBackgroundImageUrl(event.target.value)}
+              placeholder="이미지 URL 또는 파일 업로드"
+              className="h-10 w-full rounded-md px-3 text-sm outline-none"
+              style={{ background: '#11141d', color: '#fff', border: '1px solid #283040' }}
+            />
+          </label>
+          <label className="flex min-w-[112px] cursor-pointer flex-col justify-end">
+            <span className="mb-1 block text-xs font-bold uppercase" style={{ color: '#687086' }}>upload</span>
+            <span
+              className="inline-flex h-10 items-center justify-center rounded-md px-3 text-sm font-bold"
+              style={{ background: '#1a2a4a', color: '#60a5fa', border: '1px solid #1e3a5f', opacity: disabled || backgroundUploading ? 0.55 : 1 }}
+            >
+              {backgroundUploading ? '업로드 중' : '파일 선택'}
+            </span>
+            <input
+              type="file"
+              accept="image/*"
+              disabled={disabled || backgroundUploading}
+              onChange={event => {
+                const file = event.target.files?.[0];
+                event.target.value = '';
+                uploadBackgroundFile(file);
+              }}
+              className="sr-only"
+            />
+          </label>
+          <button
+            type="button"
+            onClick={() => updateBackgroundImageUrl('')}
+            disabled={disabled || backgroundUploading || !value.background_image_url}
+            className="self-end rounded-md px-3 py-2 text-sm font-bold disabled:opacity-50"
+            style={{ background: '#171923', color: '#cbd3e8', border: '1px solid #2a3040' }}
+          >
+            기본 배경
+          </button>
+        </div>
+        {backgroundError && (
+          <div className="text-xs font-bold" style={{ color: '#ffb0b0' }}>{backgroundError}</div>
+        )}
 
         <div className="space-y-3">
           <div className="flex items-center justify-between gap-3">
@@ -2312,7 +2544,6 @@ function TodayFixturesEditor({
                   <input
                     type="date"
                     value={day.date || ''}
-                    onInput={event => updateWeeklyDayDate(dayIndex, event.currentTarget.value)}
                     onChange={event => updateWeeklyDayDate(dayIndex, event.target.value)}
                     className="h-10 w-full rounded-md px-3 text-sm font-bold outline-none"
                     style={{ background: '#11141d', color: '#fff', border: '1px solid #283040' }}
@@ -2335,6 +2566,7 @@ function TodayFixturesEditor({
                 {day.matches.map((match, matchIndex) => {
                   const absoluteIndex = beforeCount + matchIndex;
                   const selected = selectedMatchIndex === absoluteIndex;
+                  const highlighted = Boolean(match.highlighted);
                   const rowIssues = validationIssues.filter(issue => issue.index === absoluteIndex);
                   return (
                   <div
@@ -2343,9 +2575,9 @@ function TodayFixturesEditor({
                     onClick={() => onSelectMatch?.(absoluteIndex)}
                     className="rounded-md p-3 transition"
                     style={{
-                      background: selected ? '#0f1722' : '#0b0d14',
-                      border: `1px solid ${selected ? '#35d48a' : rowIssues.length && showValidation ? '#665017' : '#202635'}`,
-                      boxShadow: selected ? '0 0 0 1px rgba(53,212,138,0.35)' : 'none',
+                      background: highlighted ? '#0e1f17' : selected ? '#0f1722' : '#0b0d14',
+                      border: `1px solid ${highlighted ? '#35d48a' : selected ? '#35d48a' : rowIssues.length && showValidation ? '#665017' : '#202635'}`,
+                      boxShadow: highlighted ? '0 0 0 1px rgba(53,212,138,0.32), 0 10px 24px rgba(53,212,138,0.12)' : selected ? '0 0 0 1px rgba(53,212,138,0.35)' : 'none',
                     }}
                   >
                     <div className={`grid min-w-0 items-end gap-2 ${isResults ? 'sm:grid-cols-[34px_86px_104px_112px_minmax(0,1fr)_40px]' : 'sm:grid-cols-[34px_86px_104px_minmax(0,1fr)_40px]'}`}>
@@ -2422,6 +2654,13 @@ function TodayFixturesEditor({
                         삭제
                       </button>
                     </div>
+                    <label className="mt-2 block min-w-0 space-y-1">
+                      <span className="block text-xs font-bold uppercase" style={{ color: '#687086' }}>highlight match</span>
+                      <FixtureMatchHighlightToggle
+                        value={match.highlighted}
+                        onChange={nextValue => updateWeeklyMatch(dayIndex, matchIndex, 'highlighted', nextValue)}
+                      />
+                    </label>
                     {showValidation && rowIssues.length > 0 && (
                       <div className="mt-2 text-xs font-bold" style={{ color: '#ffd166' }}>
                         {rowIssues.map(issue => issue.message).join(' · ')}
@@ -2455,6 +2694,7 @@ function TodayFixturesEditor({
 
           {!isWeekly && value.matches.map((match, index) => {
             const selected = selectedMatchIndex === index;
+            const highlighted = Boolean(match.highlighted);
             const rowIssues = validationIssues.filter(issue => issue.index === index);
             return (
             <div
@@ -2464,9 +2704,9 @@ function TodayFixturesEditor({
               onMouseOver={() => enterDragTarget(index)}
               className="rounded-md p-3 transition"
               style={{
-                background: selected ? '#0f1722' : '#080a10',
-                border: `1px solid ${selected ? '#35d48a' : rowIssues.length && showValidation ? '#665017' : '#202635'}`,
-                boxShadow: selected ? '0 0 0 1px rgba(53,212,138,0.35)' : 'none',
+                background: highlighted ? '#0e1f17' : selected ? '#0f1722' : '#080a10',
+                border: `1px solid ${highlighted ? '#35d48a' : selected ? '#35d48a' : rowIssues.length && showValidation ? '#665017' : '#202635'}`,
+                boxShadow: highlighted ? '0 0 0 1px rgba(53,212,138,0.32), 0 10px 24px rgba(53,212,138,0.12)' : selected ? '0 0 0 1px rgba(53,212,138,0.35)' : 'none',
               }}
             >
               <div className={`grid min-w-0 items-end gap-2 ${isResults ? 'sm:grid-cols-[34px_86px_104px_112px_minmax(0,1fr)_40px]' : 'sm:grid-cols-[34px_86px_104px_minmax(0,1fr)_40px]'}`}>
@@ -2567,6 +2807,13 @@ function TodayFixturesEditor({
                 </label>
               </div>
               <label className="mt-2 block min-w-0 space-y-1">
+                <span className="block text-xs font-bold uppercase" style={{ color: '#687086' }}>highlight match</span>
+                <FixtureMatchHighlightToggle
+                  value={match.highlighted}
+                  onChange={nextValue => updateMatch(index, 'highlighted', nextValue)}
+                />
+              </label>
+              <label className="mt-2 block min-w-0 space-y-1">
                 <span className="block text-xs font-bold uppercase" style={{ color: '#687086' }}>venue</span>
                 <input
                   value={match.venue}
@@ -2634,6 +2881,7 @@ function TodayFixturesPreview({ value, selectedMatchIndex, onSelectMatch, varian
   const activePageIndex = Math.min(pageIndex, fixturePages.length - 1);
   const activeMatches = isWeekly ? [] : fixturePages[activePageIndex] || [];
   const activeWeeklyDays = isWeekly ? fixturePages[activePageIndex] || [] : [];
+  const backgroundImageUrl = String(payload.background_image_url || '').trim();
 
   useEffect(() => {
     setPageIndex(current => Math.min(current, fixturePages.length - 1));
@@ -2698,11 +2946,27 @@ function TodayFixturesPreview({ value, selectedMatchIndex, onSelectMatch, varian
               background: '#06090f',
               fontFamily: '"Pretendard", "Malgun Gothic", "Apple SD Gothic Neo", sans-serif',
             }}>
-            <img
-              src={todayFixturesTemplateUrl}
-              alt=""
-              style={{ position: 'absolute', inset: 0, width: CARD_PREVIEW_WIDTH, height: CARD_PREVIEW_HEIGHT, display: 'block' }}
-            />
+            {backgroundImageUrl ? (
+              <>
+                <img
+                  src={backgroundImageUrl}
+                  alt=""
+                  style={{ position: 'absolute', inset: 0, width: CARD_PREVIEW_WIDTH, height: CARD_PREVIEW_HEIGHT, display: 'block', objectFit: 'cover' }}
+                />
+                <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(180deg, rgba(2,5,10,0.76) 0%, rgba(2,5,10,0.70) 50%, rgba(0,20,14,0.82) 100%)' }} />
+                <img
+                  src={todayFixturesTemplateUrl}
+                  alt=""
+                  style={{ position: 'absolute', inset: 0, width: CARD_PREVIEW_WIDTH, height: CARD_PREVIEW_HEIGHT, display: 'block', mixBlendMode: 'screen' }}
+                />
+              </>
+            ) : (
+              <img
+                src={todayFixturesTemplateUrl}
+                alt=""
+                style={{ position: 'absolute', inset: 0, width: CARD_PREVIEW_WIDTH, height: CARD_PREVIEW_HEIGHT, display: 'block' }}
+              />
+            )}
             <div style={{ position: 'absolute', left: isWeekly ? 93 : 92, top: isWeekly ? 86 : 91, width: isWeekly ? 430 : 420, height: isWeekly ? 36 : 30, display: 'flex', alignItems: 'center', gap: isWeekly ? 21 : 14, color: '#fff', fontFamily: '"Bebas Neue", "Pretendard", sans-serif', fontSize: isWeekly ? 30 : 27, lineHeight: isWeekly ? '36px' : '30px', fontWeight: 400, letterSpacing: isWeekly ? 4.2 : 7, whiteSpace: 'nowrap', overflow: 'hidden' }}>
               <span style={{ width: 7, height: 7, borderRadius: '50%', background: '#35d48a', flex: '0 0 auto' }} />
               <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{payload.eyebrow}</span>
@@ -2728,6 +2992,7 @@ function TodayFixturesPreview({ value, selectedMatchIndex, onSelectMatch, varian
                 let rowTop = cursor + 40;
                 day.matches.forEach(({ match, absoluteIndex }, matchIndex) => {
                   const selected = selectedMatchIndex === absoluteIndex;
+                  const highlighted = Boolean(match.highlighted);
                   const homeFontSize = weeklyFixtureTeamNameFontSize(match.home_team);
                   const awayFontSize = weeklyFixtureTeamNameFontSize(match.away_team);
                   elements.push(
@@ -2744,9 +3009,10 @@ function TodayFixturesPreview({ value, selectedMatchIndex, onSelectMatch, varian
                         overflow: 'hidden',
                         appearance: 'none',
                         padding: 0,
-                        border: selected ? '2px solid rgba(53,212,138,0.85)' : '2px solid transparent',
+                        border: highlighted ? '2px solid rgba(53,212,138,0.95)' : selected ? '2px solid rgba(53,212,138,0.85)' : '2px solid transparent',
                         borderRadius: 12,
-                        background: selected ? 'rgba(53,212,138,0.08)' : 'transparent',
+                        background: highlighted ? 'rgba(53,212,138,0.12)' : selected ? 'rgba(53,212,138,0.08)' : 'transparent',
+                        boxShadow: highlighted ? '0 0 0 1px rgba(53,212,138,0.42), 0 16px 34px rgba(0,0,0,0.28)' : 'none',
                         color: '#fff',
                         textAlign: 'left',
                         cursor: 'pointer',
@@ -2756,7 +3022,7 @@ function TodayFixturesPreview({ value, selectedMatchIndex, onSelectMatch, varian
                         <div style={{ width: 84, height: 21, color: 'rgba(255,255,255,0.46)', fontSize: 18, lineHeight: '21px', fontWeight: 900, whiteSpace: 'nowrap', overflow: 'hidden' }}>{match.time_period}</div>
                         <div style={{ marginTop: 4, width: 110, height: 36, fontFamily: '"Bebas Neue", "Pretendard", sans-serif', fontSize: 40, lineHeight: '36px', fontWeight: 400, letterSpacing: 0.8, whiteSpace: 'nowrap', overflow: 'hidden' }}>{match.kickoff_time}</div>
                       </div>
-                      <div style={{ position: 'absolute', left: isResults ? 182.73 : 286, top: 29, width: 220, height: 37, fontSize: homeFontSize, lineHeight: '37px', fontWeight: 900, letterSpacing: -0.31, textAlign: 'right', whiteSpace: 'nowrap', overflow: 'hidden' }}>{match.home_team}</div>
+                      <div style={{ position: 'absolute', left: isResults ? 182.73 : 286, top: 29, width: 220, height: 37, color: '#fff', fontSize: homeFontSize, lineHeight: '37px', fontWeight: 900, letterSpacing: -0.31, textAlign: 'right', whiteSpace: 'nowrap', overflow: 'hidden' }}>{match.home_team}</div>
                       <FixtureFlagBadge code={match.home_code} imageUrl={match.home_image_url} size={56} style={{ position: 'absolute', left: isResults ? 418.53 : 522, top: 19.5 }} />
                       {isResults ? (
                         <FixtureResultScore match={match} variant="weekly" />
@@ -2764,7 +3030,7 @@ function TodayFixturesPreview({ value, selectedMatchIndex, onSelectMatch, varian
                         <div style={{ position: 'absolute', left: 595.61, top: 32, width: 28, height: 31, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'rgba(255,255,255,0.46)', fontFamily: '"Bebas Neue", "Pretendard", sans-serif', fontSize: 26, lineHeight: 1, fontWeight: 400, letterSpacing: 2.08, textAlign: 'center', whiteSpace: 'nowrap' }}>VS</div>
                       )}
                       <FixtureFlagBadge code={match.away_code} imageUrl={match.away_image_url} size={56} style={{ position: 'absolute', left: isResults ? 596.45 : 637.38, top: 19.5 }} />
-                      <div style={{ position: 'absolute', left: isResults ? 668.45 : 709.38, top: 29, width: 220, height: 37, fontSize: awayFontSize, lineHeight: '37px', fontWeight: 900, letterSpacing: -0.31, whiteSpace: 'nowrap', overflow: 'hidden' }}>{match.away_team}</div>
+                      <div style={{ position: 'absolute', left: isResults ? 668.45 : 709.38, top: 29, width: 220, height: 37, color: '#fff', fontSize: awayFontSize, lineHeight: '37px', fontWeight: 900, letterSpacing: -0.31, whiteSpace: 'nowrap', overflow: 'hidden' }}>{match.away_team}</div>
                     </button>
                   );
                   rowTop += 106;
@@ -2776,6 +3042,7 @@ function TodayFixturesPreview({ value, selectedMatchIndex, onSelectMatch, varian
             {!isWeekly && activeMatches.map((match, index) => {
               const absoluteIndex = activePageIndex * TODAY_FIXTURES_MATCHES_PER_PAGE + index;
               const selected = selectedMatchIndex === absoluteIndex;
+              const highlighted = Boolean(match.highlighted);
               const homeFontSize = fixtureTeamNameFontSize(match.home_team);
               const awayFontSize = fixtureTeamNameFontSize(match.away_team);
               return (
@@ -2792,9 +3059,10 @@ function TodayFixturesPreview({ value, selectedMatchIndex, onSelectMatch, varian
                   overflow: 'hidden',
                   appearance: 'none',
                   padding: 0,
-                  border: selected ? '2px solid rgba(53,212,138,0.85)' : '2px solid transparent',
+                  border: highlighted ? '2px solid rgba(53,212,138,0.95)' : selected ? '2px solid rgba(53,212,138,0.85)' : '2px solid transparent',
                   borderRadius: 12,
-                  background: selected ? 'rgba(53,212,138,0.08)' : 'transparent',
+                  background: highlighted ? 'rgba(53,212,138,0.12)' : selected ? 'rgba(53,212,138,0.08)' : 'transparent',
+                  boxShadow: highlighted ? '0 0 0 1px rgba(53,212,138,0.42), 0 18px 34px rgba(0,0,0,0.28)' : 'none',
                   color: '#fff',
                   textAlign: 'left',
                   cursor: 'pointer',
@@ -2805,7 +3073,7 @@ function TodayFixturesPreview({ value, selectedMatchIndex, onSelectMatch, varian
                   <div style={{ width: 170, height: 67, fontFamily: '"Bebas Neue", "Pretendard", sans-serif', fontSize: 56, lineHeight: '50.4px', fontWeight: 400, letterSpacing: 1.12, whiteSpace: 'nowrap', overflow: 'hidden' }}>{match.kickoff_time}</div>
                 </div>
                 <div style={{ position: 'absolute', left: 200, top: 33, width: 720, height: 150 }}>
-                  <div style={{ position: 'absolute', left: isResults ? -31.27 : 0, top: 15, width: 225, height: 54, fontSize: homeFontSize, lineHeight: '48px', fontWeight: 900, textAlign: 'right', whiteSpace: 'nowrap', overflow: 'hidden' }}>{match.home_team}</div>
+                  <div style={{ position: 'absolute', left: isResults ? -31.27 : 0, top: 15, width: 225, height: 54, color: '#fff', fontSize: homeFontSize, lineHeight: '48px', fontWeight: 900, textAlign: 'right', whiteSpace: 'nowrap', overflow: 'hidden' }}>{match.home_team}</div>
                   <FixtureFlagBadge code={match.home_code} imageUrl={match.home_image_url} style={{ position: 'absolute', left: isResults ? 209.53 : 240.61, top: 0 }} />
                   {isResults ? (
                     <FixtureResultScore match={match} variant="today" />
@@ -2813,7 +3081,7 @@ function TodayFixturesPreview({ value, selectedMatchIndex, onSelectMatch, varian
                     <div style={{ position: 'absolute', left: 321.5, top: 0, width: 54, height: 78, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'rgba(255,255,255,0.46)', fontFamily: '"Bebas Neue", "Pretendard", sans-serif', fontSize: 26, lineHeight: 1, fontWeight: 400, letterSpacing: 0, textAlign: 'center', whiteSpace: 'nowrap' }}>VS</div>
                   )}
                   <FixtureFlagBadge code={match.away_code} imageUrl={match.away_image_url} style={{ position: 'absolute', left: isResults ? 409.45 : 378.38, top: 0 }} />
-                  <div style={{ position: 'absolute', left: isResults ? 503.45 : 472.38, top: 15, width: 225, height: 54, fontSize: awayFontSize, lineHeight: '48px', fontWeight: 900, whiteSpace: 'nowrap', overflow: 'hidden' }}>{match.away_team}</div>
+                  <div style={{ position: 'absolute', left: isResults ? 503.45 : 472.38, top: 15, width: 225, height: 54, color: '#fff', fontSize: awayFontSize, lineHeight: '48px', fontWeight: 900, whiteSpace: 'nowrap', overflow: 'hidden' }}>{match.away_team}</div>
                   <div style={{ position: 'absolute', left: 0, top: 92, width: 680, height: 25, color: 'rgba(255,255,255,0.46)', fontSize: 21, lineHeight: '25px', fontWeight: 900, whiteSpace: 'nowrap', overflow: 'hidden' }}>
                     {[match.group_label, match.venue].filter(Boolean).join(' · ')}
                   </div>
@@ -2933,6 +3201,52 @@ function CardNewsWorkspace({ headers, adminToken, seedItem, onNotify }) {
     setLocalTone(tone);
     setLocalMessage(text);
     onNotify?.(tone, text);
+  };
+
+  const autoFillWorldCupFixtures = async (nextValue, variant = 'fixtures') => {
+    if (!adminToken || nextValue.preset_id !== 'world_cup') return;
+    const scheduleType = getFixtureTypeOption(nextValue.schedule_type, variant);
+    const startDate = scheduleType.id === 'weekly' ? (nextValue.date_start || nextValue.date) : nextValue.date;
+    if (!startDate) return;
+    const endDate = scheduleType.id === 'weekly' ? addDaysToDateValue(startDate, 6) : startDate;
+    setBusy(true);
+    setLocalMessage('');
+    try {
+      const params = new URLSearchParams({
+        from: startDate,
+        to: endDate,
+        limit: '100',
+      });
+      if (variant === 'results') params.set('status', 'completed');
+      const response = await fetch(`/api/admin/world-cup-fixtures?${params.toString()}`, { headers });
+      const data = await readJsonResponse(response);
+      if (!response.ok) throw new Error(data.error || '월드컵 경기 데이터를 불러오지 못했습니다.');
+      const rows = Array.isArray(data.fixtures) ? data.fixtures : [];
+      if (rows.length === 0) {
+        setNotice('warn', variant === 'results'
+          ? '저장된 월드컵 경기 결과가 없습니다. 먼저 월드컵 결과 동기화를 실행해주세요.'
+          : '저장된 월드컵 경기 일정이 없습니다. 먼저 월드컵 일정 동기화를 실행해주세요.');
+        return;
+      }
+      const editorValue = buildWorldCupFixtureEditorValue({
+        ...nextValue,
+        date: startDate,
+        date_start: startDate,
+        date_end: endDate,
+      }, rows, variant);
+      if (variant === 'results') {
+        setMatchResults(editorValue);
+        setSelectedMatchResultIndex(0);
+      } else {
+        setTodayFixtures(editorValue);
+        setSelectedTodayFixtureIndex(0);
+      }
+      setNotice('good', `${editorValue.date_label} 월드컵 경기 ${variant === 'results' ? '결과' : '일정'} ${rows.length}건을 자동 입력했습니다.`);
+    } catch (error) {
+      setNotice('bad', error.message);
+    } finally {
+      setBusy(false);
+    }
   };
 
   const applyItemDefaults = item => {
@@ -4037,6 +4351,8 @@ function CardNewsWorkspace({ headers, adminToken, seedItem, onNotify }) {
           focusRequest={todayFixtureFocusRequest}
           onReorderMatch={reorderTodayFixtureMatch}
           showValidation={showTodayFixturesValidation}
+          onAutoFillDateChange={nextValue => autoFillWorldCupFixtures(nextValue, 'fixtures')}
+          onUploadBackground={uploadCardImageFile}
           variant="fixtures"
         />
         <TodayFixturesPreview
@@ -4059,6 +4375,8 @@ function CardNewsWorkspace({ headers, adminToken, seedItem, onNotify }) {
           focusRequest={matchResultFocusRequest}
           onReorderMatch={reorderMatchResultMatch}
           showValidation={showMatchResultsValidation}
+          onAutoFillDateChange={nextValue => autoFillWorldCupFixtures(nextValue, 'results')}
+          onUploadBackground={uploadCardImageFile}
           variant="results"
         />
         <TodayFixturesPreview
@@ -4069,6 +4387,194 @@ function CardNewsWorkspace({ headers, adminToken, seedItem, onNotify }) {
         />
       </div>
       )}
+    </div>
+  );
+}
+
+function WorldCupFixturesPanel({ headers, adminToken, onNotify }) {
+  const [fromDate, setFromDate] = useState(() => todayKstDateValue());
+  const [toDate, setToDate] = useState(() => addDaysToDateValue(todayKstDateValue(), 6));
+  const [statusFilter, setStatusFilter] = useState('all');
+  const [fixtures, setFixtures] = useState([]);
+  const [busy, setBusy] = useState(false);
+  const [localMessage, setLocalMessage] = useState('');
+  const [localTone, setLocalTone] = useState('neutral');
+
+  const setNotice = (tone, text) => {
+    setLocalTone(tone);
+    setLocalMessage(text);
+    onNotify?.(tone, text);
+  };
+
+  const loadFixtures = async () => {
+    if (!adminToken) {
+      setFixtures([]);
+      return;
+    }
+    setBusy(true);
+    setLocalMessage('');
+    try {
+      const params = new URLSearchParams({ limit: '300' });
+      if (fromDate) params.set('from', fromDate);
+      if (toDate) params.set('to', toDate);
+      if (statusFilter && statusFilter !== 'all') params.set('status', statusFilter);
+      const response = await fetch(`/api/admin/world-cup-fixtures?${params.toString()}`, { headers });
+      const data = await readJsonResponse(response);
+      if (!response.ok) throw new Error(data.error || '월드컵 경기 데이터를 불러오지 못했습니다.');
+      setFixtures(Array.isArray(data.fixtures) ? data.fixtures : []);
+    } catch (error) {
+      setNotice('bad', error.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  useEffect(() => {
+    loadFixtures();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [adminToken]);
+
+  const completedCount = fixtures.filter(row => WORLD_CUP_COMPLETED_STATUSES.has(row.status_short)).length;
+  const upcomingCount = fixtures.length - completedCount;
+  const statusOptions = ['all', 'completed', 'NS', 'TBD', 'LIVE', 'HT', 'FT', 'AET', 'PEN', 'PST', 'CANC'];
+  const statusLabels = {
+    all: '전체 상태',
+    completed: '완료 경기',
+    NS: '예정',
+    TBD: '시간 미정',
+    LIVE: '진행 중',
+    HT: '하프타임',
+    FT: '종료',
+    AET: '연장 종료',
+    PEN: '승부차기 종료',
+    PST: '연기',
+    CANC: '취소',
+  };
+
+  return (
+    <div className="min-w-0 space-y-4">
+      {localMessage && <Notice tone={localTone}>{localMessage}</Notice>}
+
+      <section className="min-w-0 rounded-md p-4" style={{ background: '#0b0d14', border: '1px solid #202635' }}>
+        <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
+          <div>
+            <div className="text-xs font-bold uppercase" style={{ color: '#687086' }}>World Cup fixtures</div>
+            <h2 className="mt-1 text-lg font-black text-white">경기 일정</h2>
+          </div>
+          <div className="grid w-full min-w-0 gap-2 sm:grid-cols-[150px_150px_160px_auto] lg:w-auto">
+            <label className="block min-w-0">
+              <span className="mb-1 block text-xs font-bold uppercase" style={{ color: '#687086' }}>from</span>
+              <input
+                type="date"
+                value={fromDate}
+                onChange={event => setFromDate(event.target.value)}
+                className="h-10 w-full rounded-md px-3 text-sm font-bold outline-none"
+                style={{ background: '#11141d', color: '#fff', border: '1px solid #283040' }}
+              />
+            </label>
+            <label className="block min-w-0">
+              <span className="mb-1 block text-xs font-bold uppercase" style={{ color: '#687086' }}>to</span>
+              <input
+                type="date"
+                value={toDate}
+                onChange={event => setToDate(event.target.value)}
+                className="h-10 w-full rounded-md px-3 text-sm font-bold outline-none"
+                style={{ background: '#11141d', color: '#fff', border: '1px solid #283040' }}
+              />
+            </label>
+            <label className="block min-w-0">
+              <span className="mb-1 block text-xs font-bold uppercase" style={{ color: '#687086' }}>status</span>
+              <CompactSelect
+                value={statusFilter}
+                options={statusOptions}
+                optionLabels={statusLabels}
+                onChange={setStatusFilter}
+                ariaLabel="월드컵 경기 상태 필터"
+              />
+            </label>
+            <button
+              type="button"
+              onClick={loadFixtures}
+              disabled={!adminToken || busy}
+              className="h-10 self-end rounded-md px-4 text-sm font-black disabled:opacity-50"
+              style={{ background: '#e8edf7', color: '#05070d' }}>
+              {busy ? '불러오는 중' : '조회'}
+            </button>
+          </div>
+        </div>
+
+        <div className="mb-4 grid min-w-0 gap-3 sm:grid-cols-3">
+          <Metric label="Loaded fixtures" value={fixtures.length} />
+          <Metric label="Upcoming / live" value={upcomingCount} />
+          <Metric label="Completed" value={completedCount} />
+        </div>
+
+        {fixtures.length === 0 ? (
+          <div className="rounded-md p-8 text-center text-sm" style={{ background: '#11141d', color: '#8791aa', border: '1px solid #283040' }}>
+            저장된 월드컵 경기 데이터가 없습니다. 먼저 월드컵 일정 동기화를 실행해주세요.
+          </div>
+        ) : (
+          <div className="min-w-0 overflow-x-auto rounded-md" style={{ border: '1px solid #283040' }}>
+            <table className="w-full min-w-[1120px] border-collapse text-left text-xs">
+              <thead style={{ background: '#080a10', color: '#687086' }}>
+                <tr>
+                  <th className="px-3 py-2 font-black uppercase">date</th>
+                  <th className="px-3 py-2 font-black uppercase">time</th>
+                  <th className="px-3 py-2 font-black uppercase">home</th>
+                  <th className="px-3 py-2 font-black uppercase">away</th>
+                  <th className="px-3 py-2 font-black uppercase">group/round</th>
+                  <th className="px-3 py-2 font-black uppercase">venue</th>
+                  <th className="px-3 py-2 font-black uppercase">status</th>
+                  <th className="px-3 py-2 font-black uppercase">score</th>
+                  <th className="px-3 py-2 font-black uppercase">schedule sync</th>
+                  <th className="px-3 py-2 font-black uppercase">result sync</th>
+                </tr>
+              </thead>
+              <tbody>
+                {fixtures.map(row => {
+                  const home = worldCupFixtureTeam(row, 'home');
+                  const away = worldCupFixtureTeam(row, 'away');
+                  const score = row.home_score === null || row.home_score === undefined
+                    ? '-'
+                    : `${row.home_score}:${row.away_score ?? '-'}`;
+                  return (
+                    <tr key={row.id || row.api_fixture_id} style={{ borderTop: '1px solid #202635' }}>
+                      <td className="px-3 py-3 font-bold text-white">{row.kickoff_date_kst || '-'}</td>
+                      <td className="px-3 py-3 font-black text-white">{row.kickoff_time_kst || '-'}</td>
+                      <td className="px-3 py-3">
+                        <div className="flex min-w-0 items-center gap-2">
+                          {home.imageUrl && <img src={home.imageUrl} alt="" className="h-6 w-6 shrink-0 rounded-full object-cover" />}
+                          <div className="min-w-0">
+                            <div className="truncate font-black text-white">{home.name || '-'}</div>
+                            <div style={{ color: '#687086' }}>{home.code || row.home_team_name_api || '-'}</div>
+                          </div>
+                        </div>
+                      </td>
+                      <td className="px-3 py-3">
+                        <div className="flex min-w-0 items-center gap-2">
+                          {away.imageUrl && <img src={away.imageUrl} alt="" className="h-6 w-6 shrink-0 rounded-full object-cover" />}
+                          <div className="min-w-0">
+                            <div className="truncate font-black text-white">{away.name || '-'}</div>
+                            <div style={{ color: '#687086' }}>{away.code || row.away_team_name_api || '-'}</div>
+                          </div>
+                        </div>
+                      </td>
+                      <td className="px-3 py-3 font-bold" style={{ color: '#cbd3e8' }}>{row.group_label || row.round || '-'}</td>
+                      <td className="px-3 py-3" style={{ color: '#a8b0c7' }}>{worldCupFixtureVenue(row) || '-'}</td>
+                      <td className="px-3 py-3">
+                        <Badge tone={WORLD_CUP_COMPLETED_STATUSES.has(row.status_short) ? 'good' : 'neutral'}>{row.status_short || '-'}</Badge>
+                      </td>
+                      <td className="px-3 py-3 font-black text-white">{score}</td>
+                      <td className="px-3 py-3" style={{ color: '#8791aa' }}>{row.last_schedule_synced_at ? fmtKST(row.last_schedule_synced_at) : '-'}</td>
+                      <td className="px-3 py-3" style={{ color: '#8791aa' }}>{row.last_result_synced_at ? fmtKST(row.last_result_synced_at) : '-'}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
     </div>
   );
 }
@@ -5009,6 +5515,7 @@ export default function AdminDashboard() {
   const [scheduleModal, setScheduleModal] = useState(false);
   const [matchModal, setMatchModal] = useState(false);
   const [newIds, setNewIds] = useState(new Set());
+  const [worldCupSyncing, setWorldCupSyncing] = useState('');
   const isInitialLoading = Boolean(adminToken && busy && !loaded && !error);
 
   useEffect(() => {
@@ -5032,7 +5539,7 @@ export default function AdminDashboard() {
       setError('');
       return [];
     }
-    if (status === CARD_NEWS_TAB) {
+    if ([CARD_NEWS_TAB, GENERATED_CARD_NEWS_TAB, WORLD_CUP_FIXTURES_TAB].includes(status)) {
       setError('');
       setLoaded(true);
       return items;
@@ -5293,6 +5800,39 @@ export default function AdminDashboard() {
     }
   };
 
+  const syncWorldCupFixtures = async syncType => {
+    if (!adminToken) {
+      setMessageTone('warn');
+      setMessage('월드컵 데이터를 동기화하려면 ADMIN_TOKEN이 필요합니다.');
+      return;
+    }
+    const label = syncType === 'result' ? '월드컵 결과 동기화' : '월드컵 일정 동기화';
+    setBusy(true);
+    setWorldCupSyncing(syncType);
+    setMessage('');
+    setError('');
+    try {
+      const response = await fetch('/api/admin/world-cup-fixtures', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          action: syncType === 'result' ? 'sync_result' : 'sync_schedule',
+          actor: 'admin-ui',
+        }),
+      });
+      const data = await readJsonResponse(response);
+      if (!response.ok) throw new Error(data.error || `${label}에 실패했습니다.`);
+      setMessageTone('good');
+      setMessage(`${label} 완료: 저장 ${data.saved_count || 0}건 · API ${data.fixture_count || 0}건 · ${data.range?.from || '-'}~${data.range?.to || '-'}`);
+    } catch (error) {
+      setMessageTone('bad');
+      setMessage(error.message);
+    } finally {
+      setWorldCupSyncing('');
+      setBusy(false);
+    }
+  };
+
   return (
     <div className="min-h-screen" style={{ background: '#05070d', color: '#fff' }}>
       {debateModal && (
@@ -5371,6 +5911,16 @@ export default function AdminDashboard() {
               style={{ background: '#1a2a4a', color: '#60a5fa', border: '1px solid #1e3a5f' }}>
               경기 관리
             </button>
+            <button onClick={() => syncWorldCupFixtures('schedule')} disabled={busy || !adminToken}
+              className="rounded-md px-4 py-2 text-sm font-bold disabled:opacity-50"
+              style={{ background: '#13251d', color: '#7ce0b3', border: '1px solid #1f5d42' }}>
+              {worldCupSyncing === 'schedule' ? '일정 동기화 중' : '월드컵 일정 동기화'}
+            </button>
+            <button onClick={() => syncWorldCupFixtures('result')} disabled={busy || !adminToken}
+              className="rounded-md px-4 py-2 text-sm font-bold disabled:opacity-50"
+              style={{ background: '#271f12', color: '#ffd166', border: '1px solid #6a4f15' }}>
+              {worldCupSyncing === 'result' ? '결과 동기화 중' : '월드컵 결과 동기화'}
+            </button>
           </div>
         </header>
 
@@ -5409,16 +5959,16 @@ export default function AdminDashboard() {
           <Metric label="Rejected" value={dashboard?.rejected} />
         </section>
 
-        <section className={[CARD_NEWS_TAB, GENERATED_CARD_NEWS_TAB].includes(status) ? 'mt-5 grid min-w-0 gap-5' : 'mt-5 grid min-w-0 gap-5 lg:grid-cols-[minmax(0,1fr)_320px]'}>
+        <section className={[CARD_NEWS_TAB, GENERATED_CARD_NEWS_TAB, WORLD_CUP_FIXTURES_TAB].includes(status) ? 'mt-5 grid min-w-0 gap-5' : 'mt-5 grid min-w-0 gap-5 lg:grid-cols-[minmax(0,1fr)_320px]'}>
           <div className="min-w-0">
             <div className="mb-3 flex flex-wrap items-center gap-2">
               {ADMIN_TAB_OPTIONS.map(option => {
-                const countMap = { review: dashboard?.review, published: dashboard?.published, discarded: dashboard?.discarded, rejected: dashboard?.rejected, all: dashboard?.total, [CARD_NEWS_TAB]: dashboard?.published, [GENERATED_CARD_NEWS_TAB]: 0 };
+                const countMap = { review: dashboard?.review, published: dashboard?.published, discarded: dashboard?.discarded, rejected: dashboard?.rejected, all: dashboard?.total, [CARD_NEWS_TAB]: dashboard?.published, [GENERATED_CARD_NEWS_TAB]: 0, [WORLD_CUP_FIXTURES_TAB]: 0 };
                 const count = countMap[option] || 0;
                 const isActive = status === option;
                 const isWarn = option === 'review' && count > 0;
                 const newCount = [...newIds].filter(id => {
-                  if ([CARD_NEWS_TAB, GENERATED_CARD_NEWS_TAB].includes(option)) return false;
+                  if ([CARD_NEWS_TAB, GENERATED_CARD_NEWS_TAB, WORLD_CUP_FIXTURES_TAB].includes(option)) return false;
                   const it = items.find(i => i.id === id);
                   if (!it) return false;
                   return option === 'all' || it.status === option;
@@ -5427,7 +5977,9 @@ export default function AdminDashboard() {
                   ? '카드뉴스 작업대'
                   : option === GENERATED_CARD_NEWS_TAB
                     ? '생성된 카드뉴스'
-                    : STATUS_LABELS[option];
+                    : option === WORLD_CUP_FIXTURES_TAB
+                      ? '경기 일정'
+                      : STATUS_LABELS[option];
                 return (
                   <button key={option}
                     onClick={() => { setStatus(option); setNewIds(new Set()); }}
@@ -5469,6 +6021,15 @@ export default function AdminDashboard() {
               />
             ) : status === GENERATED_CARD_NEWS_TAB ? (
               <GeneratedCardNewsArchive
+                headers={headers}
+                adminToken={adminToken}
+                onNotify={(tone, text) => {
+                  setMessageTone(tone);
+                  setMessage(text);
+                }}
+              />
+            ) : status === WORLD_CUP_FIXTURES_TAB ? (
+              <WorldCupFixturesPanel
                 headers={headers}
                 adminToken={adminToken}
                 onNotify={(tone, text) => {

@@ -219,6 +219,31 @@ const COUNTRY_CARD_NAME_BY_CODE = {
   COD: 'DR 콩고',
 };
 
+const COUNTRY_ALIAS_ROWS = [
+  ['Bosnia & Herzegovina', 'BIH'],
+  ['Bosnia-Herzegovina', 'BIH'],
+  ['Bosnia Herzegovina', 'BIH'],
+  ['Curaçao', 'CUW'],
+  ['USA', 'USA'],
+  ['United States of America', 'USA'],
+  ['Czechia', 'CZE'],
+  ['Korea Republic', 'KOR'],
+  ['Republic of Korea', 'KOR'],
+  ['Cabo Verde', 'CPV'],
+  ['Congo DR', 'COD'],
+  ['DRC', 'COD'],
+  ['Turkiye', 'TUR'],
+  ['Türkiye', 'TUR'],
+  ['Côte d’Ivoire', 'CIV'],
+];
+
+const COUNTRY_ALIASES_BY_CODE = COUNTRY_ALIAS_ROWS.reduce((acc, [alias, code]) => {
+  const normalizedCode = String(code || '').trim().toUpperCase();
+  if (!normalizedCode) return acc;
+  acc[normalizedCode] = [...(acc[normalizedCode] || []), alias];
+  return acc;
+}, {});
+
 export const TODAY_FIXTURE_COUNTRIES = COUNTRY_ROWS.map(([nameEn, nameKo, code, flagCode]) => ({
   nameEn,
   nameKo,
@@ -226,7 +251,8 @@ export const TODAY_FIXTURE_COUNTRIES = COUNTRY_ROWS.map(([nameEn, nameKo, code, 
   code,
   flagCode,
   flagUrl: `${FLAG_BASE_URL}/${flagCode}.png`,
-  searchText: `${nameKo} ${nameEn} ${code}`.toLowerCase(),
+  aliases: COUNTRY_ALIASES_BY_CODE[code] || [],
+  searchText: `${nameKo} ${nameEn} ${code} ${(COUNTRY_ALIASES_BY_CODE[code] || []).join(' ')}`.toLowerCase(),
 }));
 
 export function getTodayFixtureCountryByCode(code) {

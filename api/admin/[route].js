@@ -13,6 +13,7 @@ const HANDLERS = {
   regenerate: require('../_handlers/admin/regenerate'),
   review: require('../_handlers/admin/review'),
   upload: require('../_handlers/admin/upload'),
+  'world-cup-fixtures': require('../_handlers/admin/world-cup-fixtures'),
 };
 
 function routeName(req) {
