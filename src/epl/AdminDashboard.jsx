@@ -30,6 +30,12 @@ const RESULT_TYPE_OPTIONS = [
   { id: 'weekly', label: '이번주 경기 결과', title: '이번주\n경기 결과' },
 ];
 const WORLD_CUP_COMPLETED_STATUSES = new Set(['FT', 'AET', 'PEN']);
+const WORLD_CUP_MANUAL_RESULT_STATUSES = ['FT', 'AET', 'PEN'];
+const WORLD_CUP_MANUAL_RESULT_STATUS_LABELS = {
+  FT: 'FT',
+  AET: 'AET',
+  PEN: 'PEN',
+};
 const TODAY_FIXTURES_PRESETS = [
   {
     id: 'world_cup',
@@ -945,6 +951,26 @@ function worldCupFixtureVenue(row) {
   const name = String(row?.venue_name_ko || row?.venue_name_api || '').trim();
   if (city && name) return `${city} · ${name}`;
   return name || city || '';
+}
+
+function worldCupFixtureKey(row) {
+  return String(row?.id || row?.api_fixture_id || '');
+}
+
+function worldCupFixtureResultDraft(row, draft = {}) {
+  return {
+    home_score: draft.home_score ?? (row?.home_score === null || row?.home_score === undefined ? '' : String(row.home_score)),
+    away_score: draft.away_score ?? (row?.away_score === null || row?.away_score === undefined ? '' : String(row.away_score)),
+    status_short: draft.status_short
+      || (WORLD_CUP_COMPLETED_STATUSES.has(row?.status_short) ? row.status_short : 'FT'),
+  };
+}
+
+function worldCupFixtureResultDrafts(rows) {
+  return Object.fromEntries((rows || []).map(row => [
+    worldCupFixtureKey(row),
+    worldCupFixtureResultDraft(row),
+  ]).filter(([key]) => key));
 }
 
 function worldCupFixtureRowToMatch(row, variant = 'fixtures') {
@@ -4422,6 +4448,8 @@ function WorldCupFixturesPanel({ headers, adminToken, onNotify }) {
   const [toDate, setToDate] = useState(() => addDaysToDateValue(todayKstDateValue(), 6));
   const [statusFilter, setStatusFilter] = useState('all');
   const [fixtures, setFixtures] = useState([]);
+  const [resultDrafts, setResultDrafts] = useState({});
+  const [savingResultKey, setSavingResultKey] = useState('');
   const [busy, setBusy] = useState(false);
   const [localMessage, setLocalMessage] = useState('');
   const [localTone, setLocalTone] = useState('neutral');
@@ -4435,6 +4463,7 @@ function WorldCupFixturesPanel({ headers, adminToken, onNotify }) {
   const loadFixtures = async () => {
     if (!adminToken) {
       setFixtures([]);
+      setResultDrafts({});
       return;
     }
     setBusy(true);
@@ -4447,7 +4476,9 @@ function WorldCupFixturesPanel({ headers, adminToken, onNotify }) {
       const response = await fetch(`/api/admin/world-cup-fixtures?${params.toString()}`, { headers });
       const data = await readJsonResponse(response);
       if (!response.ok) throw new Error(data.error || '월드컵 경기 데이터를 불러오지 못했습니다.');
-      setFixtures(Array.isArray(data.fixtures) ? data.fixtures : []);
+      const rows = Array.isArray(data.fixtures) ? data.fixtures : [];
+      setFixtures(rows);
+      setResultDrafts(worldCupFixtureResultDrafts(rows));
     } catch (error) {
       setNotice('bad', error.message);
     } finally {
@@ -4459,6 +4490,59 @@ function WorldCupFixturesPanel({ headers, adminToken, onNotify }) {
     loadFixtures();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [adminToken]);
+
+  const updateResultDraft = (row, field, value) => {
+    const key = worldCupFixtureKey(row);
+    if (!key) return;
+    setResultDrafts(current => ({
+      ...current,
+      [key]: {
+        ...worldCupFixtureResultDraft(row, current[key]),
+        [field]: value,
+      },
+    }));
+  };
+
+  const saveFixtureResult = async row => {
+    const key = worldCupFixtureKey(row);
+    if (!adminToken || !key) return;
+    const draft = worldCupFixtureResultDraft(row, resultDrafts[key]);
+    const homeScore = String(draft.home_score ?? '').trim();
+    const awayScore = String(draft.away_score ?? '').trim();
+    if (!/^\d+$/.test(homeScore) || !/^\d+$/.test(awayScore)) {
+      setNotice('bad', 'Enter both scores as whole numbers.');
+      return;
+    }
+    setSavingResultKey(key);
+    setLocalMessage('');
+    try {
+      const response = await fetch('/api/admin/world-cup-fixtures', {
+        method: 'PATCH',
+        headers,
+        body: JSON.stringify({
+          id: row.id,
+          api_fixture_id: row.api_fixture_id,
+          home_score: Number(homeScore),
+          away_score: Number(awayScore),
+          status_short: draft.status_short || 'FT',
+          actor: 'admin-ui',
+        }),
+      });
+      const data = await readJsonResponse(response);
+      if (!response.ok) throw new Error(data.error || 'Failed to save World Cup result.');
+      const fixture = data.fixture || row;
+      setFixtures(current => current.map(item => (worldCupFixtureKey(item) === key ? fixture : item)));
+      setResultDrafts(current => ({
+        ...current,
+        [key]: worldCupFixtureResultDraft(fixture),
+      }));
+      setNotice('good', 'Result saved. Result cards will auto-fill from this score.');
+    } catch (error) {
+      setNotice('bad', error.message);
+    } finally {
+      setSavingResultKey('');
+    }
+  };
 
   const completedCount = fixtures.filter(row => WORLD_CUP_COMPLETED_STATUSES.has(row.status_short)).length;
   const upcomingCount = fixtures.length - completedCount;
@@ -4541,7 +4625,7 @@ function WorldCupFixturesPanel({ headers, adminToken, onNotify }) {
           </div>
         ) : (
           <div className="min-w-0 overflow-x-auto rounded-md" style={{ border: '1px solid #283040' }}>
-            <table className="w-full min-w-[1120px] border-collapse text-left text-xs">
+            <table className="w-full min-w-[1320px] border-collapse text-left text-xs">
               <thead style={{ background: '#080a10', color: '#687086' }}>
                 <tr>
                   <th className="px-3 py-2 font-black uppercase">date</th>
@@ -4563,8 +4647,11 @@ function WorldCupFixturesPanel({ headers, adminToken, onNotify }) {
                   const score = row.home_score === null || row.home_score === undefined
                     ? '-'
                     : `${row.home_score}:${row.away_score ?? '-'}`;
+                  const rowKey = worldCupFixtureKey(row);
+                  const draft = worldCupFixtureResultDraft(row, resultDrafts[rowKey]);
+                  const saving = savingResultKey === rowKey;
                   return (
-                    <tr key={row.id || row.api_fixture_id} style={{ borderTop: '1px solid #202635' }}>
+                    <tr key={rowKey || row.id || row.api_fixture_id} style={{ borderTop: '1px solid #202635' }}>
                       <td className="px-3 py-3 font-bold text-white">{row.kickoff_date_kst || '-'}</td>
                       <td className="px-3 py-3 font-black text-white">{row.kickoff_time_kst || '-'}</td>
                       <td className="px-3 py-3">
@@ -4590,7 +4677,52 @@ function WorldCupFixturesPanel({ headers, adminToken, onNotify }) {
                       <td className="px-3 py-3">
                         <Badge tone={WORLD_CUP_COMPLETED_STATUSES.has(row.status_short) ? 'good' : 'neutral'}>{row.status_short || '-'}</Badge>
                       </td>
-                      <td className="px-3 py-3 font-black text-white">{score}</td>
+                      <td className="px-3 py-3">
+                        <div className="flex min-w-[260px] items-center gap-1.5">
+                          <input
+                            type="number"
+                            min="0"
+                            max="99"
+                            inputMode="numeric"
+                            value={draft.home_score}
+                            onChange={event => updateResultDraft(row, 'home_score', event.target.value)}
+                            className="h-9 w-14 rounded px-2 text-center text-sm font-black outline-none"
+                            style={{ background: '#11141d', color: '#fff', border: '1px solid #283040' }}
+                            aria-label="Home score"
+                          />
+                          <span className="font-black text-white">:</span>
+                          <input
+                            type="number"
+                            min="0"
+                            max="99"
+                            inputMode="numeric"
+                            value={draft.away_score}
+                            onChange={event => updateResultDraft(row, 'away_score', event.target.value)}
+                            className="h-9 w-14 rounded px-2 text-center text-sm font-black outline-none"
+                            style={{ background: '#11141d', color: '#fff', border: '1px solid #283040' }}
+                            aria-label="Away score"
+                          />
+                          <div className="w-20">
+                            <CompactSelect
+                              value={draft.status_short || 'FT'}
+                              options={WORLD_CUP_MANUAL_RESULT_STATUSES}
+                              optionLabels={WORLD_CUP_MANUAL_RESULT_STATUS_LABELS}
+                              onChange={value => updateResultDraft(row, 'status_short', value)}
+                              ariaLabel="Result status"
+                            />
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => saveFixtureResult(row)}
+                            disabled={!adminToken || busy || saving}
+                            className="h-9 rounded px-3 text-xs font-black disabled:opacity-50"
+                            style={{ background: '#e8edf7', color: '#05070d' }}
+                          >
+                            {saving ? 'Saving' : 'Save'}
+                          </button>
+                        </div>
+                        <div className="mt-1 text-[11px] font-bold" style={{ color: '#687086' }}>Current: {score}</div>
+                      </td>
                       <td className="px-3 py-3" style={{ color: '#8791aa' }}>{row.last_schedule_synced_at ? fmtKST(row.last_schedule_synced_at) : '-'}</td>
                       <td className="px-3 py-3" style={{ color: '#8791aa' }}>{row.last_result_synced_at ? fmtKST(row.last_result_synced_at) : '-'}</td>
                     </tr>

@@ -3,7 +3,7 @@ const path = require('path');
 const { requireToken } = require('../../_lib/auth');
 const { recordAudit } = require('../../_lib/audit');
 const { handleError, json, parseJsonBody } = require('../../_lib/http');
-const { select, supabaseFetch } = require('../../_lib/supabase');
+const { eq, patch, select, supabaseFetch } = require('../../_lib/supabase');
 
 const API_FOOTBALL_BASE_URL = process.env.API_FOOTBALL_BASE_URL || 'https://v3.football.api-sports.io';
 const WORLD_CUP_LEAGUE_ID = Number(process.env.API_FOOTBALL_WORLD_CUP_LEAGUE_ID || 1);
@@ -15,6 +15,18 @@ const OPENFOOTBALL_WORLD_CUP_URL = process.env.OPENFOOTBALL_WORLD_CUP_URL
   || `https://raw.githubusercontent.com/openfootball/worldcup.json/master/${WORLD_CUP_SEASON}/worldcup.json`;
 const KST_OFFSET_MS = 9 * 60 * 60 * 1000;
 const COMPLETE_RESULT_STATUSES = new Set(['FT', 'AET', 'PEN']);
+const MANUAL_RESULT_STATUSES = new Set(['FT', 'AET', 'PEN']);
+const STATUS_LONG_LABELS = {
+  NS: 'Not Started',
+  TBD: 'Time to be defined',
+  LIVE: 'Match in Progress',
+  HT: 'Halftime',
+  FT: 'Match Finished',
+  AET: 'Match Finished After Extra Time',
+  PEN: 'Match Finished After Penalties',
+  PST: 'Match Postponed',
+  CANC: 'Match Cancelled',
+};
 const FLAG_BASE_URL = 'https://flagcdn.com/w160';
 
 let countryLookupCache = null;
@@ -377,6 +389,20 @@ function numericScore(value) {
   return Number.isFinite(score) ? score : null;
 }
 
+function normalizeManualScore(value, label) {
+  if (value === undefined || value === null || value === '') return null;
+  const score = Number(value);
+  if (!Number.isInteger(score) || score < 0 || score > 99) {
+    throw Object.assign(new Error(`${label} must be an integer between 0 and 99`), { statusCode: 400 });
+  }
+  return score;
+}
+
+function statusLongFor(statusShort) {
+  const normalized = String(statusShort || '').trim().toUpperCase();
+  return STATUS_LONG_LABELS[normalized] || normalized || null;
+}
+
 function rowFromFixture(fixtureRow, context) {
   const fixture = fixtureRow?.fixture || {};
   const fixtureId = fixture.id;
@@ -541,6 +567,57 @@ async function syncFromRequest(req, res) {
   json(res, 200, { ok: true, sync_type: syncType, ...result });
 }
 
+async function updateManualResult(req, res) {
+  const body = await parseJsonBody(req);
+  const id = String(body.id || req.query?.id || '').trim();
+  const apiFixtureId = String(body.api_fixture_id || req.query?.api_fixture_id || '').trim();
+  if (!id && !apiFixtureId) {
+    throw Object.assign(new Error('id or api_fixture_id is required'), { statusCode: 400 });
+  }
+
+  const homeScore = normalizeManualScore(body.home_score, 'home_score');
+  const awayScore = normalizeManualScore(body.away_score, 'away_score');
+  if ((homeScore === null) !== (awayScore === null)) {
+    throw Object.assign(new Error('home_score and away_score must be provided together'), { statusCode: 400 });
+  }
+
+  const requestedStatus = String(body.status_short || '').trim().toUpperCase();
+  const hasScore = homeScore !== null && awayScore !== null;
+  const statusShort = hasScore
+    ? (MANUAL_RESULT_STATUSES.has(requestedStatus) ? requestedStatus : 'FT')
+    : (requestedStatus || 'NS');
+  const now = new Date().toISOString();
+  const updates = {
+    status_short: statusShort,
+    status_long: statusLongFor(statusShort),
+    home_score: homeScore,
+    away_score: awayScore,
+    updated_at: now,
+  };
+  if (hasScore && COMPLETE_RESULT_STATUSES.has(statusShort)) {
+    updates.last_result_synced_at = now;
+  } else if (!hasScore && !COMPLETE_RESULT_STATUSES.has(statusShort)) {
+    updates.last_result_synced_at = null;
+  }
+
+  const query = id ? eq('id', id) : eq('api_fixture_id', apiFixtureId);
+  const rows = await patch('world_cup_fixtures', query, updates);
+  const fixture = Array.isArray(rows) ? rows[0] : null;
+  if (!fixture) {
+    throw Object.assign(new Error('World Cup fixture not found'), { statusCode: 404 });
+  }
+
+  await recordAudit('world_cup_fixture_manual_result_update', {
+    actor: body.actor || 'admin-ui',
+    id: fixture.id,
+    api_fixture_id: fixture.api_fixture_id,
+    status_short: statusShort,
+    home_score: homeScore,
+    away_score: awayScore,
+  }).catch(() => {});
+  json(res, 200, { ok: true, fixture });
+}
+
 module.exports = async function handler(req, res) {
   try {
     requireToken(req, 'ADMIN_TOKEN', 'admin');
@@ -550,6 +627,10 @@ module.exports = async function handler(req, res) {
     }
     if (req.method === 'POST') {
       await syncFromRequest(req, res);
+      return;
+    }
+    if (req.method === 'PATCH') {
+      await updateManualResult(req, res);
       return;
     }
     json(res, 405, { error: 'Method not allowed' });

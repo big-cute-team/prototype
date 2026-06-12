@@ -5,6 +5,13 @@ admin project.
 
 ## Branch And Push Rule
 
+- Before starting command-based work, compare the local branch with its remote
+  tracking branch. Run `git fetch --all --prune`, then check
+  `git status --short --branch` and
+  `git rev-list --left-right --count HEAD...@{u}`.
+- If the local branch is behind the remote, pull or otherwise reconcile the
+  remote updates before implementing changes. Preserve any local/user changes
+  with stash or another non-destructive approach before pulling.
 - Work on `develop` for this admin repo.
 - Commit and push admin changes to `origin develop`.
 - Do not include unrelated untracked or user-created files unless the user asks.
