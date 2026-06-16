@@ -9,6 +9,12 @@ const { TARGET_TEAMS, matchesAlias, normalizeText } = require('../../_lib/consta
 const CONTENT_PROMPT = fs.readFileSync(path.join(__dirname, '../../../content.md'), 'utf8').trim();
 const BRIEFING_STATUSES = ['OFFICIAL', 'CONFIRMED', 'UPDATE', 'RUMOUR', 'DENIED'];
 const TARGET_TEAM_CODES = TARGET_TEAMS.map(team => team.code);
+const STYLE_RETRY_INSTRUCTION = [
+  'Regenerate the briefing in Korean sports article style.',
+  'Do not use direct-translation or filler phrases such as "임팩트 서브", "임팩트 교체", "가능성이 제기됐다", "전해진다", "여러 매체에서 보도", "논의가 진행 중", "구체적인 상황은 확정되지 않았다", or "추가 정보가 필요하다".',
+  'Do not add club affiliation, recent form, career background, fee, contract length, source credibility, or media coverage unless it is stated in tweet or admin_context.',
+  'Use natural Korean football wording and only concrete facts from tweet and admin_context.',
+].join('\n');
 
 function openAiBaseUrl() {
   return String(process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1').replace(/\/$/, '');
@@ -26,6 +32,14 @@ function buildSystemPrompt() {
     'Use matched_target_aliases and current_team_tags as team context, but do not invent facts beyond tweet and admin_context.',
     'If current_briefing_status is provided, preserve it only when it still matches the tweet and admin_context.',
     '=== END ADMIN CONTEXT RULES ===',
+    '',
+    '=== STYLE QUALITY RULES ===',
+    'Rewrite in natural Korean football article style, not as a direct translation of English wording.',
+    'Translate football roles idiomatically: do not write raw phrases like "임팩트 서브" or "임팩트 교체"; prefer natural Korean phrasing such as "후반 조커", "교체 카드", "승부수", or "벤치 출발" when supported by the source.',
+    'Avoid empty machine-summary phrasing such as "가능성이 제기됐다", "전해진다", "여러 매체에서 보도", "논의가 진행 중", "구체적인 상황은 확정되지 않았다", or "추가 정보가 필요하다" unless that exact uncertainty is the source fact.',
+    'Do not pad caveats. If the source has few facts, write fewer concrete sentences instead of generic filler.',
+    'Do not add club affiliation, recent form, career background, fee, contract length, source credibility, or media coverage unless it is stated in tweet or admin_context.',
+    '=== END STYLE QUALITY RULES ===',
   ].join('\n');
 }
 
@@ -60,6 +74,35 @@ function normalizeBriefingResult(raw, fallback = {}) {
     briefing_status: status,
     team_tags: tags.length ? tags : normalizeTags(fallback.tags),
   };
+}
+
+function hasHangul(value) {
+  return /[가-힣]/.test(String(value || ''));
+}
+
+function briefingHasKorean(briefing) {
+  return hasHangul(briefing?.title) || hasHangul(briefing?.summary_short) || hasHangul(briefing?.summary_detail);
+}
+
+function briefingStyleIssue(briefing) {
+  const text = [
+    briefing?.title,
+    briefing?.summary_short,
+    briefing?.summary_detail,
+  ].filter(Boolean).join('\n');
+  const patterns = [
+    /임팩트\s*(서브|교체)/i,
+    /가능성이\s*제기됐/,
+    /가능성이\s*제기되고/,
+    /논의가\s*(진행|이루어지고)/,
+    /여러\s*매체.*보도/,
+    /구체적인\s*상황.*확정되지/,
+    /추가적인?\s*정보가\s*필요/,
+    /결정일\s*수\s*있/,
+    /현재\s*아스[널날]\s*소속/,
+    /활발한\s*활약/,
+  ];
+  return patterns.some(pattern => pattern.test(text));
 }
 
 function normalizeTags(values) {
@@ -130,19 +173,7 @@ function findMatchedTargetAliases(text, aliases = []) {
   return output;
 }
 
-async function callOpenAI(item, note, aliases) {
-  if (!process.env.OPENAI_API_KEY) {
-    throw Object.assign(new Error('OPENAI_API_KEY is not configured'), { statusCode: 500 });
-  }
-
-  const userMessage = JSON.stringify({
-    tweet: item.raw_text,
-    matched_target_aliases: findMatchedTargetAliases(item.raw_text, aliases),
-    current_team_tags: firstNonEmptyTags(item.team_tags, item.ai_result?.teams, item.ai_result?.briefing?.tags),
-    current_briefing_status: item.briefing_status || item.ai_result?.briefing?.status || null,
-    admin_context: note,
-  });
-
+async function requestOpenAI(messages) {
   const response = await fetch(`${openAiBaseUrl()}/chat/completions`, {
     method: 'POST',
     headers: {
@@ -151,10 +182,7 @@ async function callOpenAI(item, note, aliases) {
     },
     body: JSON.stringify({
       model: process.env.OPENAI_MODEL || 'gpt-4o-mini',
-      messages: [
-        { role: 'system', content: buildSystemPrompt() },
-        { role: 'user', content: userMessage },
-      ],
+      messages,
       temperature: 0.1,
       response_format: { type: 'json_object' },
     }),
@@ -176,8 +204,51 @@ async function callOpenAI(item, note, aliases) {
     });
   }
 
+  return payload;
+}
+
+async function callOpenAI(item, note, aliases) {
+  if (!process.env.OPENAI_API_KEY) {
+    throw Object.assign(new Error('OPENAI_API_KEY is not configured'), { statusCode: 500 });
+  }
+
+  const userMessage = JSON.stringify({
+    tweet: item.raw_text,
+    matched_target_aliases: findMatchedTargetAliases(item.raw_text, aliases),
+    current_team_tags: firstNonEmptyTags(item.team_tags, item.ai_result?.teams, item.ai_result?.briefing?.tags),
+    current_briefing_status: item.briefing_status || item.ai_result?.briefing?.status || null,
+    admin_context: note,
+  });
+
+  const messages = [
+    { role: 'system', content: buildSystemPrompt() },
+    { role: 'user', content: userMessage },
+  ];
+  const payload = await requestOpenAI(messages);
   const content = payload.choices?.[0]?.message?.content;
-  return parseBriefing(content);
+  const briefing = parseBriefing(content);
+  if (briefingHasKorean(briefing) && !briefingStyleIssue(briefing)) {
+    return briefing;
+  }
+
+  if (briefingHasKorean(briefing)) {
+    const retryPayload = await requestOpenAI([
+      ...messages,
+      { role: 'assistant', content },
+      { role: 'user', content: STYLE_RETRY_INSTRUCTION },
+    ]).catch(() => null);
+    if (retryPayload) {
+      const retryBriefing = parseBriefing(retryPayload.choices?.[0]?.message?.content);
+      if (briefingHasKorean(retryBriefing) && !briefingStyleIssue(retryBriefing)) {
+        return retryBriefing;
+      }
+    }
+  }
+
+  throw Object.assign(new Error('OpenAI regeneration produced low-quality briefing style'), {
+    statusCode: 422,
+    payload: { briefing },
+  });
 }
 
 module.exports = async function handler(req, res) {
