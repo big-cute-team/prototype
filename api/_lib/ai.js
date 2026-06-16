@@ -680,21 +680,24 @@ function classificationSystemPrompt(options = {}) {
 
 function briefingSystemPrompt() {
   return [
+    CONTENT_PROMPT,
+    '',
+    '=== STRICT BRIEFING STYLE OVERRIDES ===',
     'Generate only the nested briefing JSON for a Korean EPL fan product.',
     'Return JSON only. Do not include classification fields outside the briefing object.',
     'All title, summary_short, and summary_detail text must be Korean.',
     'Use only facts from the provided post, X API URL metadata, and classification context.',
     'URL title and description are source material. Use them as article context when present, but do not invent beyond them.',
     'Rewrite in natural Korean football article style, not as a direct translation of English wording.',
-    'Translate football roles idiomatically: do not write raw phrases like "임팩트 서브"; prefer natural Korean phrasing such as "후반 조커", "교체 카드", "승부수", or "벤치 출발" when supported by the source.',
-    'Avoid empty machine-summary phrasing such as "가능성이 제기됐다", "전해진다", "구체적인 상황은 확정되지 않았다", or "추가 정보가 필요하다" unless that exact uncertainty is the source fact.',
+    'Translate football roles idiomatically: do not write raw phrases like "임팩트 서브" or "임팩트 교체"; prefer natural Korean phrasing such as "후반 조커", "교체 카드", "승부수", or "벤치 출발" when supported by the source.',
+    'Avoid empty machine-summary phrasing such as "가능성이 제기됐다", "전해진다", "여러 매체에서 보도", "논의가 진행 중", "구체적인 상황은 확정되지 않았다", or "추가 정보가 필요하다" unless that exact uncertainty is the source fact.',
     'Do not pad caveats. If the source has few facts, write fewer concrete sentences instead of generic filler.',
     'For names, use a Hangul alias from matched_target_aliases when one is available for the same person; otherwise use the common Korean sports-media transcription.',
-    'Do not add club affiliation, career background, fee, contract length, or source credibility unless it is stated in the post or classification context.',
+    'Do not add club affiliation, recent form, career background, fee, contract length, source credibility, or media coverage unless it is stated in the post or classification context.',
     'If classification indicates review, opinion, weak information, or visual context, write cautiously and do not present unstated context as fact.',
     'Derive status from the original post and the status rules. Do not default to UPDATE when official, confirmed, rumour, denial, rejection, or collapse signals are present.',
     'Output keys: title, summary_short, summary_detail, tags, status.',
-    CONTENT_PROMPT,
+    '=== END STRICT BRIEFING STYLE OVERRIDES ===',
   ].join('\n');
 }
 
@@ -801,13 +804,16 @@ function briefingStyleIssue(briefing) {
     briefing?.summary_detail,
   ].filter(Boolean).join('\n');
   const patterns = [
-    /임팩트\s*서브/i,
+    /임팩트\s*(서브|교체)/i,
     /가능성이\s*제기됐/,
     /가능성이\s*제기되고/,
-    /논의가\s*이루어지고/,
+    /논의가\s*(진행|이루어지고)/,
+    /여러\s*매체.*보도/,
     /구체적인\s*상황.*확정되지/,
     /추가적인?\s*정보가\s*필요/,
     /결정일\s*수\s*있/,
+    /현재\s*아스[널날]\s*소속/,
+    /활발한\s*활약/,
   ];
   return patterns.some(pattern => pattern.test(text));
 }
@@ -890,7 +896,8 @@ async function classifyPost(post, aliases) {
           role: 'user',
           content: [
             'Regenerate the briefing in Korean sports article style.',
-            'Do not use direct-translation or filler phrases such as "임팩트 서브", "가능성이 제기됐다", "전해진다", "구체적인 상황은 확정되지 않았다", or "추가 정보가 필요하다".',
+            'Do not use direct-translation or filler phrases such as "임팩트 서브", "임팩트 교체", "가능성이 제기됐다", "전해진다", "여러 매체에서 보도", "논의가 진행 중", "구체적인 상황은 확정되지 않았다", or "추가 정보가 필요하다".',
+            'Do not add club affiliation, recent form, career background, fee, contract length, source credibility, or media coverage unless it is stated in the post or URL metadata.',
             'Use natural Korean football wording and only concrete facts from the post and URL metadata.',
           ].join('\n'),
         },

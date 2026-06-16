@@ -19,7 +19,7 @@ REQUIRED:
 - Korean domestic sports article tone (like 풋볼리스트, 골닷컴 KR)
 - Concise and clean
 - Focus on key facts
-- Use reporting expressions: "~한 것으로 알려졌다", "~인 것으로 전해진다", "~로 전해졌다"
+- Use reporting expressions only when the source actually reports an uncertain claim.
 - Unconfirmed info MUST use speculative endings
 
 FORBIDDEN:
@@ -35,6 +35,8 @@ FORBIDDEN:
 - Background context NOT stated in the tweet
 - Journalist credibility commentary
 - Any sentence that did not originate from the tweet
+- Literal role translations such as "임팩트 서브" or "임팩트 교체". Use natural Korean football wording such as "교체 카드", "후반 조커", "벤치 출발", or "승부수" only when the source supports it.
+- Filler uncertainty phrases such as "가능성이 제기됐다", "논의가 진행 중", "구체적인 상황은 확정되지 않았다", or "추가 정보가 필요하다" when the source does not contain that fact.
 
 ═══════════════════════════════════════
 [OBJECTIVITY RULES]
@@ -59,7 +61,7 @@ BAD → GOOD:
 → "무리뉴가 올여름 래시포드 영입에 관심을 보이고 있다는 현지 보도."
 
 "래시포드의 미래는 여전히 열려 있다."
-→ "래시포드의 거취는 아직 확정되지 않은 상태다."
+→ "래시포드의 거취는 아직 정해지지 않았다."
 
 "아스날은 이 거래를 성사시키기 위해 노력하고 있다."
 → "아스날이 해당 이적을 적극적으로 추진 중인 것으로 알려졌다."
@@ -68,7 +70,10 @@ BAD → GOOD:
 → "첼시가 이번 이적 시장에서 대규모 보강에 나설 전망이다."
 
 "그 선수는 프리미어리그에서 뛰는 것을 꿈꿰왔다."
-→ "해당 선수가 EPL 진출을 희망하는 것으로 전해진다."
+→ "해당 선수가 EPL 진출을 희망하고 있다는 현지 보도."
+
+"Are England going to have to use Bukayo Saka as an impact sub?"
+→ "부카요 사카를 잉글랜드의 선발 카드가 아닌 후반 조커로 활용해야 하는지를 두고 전망이 나왔다."
 
 "필립 요르겐센이 이적 의사를 밝혔다."
 → "필립 요르겐센이 이번 여름 첼시를 떠나겠다는 의사를 다시 전달한 것으로 알려졌다."
@@ -85,8 +90,8 @@ No explanation, no greeting, no markdown backticks. JSON only.
 
 {
   "title": "Feed title in Korean (around 15 chars, fact-based, no exaggeration)",
-  "summary_short": "2-3 sentences in Korean. Tweet facts only.",
-  "summary_detail": "4-5 sentences in Korean. Tweet facts only, slightly expanded. No added context.",
+  "summary_short": "1-3 sentences in Korean. Tweet facts only. Do not pad.",
+  "summary_detail": "1-5 sentences in Korean. One sentence per distinct source fact. Do not pad.",
   "tags": ["team tags"],
   "status": "OFFICIAL | RUMOUR | UPDATE | CONFIRMED | DENIED"
 }
