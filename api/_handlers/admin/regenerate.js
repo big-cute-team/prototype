@@ -4,6 +4,7 @@ const { requireToken } = require('../../_lib/auth');
 const { recordAudit } = require('../../_lib/audit');
 const { handleError, json, parseJsonBody } = require('../../_lib/http');
 const { eq, select } = require('../../_lib/supabase');
+const { matchAliasRows } = require('../../_lib/constants');
 
 const CONTENT_PROMPT = fs.readFileSync(path.join(__dirname, '../../../content.md'), 'utf8').trim();
 const BRIEFING_STATUSES = ['OFFICIAL', 'CONFIRMED', 'UPDATE', 'RUMOUR', 'DENIED'];
@@ -62,9 +63,12 @@ async function callOpenAI(item, note, aliases) {
     throw Object.assign(new Error('OPENAI_API_KEY is not configured'), { statusCode: 500 });
   }
 
+  // 전체 alias 대신 이 트윗에 매칭된 행만 인풋에 넣는다.
+  const matchedRows = matchAliasRows(item.raw_text, aliases);
+
   const userMessage = JSON.stringify({
     tweet: item.raw_text,
-    target_team_aliases: aliases,
+    target_team_aliases: matchedRows,
     admin_context: note,
   });
 
@@ -115,7 +119,7 @@ module.exports = async function handler(req, res) {
 
     const aliases = await select(
       'team_aliases',
-      'select=team_code,alias,entity_type&active=eq.true&order=team_code.asc,alias.asc'
+      'select=team_code,alias,entity_type,korean_name,notes&active=eq.true&order=team_code.asc,alias.asc'
     );
 
     const raw = await callOpenAI(item, String(body.note).trim(), aliases);

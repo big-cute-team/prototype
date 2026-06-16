@@ -98,8 +98,22 @@ No explanation, no greeting, no markdown backticks. JSON only.
 - Around 15 Korean characters. Use last name only for players (e.g. "요르겐센", not "필립 요르겐센").
 - Fact-based, key info only, no exaggeration.
 - Format: [성/팀], [핵심 동사구] — lead with the subject, end with the action.
+- CRITICAL: The leading subject MUST be the actual agent who performs the action, NOT the object/target of the action.
+  - If a club wants/decides/pursues something about a player, the CLUB is the agent → put the club first.
+  - If a player requests/signs/wants something, the PLAYER is the agent → put the player first.
+  - Do NOT put the most prominent person first by default. Identify who does the verb, then lead with that subject.
+  - When unsure which is the agent, re-read the tweet: the agent is the one performing the verb in the original sentence.
+- CRITICAL — TRANSFER DIRECTION: "[팀] 이적" always means moving INTO that team. NEVER attach "이적" to the player's CURRENT club.
+  - Player LEAVING a club → use the DESTINATION club with "이적" (e.g. "엔소, 레알 이적 희망"), or use departure verbs with the current club ("첼시 이탈", "첼시 떠나", "첼시 잔류 거부").
+  - If the destination is not a Big 6 team, you may still name it in the title text (only team TAGS are restricted to Big 6, the title is free text).
+  - Player JOINING / being targeted by a club → use that destination club with "이적/영입".
+  - Before finalizing, check: does the club next to "이적" match the direction of the move in the tweet?
 
-GOOD: "요르겐센, 첼시 이적 재요청" / "맨유, 지르크제 매각 결정" / "살라, 리버풀 잔류 서명"
+GOOD (player is the agent): "요르겐센, 첼시 이적 재요청" / "살라, 리버풀 잔류 서명"
+GOOD (club is the agent):   "맨유, 지르크제 매각 결정" / "토트넘, 포로 잔류 희망" / "아스날, 외코 영입 추진"
+GOOD (player leaving):      "엔소, 레알 이적 희망" / "엔소, 첼시 이탈 희망"
+BAD  (subject/object swapped): "포로, 토트넘 잔류 원해" (← the club wants Porro to stay, so it must be "토트넘, 포로 잔류 희망")
+BAD  (wrong transfer direction): "엔소, 첼시 이적 희망" (← he wants to LEAVE Chelsea, so "첼시 이적" is backwards; use "레알 이적" or "첼시 이탈")
 BAD:  "첼시 골키퍼 필립 요르겐센, BBC 보도대로 여름 이적 요청" (too long, too descriptive)
 BAD:  "첼시 초대형 영입 임박!!" / "충격! 맨유 핵심 방출"
 
@@ -154,6 +168,14 @@ IMPORTANT: The key distinction between UPDATE and RUMOUR is whether this is a NE
 - Player requests transfer again after a previous report → UPDATE
 - Club makes first contact → RUMOUR
 - Negotiations advance after previous talks were reported → UPDATE
+
+═══════════════════════════════════════
+[KOREAN NAME]
+═══════════════════════════════════════
+
+- target_team_aliases는 이 트윗에 매칭된 대상만 담고 있으며, 각 행에 korean_name 필드가 있을 수 있다.
+- 매칭된 행에 korean_name이 있으면, 모든 브리핑 필드(제목/짧은 요약/상세 요약)에서 그 값을 인물 이름으로 **그대로** 사용한다. 임의 음역 금지.
+- 매칭 행이 없는 인물은 가장 널리 쓰이는 한국어 음역을 사용한다.
 
 ═══════════════════════════════════════
 [TAGS]

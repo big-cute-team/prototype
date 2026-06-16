@@ -1,6 +1,6 @@
 const fs = require('fs');
 const path = require('path');
-const { OFFICIAL_KEYWORDS, RUMOUR_KEYWORDS, TARGET_TEAMS, hasAny, matchTeams } = require('./constants');
+const { OFFICIAL_KEYWORDS, RUMOUR_KEYWORDS, TARGET_TEAMS, hasAny, matchAliasRows, matchTeams } = require('./constants');
 
 const TARGET_TEAM_CODES = TARGET_TEAMS.map(team => team.code);
 const BRIEFING_STATUSES = ['OFFICIAL', 'RUMOUR', 'UPDATE', 'CONFIRMED', 'DENIED'];
@@ -32,6 +32,7 @@ const TARGET_TEAM_NAME_PATTERN = [
 ].join('|');
 const GENERIC_NO_INFO_PATTERN = '(?:soon|more soon|more to follow|watch|watch this|thoughts|big news soon|announcement soon)';
 const KOREAN_SUMMARY_FALLBACK = '한국어 요약 생성이 충분하지 않아 원문 확인 후 검수가 필요합니다.';
+const KOREAN_REVIEW_REASON = '한국어 브리핑이 충분하지 않아 검수가 필요합니다.';
 const NON_TARGET_SUMMARY = '대상 6개 팀과 직접 연결되지 않아 폐기된 글입니다.';
 
 const CLASSIFICATION_SCHEMA = {
@@ -347,7 +348,7 @@ function enforcePolicy(result, post, aliases = []) {
   const reason = reviewReason(result.review_reason);
   const koreanGuard = ensureKoreanBriefing(briefing, hasPossibleTarget, post);
   const koreanReviewReason = hasPossibleTarget && koreanGuard.changed
-    ? '한국어 브리핑이 충분하지 않아 검수가 필요합니다.'
+    ? KOREAN_REVIEW_REASON
     : null;
   let decision = normalizeDecision(result.decision);
 
@@ -488,9 +489,10 @@ function systemPrompt() {
     'Rumours, speculative updates, denials, and collapses are eligible for decision=publish as long as team and information criteria are met.',
     '',
     'KOREAN NAME RULES:',
-    'When writing player/manager/executive names in the briefing, look in target_team_aliases for a Korean (Hangul) alias of that person.',
-    'If a Korean Hangul alias exists for the same person in target_team_aliases, use it as the primary name in all briefing fields.',
-    'If no Korean alias is available in target_team_aliases, use the most commonly used Korean transcription.',
+    'target_team_aliases contains ONLY the entities matched in THIS tweet. Each row may include a "korean_name" field.',
+    'If a matched row has a "korean_name", you MUST use that exact value as the person\'s name in every briefing field (title, summary_short, summary_detail). Do NOT invent your own transcription.',
+    'Only choose team tags from the team_code values present in the provided target_team_aliases rows.',
+    'If a person in the tweet has no matching row with a korean_name, use the most commonly used Korean transcription.',
     '',
     '=== BRIEFING GENERATION RULES ===',
     'The briefing object maps to the "briefing" field in the outer classification JSON.',
@@ -541,9 +543,20 @@ function briefingHasKorean(result) {
 async function classifyPost(post, aliases) {
   if (!process.env.OPENAI_API_KEY) return fallbackClassify(post, aliases);
 
+  // 서버 매칭으로 대상 팀을 먼저 가린다. 트윗 본문에 Big6 alias가 전혀 없고
+  // 전문기자 담당 팀 fallback도 없으면 OpenAI를 호출하지 않고 즉시 폐기한다.
+  const evidenceTeams = matchTeams(post.text, aliases);
+  const specialty = uniqueTargetTeams([post.specialty_team])[0] || null;
+  if (evidenceTeams.length === 0 && !specialty) {
+    return fallbackClassify(post, aliases);
+  }
+
+  // AI 인풋에는 전체 alias(433행) 대신 이 트윗에 매칭된 행만 넣는다.
+  const matchedRows = matchAliasRows(post.text, aliases);
+
   const baseMessages = [
     { role: 'system', content: systemPrompt() },
-    { role: 'user', content: userPrompt(post, aliases) },
+    { role: 'user', content: userPrompt(post, matchedRows) },
   ];
   const baseBody = {
     model: process.env.OPENAI_MODEL || 'gpt-4o-mini',
@@ -553,11 +566,18 @@ async function classifyPost(post, aliases) {
     response_format: { type: 'json_object' },
   };
 
-  let payload = await requestOpenAI(baseBody);
-  let parsed = parseJsonObject(parseChatContent(payload));
+  const payload = await requestOpenAI(baseBody);
+  const parsed = parseJsonObject(parseChatContent(payload));
+  let result = enforcePolicy(parsed, post, aliases);
 
-  // 브리핑에 한국어 없으면 1회 재시도
-  if (!briefingHasKorean(parsed)) {
+  // 발행 가능하지만 한국어 브리핑만 부족한 경우에만 1회 재시도한다.
+  // (다른 사유로 검수/폐기 큐로 가는 항목은 재시도하지 않아 토큰을 절약한다.)
+  const onlyBlockerIsKorean =
+    result.decision === 'review' &&
+    result.review_reason === KOREAN_REVIEW_REASON &&
+    normalizeDecision(parsed.decision) !== 'discard';
+
+  if (onlyBlockerIsKorean) {
     const retryPayload = await requestOpenAI({
       ...baseBody,
       messages: [
@@ -572,11 +592,11 @@ async function classifyPost(post, aliases) {
 
     if (retryPayload) {
       const retryParsed = parseJsonObject(parseChatContent(retryPayload));
-      if (briefingHasKorean(retryParsed)) parsed = retryParsed;
+      if (briefingHasKorean(retryParsed)) result = enforcePolicy(retryParsed, post, aliases);
     }
   }
 
-  return enforcePolicy(parsed, post, aliases);
+  return result;
 }
 
 module.exports = {

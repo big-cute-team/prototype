@@ -8,7 +8,7 @@ const { fetchActiveSources, fetchUserPosts } = require('./_lib/x');
 
 async function loadAliases() {
   try {
-    return await select('team_aliases', 'select=team_code,alias,entity_type&active=eq.true&order=team_code.asc,alias.asc');
+    return await select('team_aliases', 'select=team_code,alias,entity_type,korean_name,notes&active=eq.true&order=team_code.asc,alias.asc');
   } catch (error) {
     console.error('team_aliases lookup failed', error);
     return [];

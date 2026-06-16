@@ -119,6 +119,14 @@ function matchTeams(text, aliases = []) {
   return [...matches].filter(code => TARGET_TEAMS.some(team => team.code === code));
 }
 
+function matchAliasRows(text, aliases = []) {
+  const normalized = normalizeText(text);
+  return aliases.filter(row => {
+    const alias = row.alias || row.label;
+    return alias && matchesAlias(normalized, alias);
+  });
+}
+
 function hasAny(text, keywords) {
   const normalized = normalizeText(text);
   return keywords.some(keyword => normalized.includes(keyword));
@@ -129,5 +137,6 @@ module.exports = {
   RUMOUR_KEYWORDS,
   TARGET_TEAMS,
   hasAny,
+  matchAliasRows,
   matchTeams,
 };
