@@ -4,10 +4,11 @@ const { requireToken } = require('../../_lib/auth');
 const { recordAudit } = require('../../_lib/audit');
 const { handleError, json, parseJsonBody } = require('../../_lib/http');
 const { eq, select } = require('../../_lib/supabase');
+const { TARGET_TEAMS, matchesAlias, normalizeText } = require('../../_lib/constants');
 
 const CONTENT_PROMPT = fs.readFileSync(path.join(__dirname, '../../../content.md'), 'utf8').trim();
 const BRIEFING_STATUSES = ['OFFICIAL', 'CONFIRMED', 'UPDATE', 'RUMOUR', 'DENIED'];
-const TARGET_TEAM_CODES = ['ARS', 'CHE', 'LIV', 'MCI', 'MUN', 'TOT'];
+const TARGET_TEAM_CODES = TARGET_TEAMS.map(team => team.code);
 
 function openAiBaseUrl() {
   return String(process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1').replace(/\/$/, '');
@@ -22,6 +23,8 @@ function buildSystemPrompt() {
     'This is verified, authoritative information provided by an admin editor.',
     'Treat every fact in admin_context as true — incorporate it into the briefing exactly as you would incorporate facts from the tweet itself.',
     'Generate the briefing as if the tweet and admin_context together are the full source.',
+    'Use matched_target_aliases and current_team_tags as team context, but do not invent facts beyond tweet and admin_context.',
+    'If current_briefing_status is provided, preserve it only when it still matches the tweet and admin_context.',
     '=== END ADMIN CONTEXT RULES ===',
   ].join('\n');
 }
@@ -41,20 +44,90 @@ function parseBriefing(text) {
   }
 }
 
-function normalizeBriefingResult(raw) {
-  const status = BRIEFING_STATUSES.includes(String(raw.status || '').toUpperCase())
-    ? String(raw.status).toUpperCase()
+function normalizeBriefingResult(raw, fallback = {}) {
+  const source = raw && typeof raw === 'object' ? raw : {};
+  const fallbackStatus = BRIEFING_STATUSES.includes(String(fallback.status || '').toUpperCase())
+    ? String(fallback.status).toUpperCase()
     : 'UPDATE';
-  const tags = Array.isArray(raw.tags)
-    ? raw.tags.filter(t => TARGET_TEAM_CODES.includes(String(t).toUpperCase())).map(t => String(t).toUpperCase())
-    : [];
+  const status = BRIEFING_STATUSES.includes(String(source.status || '').toUpperCase())
+    ? String(source.status).toUpperCase()
+    : fallbackStatus;
+  const tags = normalizeTags(source.tags);
   return {
-    title_ko: String(raw.title || '').trim(),
-    summary_short_ko: String(raw.summary_short || '').trim(),
-    summary_detail_ko: String(raw.summary_detail || '').trim(),
+    title_ko: String(source.title || fallback.title || '').trim(),
+    summary_short_ko: String(source.summary_short || fallback.summary_short || '').trim(),
+    summary_detail_ko: String(source.summary_detail || fallback.summary_detail || '').trim(),
     briefing_status: status,
-    team_tags: tags,
+    team_tags: tags.length ? tags : normalizeTags(fallback.tags),
   };
+}
+
+function normalizeTags(values) {
+  const output = [];
+  const list = Array.isArray(values) ? values : [values];
+  for (const value of list) {
+    for (const piece of String(value || '').split(/[,\s]+/)) {
+      const code = piece.trim().toUpperCase();
+      if (TARGET_TEAM_CODES.includes(code) && !output.includes(code)) output.push(code);
+    }
+  }
+  return output;
+}
+
+function firstNonEmptyTags(...sources) {
+  for (const source of sources) {
+    const tags = normalizeTags(source);
+    if (tags.length) return tags;
+  }
+  return [];
+}
+
+function compactAliasRow(row) {
+  return {
+    team_code: String(row.team_code || row.teamCode || '').trim().toUpperCase(),
+    alias: row.alias || row.label,
+    entity_type: row.entity_type || row.entityType || 'alias',
+  };
+}
+
+function findMatchedTargetAliases(text, aliases = []) {
+  const normalized = normalizeText(text);
+  const output = [];
+  const seen = new Set();
+
+  function add(row) {
+    const compact = compactAliasRow(row);
+    const alias = String(compact.alias || '').trim();
+    if (!TARGET_TEAM_CODES.includes(compact.team_code) || !alias) return;
+
+    const key = `${compact.team_code}:${compact.entity_type}:${alias.toLowerCase()}`;
+    if (seen.has(key)) return;
+    seen.add(key);
+    output.push({
+      team_code: compact.team_code,
+      alias,
+      entity_type: compact.entity_type,
+    });
+  }
+
+  for (const team of TARGET_TEAMS) {
+    for (const alias of team.aliases) {
+      if (matchesAlias(normalized, alias)) {
+        add({ team_code: team.code, alias, entity_type: 'club' });
+      }
+    }
+  }
+
+  for (const row of aliases || []) {
+    const compact = compactAliasRow(row);
+    const alias = String(compact.alias || '').trim();
+    if (!TARGET_TEAM_CODES.includes(compact.team_code) || !alias) continue;
+    if (!matchesAlias(normalized, alias)) continue;
+
+    add(compact);
+  }
+
+  return output;
 }
 
 async function callOpenAI(item, note, aliases) {
@@ -64,7 +137,9 @@ async function callOpenAI(item, note, aliases) {
 
   const userMessage = JSON.stringify({
     tweet: item.raw_text,
-    target_team_aliases: aliases,
+    matched_target_aliases: findMatchedTargetAliases(item.raw_text, aliases),
+    current_team_tags: firstNonEmptyTags(item.team_tags, item.ai_result?.teams, item.ai_result?.briefing?.tags),
+    current_briefing_status: item.briefing_status || item.ai_result?.briefing?.status || null,
     admin_context: note,
   });
 
@@ -85,10 +160,19 @@ async function callOpenAI(item, note, aliases) {
     }),
   });
 
-  const payload = await response.json();
+  const text = await response.text();
+  let payload = {};
+  if (text) {
+    try {
+      payload = JSON.parse(text);
+    } catch {
+      payload = { error: { message: text } };
+    }
+  }
   if (!response.ok) {
     throw Object.assign(new Error(payload.error?.message || 'OpenAI regeneration failed'), {
       statusCode: response.status >= 500 ? 502 : response.status,
+      payload,
     });
   }
 
@@ -119,7 +203,13 @@ module.exports = async function handler(req, res) {
     );
 
     const raw = await callOpenAI(item, String(body.note).trim(), aliases);
-    const briefing = normalizeBriefingResult(raw);
+    const briefing = normalizeBriefingResult(raw, {
+      title: item.title_ko,
+      summary_short: item.summary_short_ko || item.summary_ko,
+      summary_detail: item.summary_detail_ko || item.summary_ko,
+      tags: firstNonEmptyTags(item.team_tags, item.ai_result?.teams, item.ai_result?.briefing?.tags),
+      status: item.briefing_status || item.ai_result?.briefing?.status || null,
+    });
 
     await recordAudit('admin_regenerate', {
       content_item_id: item.id,

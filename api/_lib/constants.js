@@ -75,7 +75,10 @@ const RUMOUR_KEYWORDS = [
 ];
 
 function normalizeText(text) {
-  return String(text || '').toLowerCase();
+  return String(text || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase();
 }
 
 function escapeRegExp(value) {
@@ -110,7 +113,7 @@ function matchTeams(text, aliases = []) {
 
   for (const row of aliases) {
     const alias = row.alias || row.label;
-    const teamCode = row.team_code || row.teamCode;
+    const teamCode = String(row.team_code || row.teamCode || '').trim().toUpperCase();
     if (alias && teamCode && matchesAlias(normalized, alias)) {
       matches.add(teamCode);
     }
@@ -121,7 +124,7 @@ function matchTeams(text, aliases = []) {
 
 function hasAny(text, keywords) {
   const normalized = normalizeText(text);
-  return keywords.some(keyword => normalized.includes(keyword));
+  return keywords.some(keyword => normalized.includes(normalizeText(keyword)));
 }
 
 module.exports = {
@@ -129,5 +132,7 @@ module.exports = {
   RUMOUR_KEYWORDS,
   TARGET_TEAMS,
   hasAny,
+  matchesAlias,
   matchTeams,
+  normalizeText,
 };

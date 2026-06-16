@@ -1,6 +1,14 @@
 const fs = require('fs');
 const path = require('path');
-const { OFFICIAL_KEYWORDS, RUMOUR_KEYWORDS, TARGET_TEAMS, hasAny, matchTeams } = require('./constants');
+const {
+  OFFICIAL_KEYWORDS,
+  RUMOUR_KEYWORDS,
+  TARGET_TEAMS,
+  hasAny,
+  matchesAlias,
+  matchTeams,
+  normalizeText,
+} = require('./constants');
 
 const TARGET_TEAM_CODES = TARGET_TEAMS.map(team => team.code);
 const BRIEFING_STATUSES = ['OFFICIAL', 'RUMOUR', 'UPDATE', 'CONFIRMED', 'DENIED'];
@@ -71,9 +79,7 @@ const CLASSIFICATION_SCHEMA = {
       },
     },
     evidence: { type: 'array', items: { type: 'string' } },
-    review_reason: {
-      anyOf: [{ type: 'string' }, { type: 'null' }],
-    },
+    review_reason: { type: ['string', 'null'] },
     is_informative: { type: 'boolean' },
     requires_visual_context: { type: 'boolean' },
     is_journalist_opinion: { type: 'boolean' },
@@ -95,6 +101,42 @@ const CLASSIFICATION_SCHEMA = {
     },
   },
 };
+
+const CLASSIFICATION_ONLY_SCHEMA = {
+  type: 'object',
+  additionalProperties: false,
+  required: [
+    'is_target_relevant',
+    'teams',
+    'decision',
+    'confidence',
+    'entities',
+    'evidence',
+    'review_reason',
+    'is_informative',
+    'requires_visual_context',
+    'is_journalist_opinion',
+    'team_resolution',
+  ],
+  properties: {
+    is_target_relevant: { type: 'boolean' },
+    teams: {
+      type: 'array',
+      items: { type: 'string', enum: TARGET_TEAM_CODES },
+    },
+    decision: { type: 'string', enum: ['publish', 'review', 'discard'] },
+    confidence: { type: 'number' },
+    entities: CLASSIFICATION_SCHEMA.properties.entities,
+    evidence: { type: 'array', items: { type: 'string' } },
+    review_reason: { type: ['string', 'null'] },
+    is_informative: { type: 'boolean' },
+    requires_visual_context: { type: 'boolean' },
+    is_journalist_opinion: { type: 'boolean' },
+    team_resolution: { type: 'string', enum: TEAM_RESOLUTIONS },
+  },
+};
+
+const BRIEFING_SCHEMA = CLASSIFICATION_SCHEMA.properties.briefing;
 
 function parseChatContent(payload) {
   return payload.choices?.[0]?.message?.content || null;
@@ -120,11 +162,115 @@ function parseJsonObject(text) {
 function uniqueTargetTeams(values) {
   const allowed = new Set(TARGET_TEAM_CODES);
   const output = [];
-  for (const value of values || []) {
-    const code = String(value || '').trim().toUpperCase();
-    if (allowed.has(code) && !output.includes(code)) output.push(code);
+  const list = Array.isArray(values) ? values : [values];
+  for (const value of list) {
+    for (const piece of String(value || '').split(/[,\s]+/)) {
+      const code = piece.trim().toUpperCase();
+      if (allowed.has(code) && !output.includes(code)) output.push(code);
+    }
   }
   return output;
+}
+
+function listValues(value) {
+  if (Array.isArray(value)) return value;
+  if (value == null) return [];
+  return [value];
+}
+
+function compactAliasRow(row) {
+  return {
+    team_code: row.team_code || row.teamCode,
+    alias: row.alias || row.label,
+    entity_type: row.entity_type || row.entityType || 'alias',
+  };
+}
+
+function findMatchedTargetAliases(post, aliases = []) {
+  const normalized = normalizeText(post.text);
+  const output = [];
+  const seen = new Set();
+
+  function add(row) {
+    const compact = compactAliasRow(row);
+    const teamCode = String(compact.team_code || '').trim().toUpperCase();
+    const alias = String(compact.alias || '').trim();
+    if (!TARGET_TEAM_CODES.includes(teamCode) || !alias) return;
+    const key = `${teamCode}:${compact.entity_type}:${alias.toLowerCase()}`;
+    if (seen.has(key)) return;
+    seen.add(key);
+    output.push({
+      team_code: teamCode,
+      alias,
+      entity_type: compact.entity_type,
+    });
+  }
+
+  for (const team of TARGET_TEAMS) {
+    for (const alias of team.aliases) {
+      if (matchesAlias(normalized, alias)) {
+        add({ team_code: team.code, alias, entity_type: 'club' });
+      }
+    }
+  }
+
+  for (const row of aliases || []) {
+    const compact = compactAliasRow(row);
+    if (compact.alias && matchesAlias(normalized, compact.alias)) add(compact);
+  }
+
+  return output;
+}
+
+function compactEntitiesForAI(post) {
+  const entities = post.raw?.entities || post.entities || {};
+  const context = {};
+
+  const urls = (entities.urls || [])
+    .slice(0, 3)
+    .map(url => ({
+      expanded_url: url.expanded_url || url.unwound_url || url.url || null,
+      display_url: url.display_url || null,
+      title: url.title || null,
+    }))
+    .filter(url => url.expanded_url || url.display_url || url.title);
+  if (urls.length) context.urls = urls;
+
+  const hashtags = (entities.hashtags || [])
+    .slice(0, 8)
+    .map(tag => tag.tag || tag.text)
+    .filter(Boolean);
+  if (hashtags.length) context.hashtags = hashtags;
+
+  const mentions = (entities.mentions || [])
+    .slice(0, 8)
+    .map(mention => mention.username || mention.screen_name)
+    .filter(Boolean);
+  if (mentions.length) context.mentions = mentions;
+
+  const referencedTweetTypes = (post.referenced_tweets || post.raw?.referenced_tweets || [])
+    .map(tweet => tweet.type)
+    .filter(Boolean);
+  if (referencedTweetTypes.length) context.referenced_tweet_types = [...new Set(referencedTweetTypes)];
+
+  return context;
+}
+
+function slimPostForAI(post) {
+  const media = Array.isArray(post.media) ? post.media : [];
+  const entities = compactEntitiesForAI(post);
+  return {
+    id: post.id,
+    text: post.text,
+    created_at: post.created_at || null,
+    author_handle: post.author_handle || null,
+    author_name: post.author_name || null,
+    specialty_team: post.specialty_team || null,
+    source_tier: post.source_tier || null,
+    has_media: media.length > 0,
+    media_types: [...new Set(media.map(item => item?.type).filter(Boolean))],
+    ...(Object.keys(entities).length ? { entities } : {}),
+  };
 }
 
 function normalizeConfidence(value) {
@@ -240,6 +386,16 @@ function isMediaHeavy(post) {
   return isClearlyNonInformative(post);
 }
 
+function hasSelfContainedText(post, evidence = []) {
+  const textWithoutUrls = normalizedPostText(post).replace(/https?:\/\/\S+/g, '').trim();
+  if (!textWithoutUrls || isClearlyNonInformative({ ...post, text: textWithoutUrls })) return false;
+  if (textWithoutUrls.length >= 60) return true;
+  return evidence.some(item => {
+    const clean = String(item || '').replace(/https?:\/\/\S+/g, '').trim();
+    return clean.length >= 30;
+  });
+}
+
 function legacyNewsTypeFromBriefingStatus(status, decision) {
   if (decision === 'discard') return 'irrelevant';
   const normalized = normalizeStatus(status);
@@ -271,6 +427,16 @@ function neutralBriefing(post) {
     summary_short: NON_TARGET_SUMMARY,
     summary_detail: NON_TARGET_SUMMARY,
     tags: [],
+    status: 'UPDATE',
+  };
+}
+
+function targetBriefingFallback(post, teams = []) {
+  return {
+    title: '검수 필요 EPL 업데이트',
+    summary_short: 'AI 브리핑 생성에 실패해 원문 확인이 필요합니다.',
+    summary_detail: 'AI 브리핑 생성에 실패해 원문을 직접 확인해야 합니다.',
+    tags: uniqueTargetTeams(teams),
     status: 'UPDATE',
   };
 }
@@ -321,15 +487,15 @@ function fallbackClassify(post, aliases) {
 
 function enforcePolicy(result, post, aliases = []) {
   const evidenceTeams = uniqueTargetTeams(matchTeams(post.text, aliases));
-  const modelTeams = uniqueTargetTeams([...(result.teams || []), ...((result.briefing && result.briefing.tags) || [])]);
+  const modelTeams = uniqueTargetTeams([...listValues(result.teams), ...listValues(result.briefing?.tags)]);
   // 전문 기자: 글에 어떤 Big6도 안 잡혔으면 담당 팀으로 fallback 귀속
   const specialty = uniqueTargetTeams([post.specialty_team])[0] || null;
-  const specialistFallback = Boolean(specialty) && evidenceTeams.length === 0 && modelTeams.length === 0;
-  const localEvidenceTeams = specialistFallback ? [specialty] : evidenceTeams;
   const modelClaimsTarget = normalizeBoolean(result.is_target_relevant, false) || modelTeams.length > 0;
-  const confirmedTarget = localEvidenceTeams.length > 0;
-  const hasPossibleTarget = confirmedTarget || modelClaimsTarget;
-  const teams = confirmedTarget
+  const specialistFallback = Boolean(specialty) && evidenceTeams.length === 0 && modelTeams.length === 0 && modelClaimsTarget;
+  const localEvidenceTeams = specialistFallback ? [specialty] : evidenceTeams;
+  const confirmedTarget = evidenceTeams.length > 0;
+  const hasPossibleTarget = confirmedTarget || specialistFallback || modelClaimsTarget;
+  const teams = confirmedTarget || specialistFallback
     ? uniqueTargetTeams([...localEvidenceTeams, ...modelTeams])
     : modelTeams;
   // 전문 기자가 자기 담당 팀 글 → specialist match (공신력 상)
@@ -339,7 +505,8 @@ function enforcePolicy(result, post, aliases = []) {
   const evidence = Array.isArray(result.evidence) ? result.evidence.filter(Boolean).map(String) : [];
   const hasEvidence = evidence.length > 0;
   const informative = normalizeBoolean(result.is_informative, !isClearlyNonInformative(post)) && !isClearlyNonInformative(post);
-  const requiresVisualContext = normalizeBoolean(result.requires_visual_context, isMediaHeavy(post)) || isMediaHeavy(post);
+  const modelRequiresVisualContext = normalizeBoolean(result.requires_visual_context, isMediaHeavy(post));
+  const requiresVisualContext = isMediaHeavy(post) || (modelRequiresVisualContext && !hasSelfContainedText(post, evidence));
   const journalistOpinion = normalizeBoolean(result.is_journalist_opinion, false);
   const teamResolution = confirmedTarget
     ? 'certain'
@@ -424,6 +591,14 @@ function enforcePolicy(result, post, aliases = []) {
     };
   }
 
+  if (confidence < 0.7 || !hasEvidence) {
+    return {
+      ...cleanResult,
+      decision: 'review',
+      review_reason: cleanResult.review_reason || '자동 발행에 필요한 신뢰도 또는 원문 근거가 부족해 검수가 필요합니다.',
+    };
+  }
+
   // 6. AI가 discard 했지만 팀 근거 있음 → review
   if (cleanResult.decision === 'discard') {
     return {
@@ -452,63 +627,111 @@ function openAiBaseUrl() {
   return String(process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1').replace(/\/$/, '');
 }
 
-function systemPrompt() {
+function classificationSystemPrompt(options = {}) {
+  const lines = [
+    'Classify one football X post for a Korean EPL Big 6 product. Return JSON only.',
+    'Target teams: MUN, MCI, LIV, ARS, TOT, CHE.',
+    'Use only explicit team names in the post, matched_target_aliases, or source_specialty_team. Do not infer team affiliation from training knowledge unless the Safety fallback instruction is present below.',
+    'source_specialty_team is weak context. If it is the only team signal, choose review, not publish.',
+    'If no Big 6 connection is supported by those inputs, set is_target_relevant=false, teams=[], team_resolution=none, decision=discard.',
+    'Tag both Big 6 clubs only when both are explicitly identifiable. For departure news without a destination, tag only the identifiable current club.',
+    'Do not tag from the words Premier League/EPL alone. Never tag all six teams. Do not duplicate team codes.',
+    'Set is_informative=false for teases, jokes, reactions, generic captions, or posts with no concrete football update.',
+    'Set requires_visual_context=true when the text cannot be understood without inspecting media, link cards, or quoted posts.',
+    'Do not set requires_visual_context=true merely because a URL or media is present when the text itself contains the concrete update.',
+    'Set is_journalist_opinion=true for personal opinion, feeling, evaluation, or reaction rather than reportable information.',
+    'Choose publish only when team_resolution=certain, confidence>=0.70, evidence contains exact text support, informative, text-sufficient, and not opinion. Otherwise choose review for target-relevant posts.',
+    'Rumours, talks, interest, denials, collapses, injuries, contracts, squad news, and official announcements are informative when concrete facts are present.',
+    'Do not generate title or summary in this step.',
+    'Output keys: is_target_relevant, teams, decision, confidence, entities, evidence, review_reason, is_informative, requires_visual_context, is_journalist_opinion, team_resolution.',
+  ];
+
+  if (options.allowKnowledgeFallback) {
+    lines.push(
+      'Safety fallback: matched_target_aliases is empty. If the post names a well-known current or recent Big 6 player, manager, executive, or club-related person, do not discard it outright.',
+      'If matched_target_aliases is empty but source_tier is 1 and the post is concrete football news about a named person or club, choose review when Big 6 relevance is plausible but unconfirmed.',
+      'For that fallback, set decision=review, team_resolution=ambiguous, confidence<=0.65, and review_reason explaining that no local alias matched. Never publish from this fallback.'
+    );
+  }
+
+  return lines.join('\n');
+}
+
+function briefingSystemPrompt() {
   return [
-    'You classify football X posts for a Korean EPL fan product.',
-    'Return JSON only. Do not return markdown, code fences, commentary, or extra text.',
-    'The JSON object must follow this exact top-level shape: is_target_relevant, teams, decision, confidence, entities, evidence, review_reason, is_informative, requires_visual_context, is_journalist_opinion, team_resolution, briefing.',
-    'Only these target teams are in scope: MUN, MCI, LIV, ARS, TOT, CHE.',
-    'Target team Korean names: MUN=맨유, MCI=맨시티, LIV=리버풀, ARS=아스널, TOT=토트넘, CHE=첼시.',
-    'Discard posts unrelated to those six teams.',
-    '',
-    'TEAM TAGGING RULES:',
-    'Only Big 6 codes are allowed in teams[]: ARS, CHE, LIV, MCI, MUN, TOT.',
-    'Tag a team ONLY when ONE of these two conditions is met:',
-    '  (1) The team name or a known alias is explicitly written in the tweet text (e.g. "Arsenal", "Man Utd", "Spurs").',
-    '  (2) A player/manager/executive name appears in the target_team_aliases list provided in the user message — use that entry\'s team_code.',
-    'DO NOT infer or assume team affiliation from your own training knowledge. If a person is not found in target_team_aliases and no team name appears in the tweet text, you MUST set teams=[] and team_resolution=none.',
-    'For transfer/negotiation/interest/collapse: if both clubs are identifiable by the above rules and both are Big 6, tag BOTH. If only one qualifies, tag only that one.',
-    'For departure rumour with no confirmed destination: tag only the current club if it is identifiable by the above rules.',
-    'Do NOT tag a team just because "Premier League" is mentioned.',
-    'Never tag all 6 teams at once. Duplicate codes are not allowed in teams[].',
-    'If no Big 6 connection is provable by the rules above, return teams=[] and team_resolution=none.',
-    'Set team_resolution=certain ONLY when a team is confirmed via rule (1) or (2) above.',
-    'Set team_resolution=ambiguous when a team is mentioned but the connection to a specific Big 6 club is unclear.',
-    'Set team_resolution=none when no Big 6 team is identifiable by the rules above.',
-    'In the briefing, DO NOT state a player\'s club affiliation (e.g. "아스날 소속") unless that club is explicitly named in the tweet text OR the player appears in target_team_aliases.',
-    '',
-    'CLASSIFICATION RULES:',
-    'Set is_informative=true when the text conveys football news: rumours, talks, interest, denials, collapses, injuries, contracts, squad news, or official announcements.',
-    'Set is_informative=false when the text is only a tease, reaction, generic caption, question, joke, or does not convey a concrete update.',
-    'Set requires_visual_context=true when the reader must inspect an image, video, link card, or quoted post to understand the news.',
-    'Set is_journalist_opinion=true when the post is mainly the journalist giving a personal opinion, feeling, evaluation, joke, or reaction rather than reportable information.',
-    'Choose decision=publish when: team_resolution=certain, is_informative=true, requires_visual_context=false, is_journalist_opinion=false.',
-    'Choose decision=review when: team is uncertain, needs visual context, lacks concrete information, or is journalist opinion.',
-    'Choose decision=discard only when the post is unrelated to all six target teams.',
-    'Rumours, speculative updates, denials, and collapses are eligible for decision=publish as long as team and information criteria are met.',
-    '',
-    'KOREAN NAME RULES:',
-    'When writing player/manager/executive names in the briefing, look in target_team_aliases for a Korean (Hangul) alias of that person.',
-    'If a Korean Hangul alias exists for the same person in target_team_aliases, use it as the primary name in all briefing fields.',
-    'If no Korean alias is available in target_team_aliases, use the most commonly used Korean transcription.',
-    '',
-    '=== BRIEFING GENERATION RULES ===',
-    'The briefing object maps to the "briefing" field in the outer classification JSON.',
-    'NOTE: The JSON output described in the rules below is the "briefing" nested object — do NOT output it as a standalone response. It must be embedded as briefing:{} inside the outer classification JSON.',
+    'Generate only the nested briefing JSON for a Korean EPL fan product.',
+    'Return JSON only. Do not include classification fields outside the briefing object.',
+    'All title, summary_short, and summary_detail text must be Korean.',
+    'Use only facts from the provided post and classification context.',
+    'For names, use a Hangul alias from matched_target_aliases when one is available for the same person; otherwise use the common Korean sports-media transcription.',
+    'Do not add club affiliation, career background, fee, contract length, or source credibility unless it is stated in the post or classification context.',
+    'If classification indicates review, opinion, weak information, or visual context, write cautiously and do not present unstated context as fact.',
+    'Derive status from the original post and the status rules. Do not default to UPDATE when official, confirmed, rumour, denial, rejection, or collapse signals are present.',
+    'Output keys: title, summary_short, summary_detail, tags, status.',
     CONTENT_PROMPT,
-    '=== END BRIEFING RULES ===',
   ].join('\n');
 }
 
-function userPrompt(post, aliases) {
+function classificationUserPrompt(post, matchedAliases) {
   return JSON.stringify({
-    required_json_contract: CLASSIFICATION_SCHEMA,
-    post,
-    target_team_aliases: aliases,
+    post: slimPostForAI(post),
+    matched_target_aliases: matchedAliases,
+    source_specialty_team: uniqueTargetTeams([post.specialty_team])[0] || null,
+    local_team_matches: uniqueTargetTeams(matchedAliases.map(row => row.team_code)),
+    no_local_alias_match: matchedAliases.length === 0,
   });
 }
 
-async function requestOpenAI(body, allowRetry = true) {
+function briefingUserPrompt(post, matchedAliases, classification) {
+  return JSON.stringify({
+    post: slimPostForAI(post),
+    matched_target_aliases: matchedAliases,
+    classification: {
+      teams: classification.teams || [],
+      decision: classification.decision,
+      confidence: classification.confidence,
+      entities: classification.entities || {},
+      evidence: classification.evidence || [],
+      review_reason: classification.review_reason || null,
+      is_informative: classification.is_informative,
+      requires_visual_context: classification.requires_visual_context,
+      is_journalist_opinion: classification.is_journalist_opinion,
+      team_resolution: classification.team_resolution,
+    },
+  });
+}
+
+function attachAiMetadata(result, matchedAliases, metadata = {}) {
+  return {
+    ...result,
+    ai_pipeline: 'split_classification_briefing_v1',
+    matched_target_aliases: matchedAliases,
+    no_local_alias_match: matchedAliases.length === 0,
+    ...metadata,
+  };
+}
+
+function jsonSchemaResponseFormat(name, schema) {
+  return {
+    type: 'json_schema',
+    json_schema: {
+      name,
+      strict: true,
+      schema,
+    },
+  };
+}
+
+function downgradedResponseFormat(body) {
+  if (body.response_format?.type === 'json_schema') {
+    return { ...body, response_format: { type: 'json_object' } };
+  }
+
+  const { response_format: _ignored, ...withoutResponseFormat } = body;
+  return withoutResponseFormat;
+}
+
+async function requestOpenAI(body, retryCount = 0) {
   const response = await fetch(`${openAiBaseUrl()}/chat/completions`, {
     method: 'POST',
     headers: {
@@ -518,13 +741,20 @@ async function requestOpenAI(body, allowRetry = true) {
     body: JSON.stringify(body),
   });
 
-  const payload = await response.json();
+  const text = await response.text();
+  let payload = {};
+  if (text) {
+    try {
+      payload = JSON.parse(text);
+    } catch {
+      payload = { error: { message: text } };
+    }
+  }
   if (response.ok) return payload;
 
   const message = payload.error?.message || '';
-  if (allowRetry && response.status === 400 && /response_format|json_object/i.test(message)) {
-    const { response_format: _ignored, ...retryBody } = body;
-    return requestOpenAI(retryBody, false);
+  if (retryCount < 2 && response.status === 400 && /response_format|json_schema|json_object|schema/i.test(message)) {
+    return requestOpenAI(downgradedResponseFormat(body), retryCount + 1);
   }
 
   throw Object.assign(new Error(message || 'OpenAI classification failed'), {
@@ -539,44 +769,78 @@ function briefingHasKorean(result) {
 }
 
 async function classifyPost(post, aliases) {
-  if (!process.env.OPENAI_API_KEY) return fallbackClassify(post, aliases);
+  const matchedAliases = findMatchedTargetAliases(post, aliases);
+  if (!process.env.OPENAI_API_KEY) {
+    return attachAiMetadata(fallbackClassify(post, aliases), matchedAliases, {
+      briefing_generated: false,
+      fallback_reason: 'missing_openai_api_key',
+    });
+  }
+
+  const hasSpecialtyTeam = uniqueTargetTeams([post.specialty_team]).length > 0;
+  const allowKnowledgeFallback = matchedAliases.length === 0 && !hasSpecialtyTeam;
 
   const baseMessages = [
-    { role: 'system', content: systemPrompt() },
-    { role: 'user', content: userPrompt(post, aliases) },
+    { role: 'system', content: classificationSystemPrompt({ allowKnowledgeFallback }) },
+    { role: 'user', content: classificationUserPrompt(post, matchedAliases) },
   ];
   const baseBody = {
     model: process.env.OPENAI_MODEL || 'gpt-4o-mini',
     messages: baseMessages,
     temperature: 0.1,
     stream: false,
-    response_format: { type: 'json_object' },
+    response_format: jsonSchemaResponseFormat('epl_post_classification', CLASSIFICATION_ONLY_SCHEMA),
   };
 
-  let payload = await requestOpenAI(baseBody);
-  let parsed = parseJsonObject(parseChatContent(payload));
+  const payload = await requestOpenAI(baseBody);
+  const parsed = parseJsonObject(parseChatContent(payload));
 
-  // 브리핑에 한국어 없으면 1회 재시도
-  if (!briefingHasKorean(parsed)) {
-    const retryPayload = await requestOpenAI({
-      ...baseBody,
-      messages: [
-        ...baseMessages,
-        { role: 'assistant', content: parseChatContent(payload) },
-        {
-          role: 'user',
-          content: 'IMPORTANT: The briefing fields (title, summary_short, summary_detail) MUST be written entirely in Korean (한국어/Hangul). Regenerate only the briefing object in Korean.',
-        },
-      ],
-    }).catch(() => null);
+  let result = enforcePolicy({
+    ...parsed,
+    briefing: targetBriefingFallback(post, parsed.teams),
+  }, post, aliases);
 
-    if (retryPayload) {
-      const retryParsed = parseJsonObject(parseChatContent(retryPayload));
-      if (briefingHasKorean(retryParsed)) parsed = retryParsed;
+  if (result.decision === 'discard') {
+    return attachAiMetadata(result, matchedAliases, { briefing_generated: false });
+  }
+
+  const briefingPayload = await requestOpenAI({
+    model: process.env.OPENAI_MODEL || 'gpt-4o-mini',
+    messages: [
+      { role: 'system', content: briefingSystemPrompt() },
+      { role: 'user', content: briefingUserPrompt(post, matchedAliases, result) },
+    ],
+    temperature: 0.1,
+    stream: false,
+    response_format: jsonSchemaResponseFormat('epl_post_briefing', BRIEFING_SCHEMA),
+  }).catch(() => null);
+
+  let briefingGenerated = false;
+  if (briefingPayload) {
+    try {
+      const briefing = parseJsonObject(parseChatContent(briefingPayload));
+      if (briefingHasKorean({ briefing })) {
+        result = enforcePolicy({
+          ...result,
+          briefing,
+        }, post, aliases);
+        briefingGenerated = true;
+      }
+    } catch {
+      // Keep the policy result with its fallback briefing if generation returns malformed JSON.
     }
   }
 
-  return enforcePolicy(parsed, post, aliases);
+  if (!briefingGenerated) {
+    return attachAiMetadata({
+      ...result,
+      decision: 'review',
+      review_reason: result.review_reason || 'AI 브리핑 생성에 실패해 검수가 필요합니다.',
+      briefing: targetBriefingFallback(post, result.teams),
+    }, matchedAliases, { briefing_generated: false });
+  }
+
+  return attachAiMetadata(result, matchedAliases, { briefing_generated: true });
 }
 
 module.exports = {
