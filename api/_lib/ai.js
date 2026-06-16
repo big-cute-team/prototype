@@ -222,18 +222,38 @@ function findMatchedTargetAliases(post, aliases = []) {
   return output;
 }
 
+function compactText(value, max = 500) {
+  const text = String(value || '').replace(/\s+/g, ' ').trim();
+  if (!text) return null;
+  return text.length > max ? `${text.slice(0, max - 1)}...` : text;
+}
+
 function compactEntitiesForAI(post) {
   const entities = post.raw?.entities || post.entities || {};
   const context = {};
 
   const urls = (entities.urls || [])
     .slice(0, 3)
-    .map(url => ({
-      expanded_url: url.expanded_url || url.unwound_url || url.url || null,
-      display_url: url.display_url || null,
-      title: url.title || null,
-    }))
-    .filter(url => url.expanded_url || url.display_url || url.title);
+    .map(url => {
+      const expandedUrl = url.expanded_url || url.url || null;
+      const unwoundUrl = url.unwound_url && url.unwound_url !== expandedUrl ? url.unwound_url : null;
+      const images = Array.isArray(url.images)
+        ? url.images.slice(0, 2).map(image => ({
+          url: image.url || null,
+          width: image.width || null,
+          height: image.height || null,
+        })).filter(image => image.url)
+        : [];
+      return {
+        expanded_url: expandedUrl || unwoundUrl,
+        display_url: url.display_url || null,
+        unwound_url: unwoundUrl,
+        title: compactText(url.title, 220),
+        description: compactText(url.description, 700),
+        ...(images.length ? { images } : {}),
+      };
+    })
+    .filter(url => url.expanded_url || url.display_url || url.title || url.description);
   if (urls.length) context.urls = urls;
 
   const hashtags = (entities.hashtags || [])
@@ -637,6 +657,7 @@ function classificationSystemPrompt(options = {}) {
     'Tag both Big 6 clubs only when both are explicitly identifiable. For departure news without a destination, tag only the identifiable current club.',
     'Do not tag from the words Premier League/EPL alone. Never tag all six teams. Do not duplicate team codes.',
     'Set is_informative=false for teases, jokes, reactions, generic captions, or posts with no concrete football update.',
+    'Question-style headlines can be informative only when the post text or URL metadata contains concrete article context. If it only asks a question, choose review with is_informative=false and requires_visual_context=true.',
     'Set requires_visual_context=true when the text cannot be understood without inspecting media, link cards, or quoted posts.',
     'Do not set requires_visual_context=true merely because a URL or media is present when the text itself contains the concrete update.',
     'Set is_journalist_opinion=true for personal opinion, feeling, evaluation, or reaction rather than reportable information.',
@@ -662,7 +683,12 @@ function briefingSystemPrompt() {
     'Generate only the nested briefing JSON for a Korean EPL fan product.',
     'Return JSON only. Do not include classification fields outside the briefing object.',
     'All title, summary_short, and summary_detail text must be Korean.',
-    'Use only facts from the provided post and classification context.',
+    'Use only facts from the provided post, X API URL metadata, and classification context.',
+    'URL title and description are source material. Use them as article context when present, but do not invent beyond them.',
+    'Rewrite in natural Korean football article style, not as a direct translation of English wording.',
+    'Translate football roles idiomatically: do not write raw phrases like "임팩트 서브"; prefer natural Korean phrasing such as "후반 조커", "교체 카드", "승부수", or "벤치 출발" when supported by the source.',
+    'Avoid empty machine-summary phrasing such as "가능성이 제기됐다", "전해진다", "구체적인 상황은 확정되지 않았다", or "추가 정보가 필요하다" unless that exact uncertainty is the source fact.',
+    'Do not pad caveats. If the source has few facts, write fewer concrete sentences instead of generic filler.',
     'For names, use a Hangul alias from matched_target_aliases when one is available for the same person; otherwise use the common Korean sports-media transcription.',
     'Do not add club affiliation, career background, fee, contract length, or source credibility unless it is stated in the post or classification context.',
     'If classification indicates review, opinion, weak information, or visual context, write cautiously and do not present unstated context as fact.',
@@ -768,6 +794,24 @@ function briefingHasKorean(result) {
   return hasHangul(b.title) || hasHangul(b.summary_short) || hasHangul(b.summary_detail);
 }
 
+function briefingStyleIssue(briefing) {
+  const text = [
+    briefing?.title,
+    briefing?.summary_short,
+    briefing?.summary_detail,
+  ].filter(Boolean).join('\n');
+  const patterns = [
+    /임팩트\s*서브/i,
+    /가능성이\s*제기됐/,
+    /가능성이\s*제기되고/,
+    /논의가\s*이루어지고/,
+    /구체적인\s*상황.*확정되지/,
+    /추가적인?\s*정보가\s*필요/,
+    /결정일\s*수\s*있/,
+  ];
+  return patterns.some(pattern => pattern.test(text));
+}
+
 async function classifyPost(post, aliases) {
   const matchedAliases = findMatchedTargetAliases(post, aliases);
   if (!process.env.OPENAI_API_KEY) {
@@ -804,30 +848,68 @@ async function classifyPost(post, aliases) {
     return attachAiMetadata(result, matchedAliases, { briefing_generated: false });
   }
 
-  const briefingPayload = await requestOpenAI({
+  const briefingMessages = [
+    { role: 'system', content: briefingSystemPrompt() },
+    { role: 'user', content: briefingUserPrompt(post, matchedAliases, result) },
+  ];
+  const briefingBody = {
     model: process.env.OPENAI_MODEL || 'gpt-4o-mini',
-    messages: [
-      { role: 'system', content: briefingSystemPrompt() },
-      { role: 'user', content: briefingUserPrompt(post, matchedAliases, result) },
-    ],
+    messages: briefingMessages,
     temperature: 0.1,
     stream: false,
     response_format: jsonSchemaResponseFormat('epl_post_briefing', BRIEFING_SCHEMA),
-  }).catch(() => null);
+  };
+  const briefingPayload = await requestOpenAI(briefingBody).catch(() => null);
 
   let briefingGenerated = false;
+  let briefingRejectedForStyle = false;
   if (briefingPayload) {
     try {
       const briefing = parseJsonObject(parseChatContent(briefingPayload));
-      if (briefingHasKorean({ briefing })) {
+      if (briefingHasKorean({ briefing }) && !briefingStyleIssue(briefing)) {
         result = enforcePolicy({
           ...result,
           briefing,
         }, post, aliases);
         briefingGenerated = true;
+      } else if (briefingHasKorean({ briefing })) {
+        briefingRejectedForStyle = true;
       }
     } catch {
       // Keep the policy result with its fallback briefing if generation returns malformed JSON.
+    }
+  }
+
+  if (!briefingGenerated && briefingRejectedForStyle) {
+    const retryPayload = await requestOpenAI({
+      ...briefingBody,
+      messages: [
+        ...briefingMessages,
+        { role: 'assistant', content: parseChatContent(briefingPayload) },
+        {
+          role: 'user',
+          content: [
+            'Regenerate the briefing in Korean sports article style.',
+            'Do not use direct-translation or filler phrases such as "임팩트 서브", "가능성이 제기됐다", "전해진다", "구체적인 상황은 확정되지 않았다", or "추가 정보가 필요하다".',
+            'Use natural Korean football wording and only concrete facts from the post and URL metadata.',
+          ].join('\n'),
+        },
+      ],
+    }).catch(() => null);
+
+    if (retryPayload) {
+      try {
+        const briefing = parseJsonObject(parseChatContent(retryPayload));
+        if (briefingHasKorean({ briefing }) && !briefingStyleIssue(briefing)) {
+          result = enforcePolicy({
+            ...result,
+            briefing,
+          }, post, aliases);
+          briefingGenerated = true;
+        }
+      } catch {
+        // Keep the fallback review result.
+      }
     }
   }
 
@@ -835,7 +917,9 @@ async function classifyPost(post, aliases) {
     return attachAiMetadata({
       ...result,
       decision: 'review',
-      review_reason: result.review_reason || 'AI 브리핑 생성에 실패해 검수가 필요합니다.',
+      review_reason: result.review_reason || (briefingRejectedForStyle
+        ? 'AI 브리핑 문체가 번역투 또는 저품질 패턴으로 생성되어 검수가 필요합니다.'
+        : 'AI 브리핑 생성에 실패해 검수가 필요합니다.'),
       briefing: targetBriefingFallback(post, result.teams),
     }, matchedAliases, { briefing_generated: false });
   }
