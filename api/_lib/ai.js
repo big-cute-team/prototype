@@ -389,6 +389,15 @@ function enforcePolicy(result, post, aliases = []) {
     };
   }
 
+  // 1.5 본문 정보가 거의 0인 반응성/티저 트윗 → 폐기 (검수 큐로 보내지 않음)
+  if (isClearlyNonInformative(post)) {
+    return {
+      ...cleanResult,
+      decision: 'discard',
+      review_reason: null,
+    };
+  }
+
   // 2. 이미지/영상/링크 없이 의미 불명 → review
   if (requiresVisualContext) {
     return {
@@ -548,6 +557,11 @@ async function classifyPost(post, aliases) {
   const evidenceTeams = matchTeams(post.text, aliases);
   const specialty = uniqueTargetTeams([post.specialty_team])[0] || null;
   if (evidenceTeams.length === 0 && !specialty) {
+    return fallbackClassify(post, aliases);
+  }
+
+  // 본문 정보가 거의 0인 반응성/티저 트윗은 폐기 확정이므로 OpenAI를 호출하지 않는다.
+  if (isClearlyNonInformative(post)) {
     return fallbackClassify(post, aliases);
   }
 
