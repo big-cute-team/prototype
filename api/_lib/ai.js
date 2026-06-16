@@ -323,10 +323,10 @@ function fallbackClassify(post, aliases) {
 function enforcePolicy(result, post, aliases = []) {
   const evidenceTeams = uniqueTargetTeams(matchTeams(post.text, aliases));
   const modelTeams = uniqueTargetTeams([...(result.teams || []), ...((result.briefing && result.briefing.tags) || [])]);
-  // 전문 기자: 글에 어떤 Big6도 안 잡혔으면 담당 팀으로 fallback 귀속
+  // 전문 기자 담당 팀은 공신력 플래그(specialistMatch)에만 쓰고, 팀 근거로는 쓰지 않는다.
+  // 본문에 team_aliases가 전혀 안 걸리면 전문기자여도 폐기되도록 fallback 귀속을 제거.
   const specialty = uniqueTargetTeams([post.specialty_team])[0] || null;
-  const specialistFallback = Boolean(specialty) && evidenceTeams.length === 0 && modelTeams.length === 0;
-  const localEvidenceTeams = specialistFallback ? [specialty] : evidenceTeams;
+  const localEvidenceTeams = evidenceTeams;
   const modelClaimsTarget = normalizeBoolean(result.is_target_relevant, false) || modelTeams.length > 0;
   const confirmedTarget = localEvidenceTeams.length > 0;
   const hasPossibleTarget = confirmedTarget || modelClaimsTarget;
@@ -554,9 +554,9 @@ async function classifyPost(post, aliases) {
 
   // 서버 매칭으로 대상 팀을 먼저 가린다. 트윗 본문에 Big6 alias가 전혀 없고
   // 전문기자 담당 팀 fallback도 없으면 OpenAI를 호출하지 않고 즉시 폐기한다.
+  // 본문에 team_aliases가 전혀 안 걸리면 전문기자여도 폐기 (OpenAI 호출 없음).
   const evidenceTeams = matchTeams(post.text, aliases);
-  const specialty = uniqueTargetTeams([post.specialty_team])[0] || null;
-  if (evidenceTeams.length === 0 && !specialty) {
+  if (evidenceTeams.length === 0) {
     return fallbackClassify(post, aliases);
   }
 
