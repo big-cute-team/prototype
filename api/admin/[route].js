@@ -7,6 +7,8 @@ const HANDLERS = {
   'card-publications': require('../_handlers/admin/card-publications'),
   'card-publications-sync': require('../_handlers/admin/card-publications-sync'),
   'card-template-render': require('../_handlers/admin/card-template-render'),
+  'content-delete': require('../_handlers/admin/content-delete'),
+  'content-reject-bulk': require('../_handlers/admin/content-reject-bulk'),
   custom: require('../_handlers/admin/custom'),
   debate: require('../_handlers/admin/debate'),
   items: require('../_handlers/admin/items'),

@@ -5673,6 +5673,7 @@ export default function AdminDashboard() {
   const [scheduleModal, setScheduleModal] = useState(false);
   const [matchModal, setMatchModal] = useState(false);
   const [newIds, setNewIds] = useState(new Set());
+  const [selectedIds, setSelectedIds] = useState(() => new Set());
   const [worldCupSyncing, setWorldCupSyncing] = useState('');
   const isInitialLoading = Boolean(adminToken && busy && !loaded && !error);
 
@@ -5729,6 +5730,96 @@ export default function AdminDashboard() {
     loadItems();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [status]);
+
+  useEffect(() => {
+    setSelectedIds(new Set());
+  }, [status]);
+
+  const toggleSelect = (id) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const allVisibleSelected = items.length > 0 && items.every(it => selectedIds.has(it.id));
+
+  const toggleSelectAll = () => {
+    setSelectedIds(prev => (allVisibleSelected ? new Set() : new Set(items.map(it => it.id))));
+  };
+
+  const deleteContents = async ({ ids, all }) => {
+    setBusy(true);
+    setMessage('');
+    setError('');
+    try {
+      const response = await fetch('/api/admin/content-delete', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(all ? { all: true, actor: 'admin-ui' } : { ids, actor: 'admin-ui' }),
+      });
+      const data = await readJsonResponse(response);
+      if (!response.ok) throw new Error(data.error || '삭제에 실패했습니다.');
+      setSelectedIds(new Set());
+      await loadItems({ preserveMessage: true });
+      setMessageTone('good');
+      setMessage(`${data.deleted}개 콘텐츠를 삭제했습니다.`);
+    } catch (error) {
+      setMessageTone('bad');
+      setMessage(error.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const deleteSelected = () => {
+    if (selectedIds.size === 0) return;
+    if (!window.confirm(`선택한 ${selectedIds.size}개 콘텐츠를 삭제할까요? 되돌릴 수 없습니다.`)) return;
+    deleteContents({ ids: Array.from(selectedIds) });
+  };
+
+  const deleteAll = () => {
+    if (!window.confirm('정말 전체 콘텐츠를 삭제하시겠습니까?\n모든 검수/발행/폐기/반려 콘텐츠가 영구 삭제되며 되돌릴 수 없습니다.')) return;
+    deleteContents({ all: true });
+  };
+
+  const rejectContents = async (ids, note) => {
+    setBusy(true);
+    setMessage('');
+    setError('');
+    try {
+      const response = await fetch('/api/admin/content-reject-bulk', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ ids, review_note: note, actor: 'admin-ui' }),
+      });
+      const data = await readJsonResponse(response);
+      if (!response.ok) throw new Error(data.error || '반려에 실패했습니다.');
+      setSelectedIds(new Set());
+      await loadItems({ preserveMessage: true });
+      setMessageTone('good');
+      setMessage(`${data.rejected}개 콘텐츠를 반려했습니다.`);
+    } catch (error) {
+      setMessageTone('bad');
+      setMessage(error.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const rejectSelected = () => {
+    if (selectedIds.size === 0) return;
+    const note = window.prompt(`선택한 ${selectedIds.size}개를 반려합니다. 반려 메모를 입력하세요:`, '일괄 반려');
+    if (note === null) return;
+    if (!note.trim()) {
+      setMessageTone('warn');
+      setMessage('반려 메모를 입력해 주세요.');
+      return;
+    }
+    rejectContents(Array.from(selectedIds), note.trim());
+  };
 
   const updateDraft = (id, patch) => {
     setDrafts(prev => ({ ...prev, [id]: { ...(prev[id] || {}), ...patch } }));
@@ -6197,6 +6288,39 @@ export default function AdminDashboard() {
               />
             ) : (
             <div className="space-y-3">
+              {loaded && items.length > 0 && (
+                <div className="flex flex-wrap items-center gap-3 rounded-md px-3 py-2"
+                  style={{ background: '#0b0d14', border: '1px solid #202635' }}>
+                  <label className="flex cursor-pointer items-center gap-2 text-sm font-bold" style={{ color: '#cbd3e8' }}>
+                    <input type="checkbox" checked={allVisibleSelected} onChange={toggleSelectAll} />
+                    전체 선택
+                  </label>
+                  <span className="text-xs" style={{ color: '#8791aa' }}>{selectedIds.size}개 선택됨</span>
+                  <div className="ml-auto flex gap-2">
+                    <button
+                      disabled={busy || selectedIds.size === 0}
+                      onClick={rejectSelected}
+                      className="rounded-md px-3 py-1.5 text-sm font-bold disabled:opacity-40"
+                      style={{ background: '#332400', color: '#fbbf24', border: '1px solid #665017' }}>
+                      선택 반려 ({selectedIds.size})
+                    </button>
+                    <button
+                      disabled={busy || selectedIds.size === 0}
+                      onClick={deleteSelected}
+                      className="rounded-md px-3 py-1.5 text-sm font-bold disabled:opacity-40"
+                      style={{ background: '#351111', color: '#ffb0b0', border: '1px solid #5c2424' }}>
+                      선택 삭제 ({selectedIds.size})
+                    </button>
+                    <button
+                      disabled={busy}
+                      onClick={deleteAll}
+                      className="rounded-md px-3 py-1.5 text-sm font-bold disabled:opacity-40"
+                      style={{ background: '#7f1d1d', color: '#ffe4e4', border: '1px solid #b91c1c' }}>
+                      전체 삭제
+                    </button>
+                  </div>
+                </div>
+              )}
               {isInitialLoading ? (
                 <>
                   <ItemSkeleton />
@@ -6209,21 +6333,30 @@ export default function AdminDashboard() {
                   Refresh를 눌러 큐를 불러오세요.
                 </div>
               ) : items.map(item => (
-                <ItemEditor
-                  key={item.id}
-                  item={item}
-                  draft={drafts[item.id] || {}}
-                  onDraft={updateDraft}
-                  onAction={reviewAction}
-                  onDebate={item => setDebateModal(item)}
-                  onRegenerate={regenerateAction}
-                  onCardNews={item => {
-                    setCardNewsSeed(item);
-                    setStatus(CARD_NEWS_TAB);
-                  }}
-                  busy={busy}
-                  isNew={newIds.has(item.id)}
-                />
+                <div key={item.id} className="flex min-w-0 items-start gap-2">
+                  <input
+                    type="checkbox"
+                    className="mt-4 shrink-0"
+                    checked={selectedIds.has(item.id)}
+                    onChange={() => toggleSelect(item.id)}
+                  />
+                  <div className="min-w-0 flex-1">
+                    <ItemEditor
+                      item={item}
+                      draft={drafts[item.id] || {}}
+                      onDraft={updateDraft}
+                      onAction={reviewAction}
+                      onDebate={item => setDebateModal(item)}
+                      onRegenerate={regenerateAction}
+                      onCardNews={item => {
+                        setCardNewsSeed(item);
+                        setStatus(CARD_NEWS_TAB);
+                      }}
+                      busy={busy}
+                      isNew={newIds.has(item.id)}
+                    />
+                  </div>
+                </div>
               ))}
               </div>
             )}
