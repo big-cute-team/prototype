@@ -475,7 +475,7 @@ function systemPrompt() {
   return [
     'You classify football X posts for a Korean EPL fan product.',
     'Return JSON only. Do not return markdown, code fences, commentary, or extra text.',
-    'The JSON object must follow this exact top-level shape: is_target_relevant, teams, decision, confidence, entities, evidence, review_reason, is_informative, requires_visual_context, is_journalist_opinion, team_resolution, briefing.',
+    'The JSON object must follow this exact top-level shape: is_target_relevant, teams, decision, category, confidence, entities, evidence, review_reason, is_informative, requires_visual_context, is_journalist_opinion, team_resolution, briefing.',
     'Only these target teams are in scope: MUN, MCI, LIV, ARS, TOT, CHE.',
     'Target team Korean names: MUN=맨유, MCI=맨시티, LIV=리버풀, ARS=아스널, TOT=토트넘, CHE=첼시.',
     'Discard posts unrelated to those six teams.',
@@ -630,8 +630,34 @@ async function classifyPost(post, aliases) {
   return result;
 }
 
+// LLM을 호출하지 않고, classifyPost이 보낼 프롬프트(system/user)와 사전 필터 결과만 반환한다.
+// 외부 LLM(예: Codex)으로 직접 요약을 뽑을 때 사용. 프롬프트·스키마·필터는 classifyPost와 동일.
+function buildPromptFor(post, aliases) {
+  const evidenceTeams = matchTeams(post.text, aliases);
+  if (evidenceTeams.length === 0) {
+    return { skip: true, reason: 'no_target_team' }; // → 6팀 무관, LLM 없이 IRRELEVANT
+  }
+  if (isClearlyNonInformative(post)) {
+    return { skip: true, reason: 'non_informative' }; // → 알맹이 없음, LLM 없이 IRRELEVANT
+  }
+  const matchedRows = matchAliasRows(post.text, aliases);
+  return {
+    skip: false,
+    model: process.env.OPENAI_MODEL || 'gpt-4o-mini',
+    temperature: 0.1,
+    response_format: 'json_object',
+    system: systemPrompt(),
+    user: userPrompt(post, matchedRows),
+    matched_aliases: matchedRows,
+    evidence_teams: evidenceTeams,
+  };
+}
+
 module.exports = {
   classifyPost,
   enforcePolicy,
   legacyNewsTypeFromBriefingStatus,
+  buildPromptFor,
+  systemPrompt,
+  CLASSIFICATION_SCHEMA,
 };
