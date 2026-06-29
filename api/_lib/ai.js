@@ -5,6 +5,7 @@ const { OFFICIAL_KEYWORDS, RUMOUR_KEYWORDS, TARGET_TEAMS, hasAny, matchAliasRows
 const TARGET_TEAM_CODES = TARGET_TEAMS.map(team => team.code);
 const BRIEFING_STATUSES = ['OFFICIAL', 'RUMOUR', 'UPDATE', 'CONFIRMED', 'DENIED'];
 const TEAM_RESOLUTIONS = ['certain', 'ambiguous', 'none'];
+const CATEGORIES = ['TRANSFER', 'MATCH', 'FITNESS', 'OTHER']; // 새 설계 article_summaries.category
 const CONTENT_PROMPT = fs.readFileSync(path.join(__dirname, '../../content.md'), 'utf8').trim();
 const TARGET_TEAM_NAME_PATTERN = [
   'manchester united',
@@ -42,6 +43,7 @@ const CLASSIFICATION_SCHEMA = {
     'is_target_relevant',
     'teams',
     'decision',
+    'category',
     'confidence',
     'entities',
     'evidence',
@@ -59,6 +61,7 @@ const CLASSIFICATION_SCHEMA = {
       items: { type: 'string', enum: TARGET_TEAM_CODES },
     },
     decision: { type: 'string', enum: ['publish', 'review', 'discard'] },
+    category: { type: 'string', enum: CATEGORIES },
     confidence: { type: 'number' },
     entities: {
       type: 'object',
@@ -151,6 +154,11 @@ function normalizeBoolean(value, fallback = false) {
 function normalizeTeamResolution(value, fallback = 'none') {
   const normalized = String(value || '').trim().toLowerCase();
   return TEAM_RESOLUTIONS.includes(normalized) ? normalized : fallback;
+}
+
+function normalizeCategory(value) {
+  const normalized = String(value || '').trim().toUpperCase();
+  return CATEGORIES.includes(normalized) ? normalized : 'OTHER';
 }
 
 function normalizeStatus(value, fallback = 'UPDATE') {
@@ -357,6 +365,7 @@ function enforcePolicy(result, post, aliases = []) {
     is_target_relevant: hasPossibleTarget,
     teams: hasPossibleTarget ? teams : [],
     decision,
+    category: normalizeCategory(result.category),
     confidence,
     entities: {
       players: Array.isArray(result.entities?.players) ? result.entities.players : [],
@@ -496,6 +505,14 @@ function systemPrompt() {
     'Choose decision=review when: team is uncertain, needs visual context, lacks concrete information, or is journalist opinion.',
     'Choose decision=discard only when the post is unrelated to all six target teams.',
     'Rumours, speculative updates, denials, and collapses are eligible for decision=publish as long as team and information criteria are met.',
+    '',
+    'CATEGORY CLASSIFICATION (category field — pick exactly one):',
+    'TRANSFER (이적/거취): signings, transfers, loans, contract renewals, releases, interest, bids, negotiations, "here we go", departures.',
+    'MATCH (경기): lineups, results, goals, refereeing/VAR, man of the match, pre/post-match, national-team match performances.',
+    'FITNESS (부상/컨디션): injuries, fitness, recovery/return, doubts over availability for an upcoming match.',
+    'OTHER (기타/잡담): features, sentiment, youth, club finance/business, banter, or anything with no concrete transfer/match/fitness news.',
+    'Boundary rules: a completed signing or contract renewal = TRANSFER; an injury affecting availability = FITNESS (not MATCH); pure opinion/banter = OTHER.',
+    'Always return category even when decision=discard (use OTHER if nothing else fits).',
     '',
     'KOREAN NAME RULES:',
     'target_team_aliases contains ONLY the entities matched in THIS tweet. Each row may include a "korean_name" field.',
