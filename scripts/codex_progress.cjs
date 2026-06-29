@@ -47,10 +47,10 @@ function readNdjson(file) {
 
   let loaded = null;
   if (!NO_DB && process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY) {
-    const { existingSourceUrls } = require('../api/_lib/persist');
-    const dbUrls = await existingSourceUrls();
+    const { existingPostIds, postIdOf } = require('../api/_lib/persist');
+    const dbIds = await existingPostIds();
     loaded = 0;
-    for (const url of idxToUrl.values()) if (dbUrls.has(url)) loaded++;
+    for (const url of idxToUrl.values()) if (dbIds.has(postIdOf(url))) loaded++;
   }
 
   const pct = total ? Math.floor((done / total) * 100) : 0;

@@ -15,7 +15,7 @@
 const fs = require('fs');
 const path = require('path');
 const { enforcePolicy } = require('../api/_lib/ai');
-const { persistSummary, existingSourceUrls, buildSummaryRow } = require('../api/_lib/persist');
+const { persistSummary, existingPostIds, postIdOf, buildSummaryRow } = require('../api/_lib/persist');
 
 const envPath = path.join(__dirname, '..', '.env.local');
 for (const line of fs.readFileSync(envPath, 'utf8').split('\n')) {
@@ -61,7 +61,7 @@ function readNdjson(file) {
   }
 
   const results = readNdjson(path.join(OUT_DIR, 'codex_results.ndjson'));
-  const dupes = await existingSourceUrls();
+  const seen = await existingPostIds();
   const stat = { results: results.length, inserted: 0, skipped_dup: 0, no_input: 0, errors: 0, REVIEW: 0, IRRELEVANT: 0 };
 
   for (const r of results) {
@@ -69,14 +69,15 @@ function readNdjson(file) {
     if (!inp) { stat.no_input++; continue; }
     const post = inp.post;
     const sourceUrl = inp.source_url;
-    if (dupes.has(sourceUrl)) { stat.skipped_dup++; continue; }
+    const pid = postIdOf(sourceUrl) || post.id;
+    if (seen.has(pid)) { stat.skipped_dup++; continue; }
     try {
       const aiResult = enforcePolicy(r.ai, post, aliases); // ★ 실서비스와 동일 후처리
       const row = buildSummaryRow(aiResult);
       stat[row.status]++;
       if (DRY) {
         process.stdout.write(JSON.stringify({ idx: r.idx, source_url: sourceUrl, status: row.status, teams: aiResult.teams, title: row.title }) + '\n');
-        dupes.add(sourceUrl);
+        seen.add(pid);
         continue;
       }
       const res = await persistSummary(aiResult, post, { sourceUrl });

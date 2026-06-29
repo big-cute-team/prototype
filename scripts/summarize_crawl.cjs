@@ -15,7 +15,7 @@
 const fs = require('fs');
 const path = require('path');
 const { classifyPost } = require('../api/_lib/ai');                 // 프롬프트·후처리 그대로
-const { persistSummary, existingSourceUrls, buildSummaryRow } = require('../api/_lib/persist'); // 공유 적재
+const { persistSummary, existingPostIds, postIdOf, buildSummaryRow } = require('../api/_lib/persist'); // 공유 적재
 
 // ---- env (.env.local) ----
 const envPath = path.join(__dirname, '..', '.env.local');
@@ -79,7 +79,7 @@ function readTweets() {
 (async () => {
   if (!process.env.OPENAI_API_KEY) throw new Error('OPENAI_API_KEY required');
   const aliases = await loadAliases();
-  const dupes = await existingSourceUrls(); // 새 DB의 기존 source_url
+  const seen = await existingPostIds(); // 새 DB의 기존 게시물 id
   const tweets = readTweets();
   const stat = { total: tweets.length, llm: 0, inserted: 0, skipped_dup: 0, REVIEW: 0, IRRELEVANT: 0, errors: 0 };
   let processed = 0;
@@ -89,7 +89,8 @@ function readTweets() {
     const post = toPost(tweet);
     if (!post.author_handle || !post.text) continue;
     const sourceUrl = tweet.url || `https://x.com/${post.author_handle}/status/${post.id}`;
-    if (dupes.has(sourceUrl)) { stat.skipped_dup++; continue; }
+    const pid = postIdOf(sourceUrl) || post.id;
+    if (seen.has(pid)) { stat.skipped_dup++; continue; }
 
     processed++;
     try {
@@ -99,7 +100,7 @@ function readTweets() {
       stat[row.status]++;
       if (DRY) {
         process.stdout.write(JSON.stringify({ source_url: sourceUrl, decision: ai.decision, status: row.status, teams: ai.teams, summary: row }) + '\n');
-        dupes.add(sourceUrl);
+        seen.add(pid);
         continue;
       }
       const res = await persistSummary(ai, post, { sourceUrl }); // 공유 적재

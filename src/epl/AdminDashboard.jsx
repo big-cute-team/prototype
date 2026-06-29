@@ -173,7 +173,7 @@ const STATUS_LABELS = {
   review: '검수',
   published: '발행',
   discarded: '폐기',
-  rejected: '반려',
+  rejected: '관련없음', // AI가 부여하는 IRRELEVANT 태그(6팀 무관)
   all: '전체',
 };
 const ACTION_LABELS = {
@@ -6205,7 +6205,7 @@ export default function AdminDashboard() {
           <Metric label="Published" value={dashboard?.published} />
           <Metric label="Review" value={dashboard?.review} warn={(dashboard?.review || 0) > 0} />
           <Metric label="Discarded" value={dashboard?.discarded} />
-          <Metric label="Rejected" value={dashboard?.rejected} />
+          <Metric label="Irrelevant" value={dashboard?.rejected} />
         </section>
 
         <section className={[CARD_NEWS_TAB, GENERATED_CARD_NEWS_TAB, WORLD_CUP_FIXTURES_TAB].includes(status) ? 'mt-5 grid min-w-0 gap-5' : 'mt-5 grid min-w-0 gap-5 lg:grid-cols-[minmax(0,1fr)_320px]'}>
