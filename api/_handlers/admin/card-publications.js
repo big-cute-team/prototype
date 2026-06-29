@@ -1,4 +1,3 @@
-const crypto = require('crypto');
 const { requireToken } = require('../../_lib/auth');
 const { recordAudit } = require('../../_lib/audit');
 const { cardRenderAuthHeaders, cardRenderUrl, readCardRenderError } = require('../../_lib/card-news');
@@ -6,7 +5,16 @@ const { handleError, json, parseJsonBody } = require('../../_lib/http');
 const { insert, select, patch, eq, supabaseFetch } = require('../../_lib/supabase');
 
 const PUBLICATION_KINDS = new Set(['article', 'today_fixtures']);
-const PUBLICATION_STATUSES = new Set(['pending', 'queued', 'running', 'zip_pending', 'completed', 'failed']);
+// 렌더 잡 상태 → 새 card_news_publications.status CHECK(pending/rendering/completed/failed)
+const RENDER_STATUS_MAP = {
+  pending: 'pending',
+  queued: 'rendering',
+  running: 'rendering',
+  zip_pending: 'rendering',
+  rendering: 'rendering',
+  completed: 'completed',
+  failed: 'failed',
+};
 
 async function requestRenderJob(renderRequest, publicationId) {
   const response = await fetch(cardRenderUrl('/card/render-jobs'), {
@@ -44,7 +52,7 @@ function mergeRenderTimings(sourcePayload, job) {
 }
 
 function patchForJob(job, sourcePayload = {}) {
-  const status = PUBLICATION_STATUSES.has(job.status) ? job.status : 'running';
+  const status = RENDER_STATUS_MAP[job.status] || 'rendering';
   return {
     status,
     render_job_id: job.job_id || null,
@@ -72,7 +80,8 @@ function requirePublicationBody(body) {
     kind,
     title,
     caption: String(body.caption || '').trim() || null,
-    contentItemId: body.content_item_id || null,
+    // 프론트는 여전히 content_item_id로 보내지만 값은 새 article_summary_id(bigint)다.
+    articleSummaryId: body.content_item_id || null,
     templateId: body.render_request.template_id || body.template_id || null,
     sourcePayload: body.source_payload && typeof body.source_payload === 'object' ? body.source_payload : {},
     renderRequest: body.render_request,
@@ -82,7 +91,7 @@ function requirePublicationBody(body) {
 async function listPublications(req, res) {
   const limit = Math.max(1, Math.min(Number(req.query?.limit || 50), 100));
   const filters = [`select=*&order=created_at.desc&limit=${limit}`];
-  if (req.query?.content_item_id) filters.push(eq('content_item_id', req.query.content_item_id));
+  if (req.query?.content_item_id) filters.push(eq('article_summary_id', req.query.content_item_id));
   if (req.query?.kind) filters.push(`kind=eq.${encodeURIComponent(req.query.kind)}`);
   const rows = await select('card_news_publications', filters.join('&'));
   json(res, 200, { publications: rows || [] });
@@ -91,11 +100,10 @@ async function listPublications(req, res) {
 async function createPublication(req, res) {
   const body = await parseJsonBody(req);
   const payload = requirePublicationBody(body);
-  const id = crypto.randomUUID();
   const now = new Date().toISOString();
+  // PK(card_news_publication_id)는 DB가 자동 생성한다(구 client UUID 방식 제거).
   const row = {
-    id,
-    content_item_id: payload.contentItemId,
+    article_summary_id: payload.articleSummaryId,
     kind: payload.kind,
     status: 'pending',
     render_job_id: null,
@@ -111,20 +119,22 @@ async function createPublication(req, res) {
     completed_at: null,
   };
 
-  await insert('card_news_publications', [row]);
+  const insertedRows = await insert('card_news_publications', [row]);
+  const created = insertedRows[0];
+  const id = created.card_news_publication_id;
   try {
     const job = await requestRenderJob(payload.renderRequest, id);
-    const updated = await patch('card_news_publications', eq('id', id), patchForJob(job, payload.sourcePayload));
+    const updated = await patch('card_news_publications', eq('card_news_publication_id', id), patchForJob(job, payload.sourcePayload));
     await recordAudit('card_news_publication_started', {
-      content_item_id: payload.contentItemId,
+      content_item_id: payload.articleSummaryId,
       actor: body.actor || 'admin',
       publication_id: id,
       render_job_id: job.job_id,
       kind: payload.kind,
     });
-    json(res, 200, { ok: true, publication: updated[0] || { ...row, ...patchForJob(job, payload.sourcePayload) } });
+    json(res, 200, { ok: true, publication: updated[0] || { ...created, ...patchForJob(job, payload.sourcePayload) } });
   } catch (error) {
-    await patch('card_news_publications', eq('id', id), {
+    await patch('card_news_publications', eq('card_news_publication_id', id), {
       status: 'failed',
       error_message: error.message,
       completed_at: new Date().toISOString(),
@@ -147,7 +157,7 @@ async function deletePublication(req, res) {
   const id = String(req.query?.id || '').trim();
   if (!id) throw Object.assign(new Error('id is required'), { statusCode: 400 });
 
-  const rows = await select('card_news_publications', `select=*&${eq('id', id)}&limit=1`);
+  const rows = await select('card_news_publications', `select=*&${eq('card_news_publication_id', id)}&limit=1`);
   const current = rows[0];
   if (!current) throw Object.assign(new Error('card news publication not found'), { statusCode: 404 });
 
@@ -160,10 +170,10 @@ async function deletePublication(req, res) {
 
   await supabaseFetch('card_news_publications', {
     method: 'DELETE',
-    query: eq('id', id),
+    query: eq('card_news_publication_id', id),
   });
   await recordAudit('card_news_publication_deleted', {
-    content_item_id: current.content_item_id,
+    content_item_id: current.article_summary_id,
     actor: req.query?.actor || 'admin',
     publication_id: id,
     storage_warning: storageWarning,

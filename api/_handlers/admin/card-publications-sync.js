@@ -4,7 +4,16 @@ const { cardRenderAuthHeaders, cardRenderUrl, readCardRenderError } = require('.
 const { handleError, json, parseJsonBody } = require('../../_lib/http');
 const { select, patch, eq } = require('../../_lib/supabase');
 
-const PUBLICATION_STATUSES = new Set(['pending', 'queued', 'running', 'zip_pending', 'completed', 'failed']);
+// 렌더 잡 상태 → 새 card_news_publications.status CHECK(pending/rendering/completed/failed)
+const RENDER_STATUS_MAP = {
+  pending: 'pending',
+  queued: 'rendering',
+  running: 'rendering',
+  zip_pending: 'rendering',
+  rendering: 'rendering',
+  completed: 'completed',
+  failed: 'failed',
+};
 const TODAY_FIXTURES_TEMPLATE_ID = 'plick_today_fixtures_v1';
 const WEEKLY_FIXTURES_TEMPLATE_ID = 'plick_weekly_fixtures_v1';
 const TODAY_RESULTS_TEMPLATE_ID = 'plick_today_results_v1';
@@ -50,7 +59,7 @@ function mergeRenderTimings(sourcePayload, job) {
 }
 
 function patchForJob(job, sourcePayload = {}) {
-  const status = PUBLICATION_STATUSES.has(job.status) ? job.status : 'running';
+  const status = RENDER_STATUS_MAP[job.status] || 'rendering';
   return {
     status,
     render_job_id: job.job_id || null,
@@ -102,15 +111,16 @@ async function recoverMissingRenderJob(current, actor) {
     : {};
   const requeueCount = Number(sourcePayload.render_job_requeue_count || 0);
   const renderRequest = renderRequestFromPublication(current);
+  const pubId = current.card_news_publication_id;
 
   if (!renderRequest || requeueCount >= 1) {
     const updates = lostRenderJobError(current);
-    const updatedRows = await patch('card_news_publications', eq('id', current.id), updates);
+    const updatedRows = await patch('card_news_publications', eq('card_news_publication_id', pubId), updates);
     const publication = updatedRows[0] || { ...current, ...updates };
     await recordAudit('card_news_publication_failed', {
-      content_item_id: publication.content_item_id,
+      content_item_id: publication.article_summary_id,
       actor,
-      publication_id: publication.id,
+      publication_id: publication.card_news_publication_id,
       render_job_id: publication.render_job_id,
       error_message: publication.error_message,
     }).catch(() => {});
@@ -123,14 +133,14 @@ async function recoverMissingRenderJob(current, actor) {
     render_job_requeued_at: new Date().toISOString(),
     render_job_requeued_from: current.render_job_id,
   };
-  const job = await requestRenderJob(renderRequest, current.id);
+  const job = await requestRenderJob(renderRequest, pubId);
   const updates = patchForJob(job, nextSourcePayload);
-  const updatedRows = await patch('card_news_publications', eq('id', current.id), updates);
+  const updatedRows = await patch('card_news_publications', eq('card_news_publication_id', pubId), updates);
   const publication = updatedRows[0] || { ...current, ...updates };
   await recordAudit('card_news_publication_requeued', {
-    content_item_id: publication.content_item_id,
+    content_item_id: publication.article_summary_id,
     actor,
-    publication_id: publication.id,
+    publication_id: publication.card_news_publication_id,
     previous_render_job_id: current.render_job_id,
     render_job_id: publication.render_job_id,
   }).catch(() => {});
@@ -149,7 +159,7 @@ module.exports = async function handler(req, res) {
     const id = String(body.id || '').trim();
     if (!id) throw Object.assign(new Error('id is required'), { statusCode: 400 });
 
-    const rows = await select('card_news_publications', `select=*&${eq('id', id)}&limit=1`);
+    const rows = await select('card_news_publications', `select=*&${eq('card_news_publication_id', id)}&limit=1`);
     const current = rows[0];
     if (!current) throw Object.assign(new Error('card news publication not found'), { statusCode: 404 });
     if (!current.render_job_id) {
@@ -169,14 +179,14 @@ module.exports = async function handler(req, res) {
       throw error;
     }
     const updates = patchForJob(job, current.source_payload);
-    const updatedRows = await patch('card_news_publications', eq('id', id), updates);
+    const updatedRows = await patch('card_news_publications', eq('card_news_publication_id', id), updates);
     const publication = updatedRows[0] || { ...current, ...updates };
 
     if (current.status !== publication.status && ['completed', 'failed'].includes(publication.status)) {
       await recordAudit(`card_news_publication_${publication.status}`, {
-        content_item_id: publication.content_item_id,
+        content_item_id: publication.article_summary_id,
         actor: body.actor || 'admin',
-        publication_id: publication.id,
+        publication_id: publication.card_news_publication_id,
         render_job_id: publication.render_job_id,
         zip_url: publication.zip_url,
         error_message: publication.error_message,

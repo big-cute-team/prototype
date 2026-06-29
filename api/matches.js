@@ -1,11 +1,9 @@
 const { requireToken } = require('./_lib/auth');
-const { recordAudit } = require('./_lib/audit');
 const { handleError, json, parseJsonBody } = require('./_lib/http');
 const { eq, insert, patch, select, supabaseFetch } = require('./_lib/supabase');
 
 const KST_OFFSET_MS = 9 * 60 * 60 * 1000;
-const STATUSES = ['scheduled', 'live', 'finished'];
-const TARGET_TEAM_CODES = ['ARS', 'CHE', 'LIV', 'MCI', 'MUN', 'TOT'];
+const STATUSES = ['SCHEDULED', 'LIVE', 'FINISHED', 'POSTPONED', 'CANCELLED'];
 
 // KST 기준 오늘/이번주(월~일) UTC 경계 계산
 function kstRange(range) {
@@ -28,29 +26,37 @@ function kstRange(range) {
   return null; // all
 }
 
+// 새 matches(match_id, home_team_text/away_team_text) → 프론트가 기대하는 구 형태(id, home_team/away_team)
+function toLegacyMatch(m) {
+  return {
+    ...m,
+    id: m.match_id,
+    home_team: m.home_team_text,
+    away_team: m.away_team_text,
+    team_tags: [], // 새 스키마는 home/away_team_id FK 사용. 텍스트 경기엔 태그 없음
+  };
+}
+
 function normalizeMatch(m) {
   if (!m.kickoff_at) throw Object.assign(new Error('kickoff_at is required'), { statusCode: 400 });
   if (!m.home_team || !m.away_team) throw Object.assign(new Error('home_team and away_team are required'), { statusCode: 400 });
 
-  const status = STATUSES.includes(m.status) ? m.status : 'scheduled';
-  const teamTags = Array.isArray(m.team_tags)
-    ? m.team_tags.filter(t => TARGET_TEAM_CODES.includes(String(t).toUpperCase())).map(t => String(t).toUpperCase())
-    : [];
+  const inputStatus = String(m.status || '').toUpperCase();
+  const status = STATUSES.includes(inputStatus) ? inputStatus : 'SCHEDULED';
   const hasScore = m.home_score !== undefined && m.home_score !== null && m.home_score !== ''
     && m.away_score !== undefined && m.away_score !== null && m.away_score !== '';
 
   return {
     competition: m.competition || null,
     kickoff_at: new Date(m.kickoff_at).toISOString(),
-    home_team: String(m.home_team).trim(),
-    away_team: String(m.away_team).trim(),
+    home_team_text: String(m.home_team).trim(),
+    away_team_text: String(m.away_team).trim(),
     home_flag: m.home_flag || null,
     away_flag: m.away_flag || null,
     group_name: m.group_name || null,
     home_score: hasScore ? Number(m.home_score) : null,
     away_score: hasScore ? Number(m.away_score) : null,
-    status: hasScore && status === 'scheduled' ? 'finished' : status,
-    team_tags: teamTags,
+    status: hasScore && status === 'SCHEDULED' ? 'FINISHED' : status,
     is_featured: Boolean(m.is_featured),
   };
 }
@@ -67,24 +73,24 @@ module.exports = async function handler(req, res) {
         query += `&kickoff_at=lt.${encodeURIComponent(bounds.to.toISOString())}`;
       }
       const matches = await select('matches', query);
-      json(res, 200, { matches });
+      json(res, 200, { matches: matches.map(toLegacyMatch) });
       return;
     }
 
     if (req.method === 'POST') {
       const body = await parseJsonBody(req);
 
-      // 승부예측 투표 (공개, 토큰 불필요)
+      // 승부예측 투표 (공개, 토큰 불필요). RPC가 없어 read-modify-write로 처리.
       if (body.action === 'vote') {
         if (!body.id) throw Object.assign(new Error('id is required'), { statusCode: 400 });
         if (!['for', 'against'].includes(body.choice)) {
           throw Object.assign(new Error("choice must be 'for' or 'against'"), { statusCode: 400 });
         }
-        await supabaseFetch('rpc/increment_match_vote', {
-          method: 'POST',
-          body: { p_match_id: body.id, p_choice: body.choice },
-        });
-        const rows = await select('matches', `select=prediction_for_count,prediction_against_count&${eq('id', body.id)}&limit=1`);
+        const col = body.choice === 'for' ? 'prediction_for_count' : 'prediction_against_count';
+        const current = await select('matches', `select=match_id,${col}&${eq('match_id', body.id)}&limit=1`);
+        if (!current[0]) throw Object.assign(new Error('match not found'), { statusCode: 404 });
+        await patch('matches', eq('match_id', body.id), { [col]: (current[0][col] || 0) + 1 });
+        const rows = await select('matches', `select=prediction_for_count,prediction_against_count&${eq('match_id', body.id)}&limit=1`);
         json(res, 200, { ok: true, counts: rows[0] || null });
         return;
       }
@@ -94,8 +100,7 @@ module.exports = async function handler(req, res) {
       const list = Array.isArray(body) ? body : Array.isArray(body.matches) ? body.matches : [body];
       const rows = list.map(normalizeMatch);
       const inserted = await insert('matches', rows);
-      await recordAudit('admin_matches_create', { count: inserted.length, actor: 'admin-ui' });
-      json(res, 200, { ok: true, matches: inserted });
+      json(res, 200, { ok: true, matches: inserted.map(toLegacyMatch) });
       return;
     }
 
@@ -118,15 +123,15 @@ module.exports = async function handler(req, res) {
         && body.away_score !== undefined && body.away_score !== null && body.away_score !== '';
       if ('home_score' in body) updates.home_score = hasScore ? Number(body.home_score) : null;
       if ('away_score' in body) updates.away_score = hasScore ? Number(body.away_score) : null;
-      if (body.status && ['scheduled', 'live', 'finished'].includes(body.status)) {
-        updates.status = body.status;
+      const inputStatus = String(body.status || '').toUpperCase();
+      if (body.status && STATUSES.includes(inputStatus)) {
+        updates.status = inputStatus;
       } else if (hasScore) {
-        updates.status = 'finished';
+        updates.status = 'FINISHED';
       }
 
-      const updated = await patch('matches', eq('id', id), updates);
-      await recordAudit('admin_matches_update', { match_id: id, actor: 'admin-ui' });
-      json(res, 200, { ok: true, match: updated[0] });
+      const updated = await patch('matches', eq('match_id', id), updates);
+      json(res, 200, { ok: true, match: updated[0] ? toLegacyMatch(updated[0]) : null });
       return;
     }
 
@@ -134,8 +139,7 @@ module.exports = async function handler(req, res) {
       requireToken(req, 'ADMIN_TOKEN', 'admin');
       const id = req.query?.id;
       if (!id) throw Object.assign(new Error('id is required'), { statusCode: 400 });
-      await supabaseFetch('matches', { method: 'DELETE', query: `id=eq.${encodeURIComponent(id)}` });
-      await recordAudit('admin_matches_delete', { match_id: id, actor: 'admin-ui' });
+      await supabaseFetch('matches', { method: 'DELETE', query: eq('match_id', id) });
       json(res, 200, { ok: true });
       return;
     }

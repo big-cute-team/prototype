@@ -600,7 +600,7 @@ async function updateManualResult(req, res) {
     updates.last_result_synced_at = null;
   }
 
-  const query = id ? eq('id', id) : eq('api_fixture_id', apiFixtureId);
+  const query = id ? eq('world_cup_fixture_id', id) : eq('api_fixture_id', apiFixtureId);
   const rows = await patch('world_cup_fixtures', query, updates);
   const fixture = Array.isArray(rows) ? rows[0] : null;
   if (!fixture) {
