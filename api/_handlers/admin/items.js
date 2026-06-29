@@ -1,6 +1,21 @@
 const { requireToken } = require('../../_lib/auth');
 const { handleError, json } = require('../../_lib/http');
-const { select } = require('../../_lib/supabase');
+const { select, supabaseFetch } = require('../../_lib/supabase');
+
+// 대시보드 카운트용 — PostgREST 1000행 제한을 넘겨 전체 status를 페이지네이션 조회
+async function fetchAllStatuses() {
+  const out = [];
+  for (let from = 0; ; from += 1000) {
+    const rows = await supabaseFetch('article_summaries', {
+      query: 'select=status',
+      headers: { Range: `${from}-${from + 999}` },
+    });
+    if (!Array.isArray(rows) || rows.length === 0) break;
+    out.push(...rows);
+    if (rows.length < 1000) break;
+  }
+  return out;
+}
 
 // 새 status(대문자 enum) ↔ 구 어드민 UI가 기대하는 소문자 버킷
 const STATUS_TO_LEGACY = {
@@ -125,7 +140,7 @@ module.exports = async function handler(req, res) {
 
     const [rows, dashboardRows, reporters, latestRaw] = await Promise.all([
       select('article_summaries', `select=${ITEM_SELECT}&order=created_at.desc&limit=${limit}${statusFilter}`),
-      select('article_summaries', 'select=status&order=created_at.desc&limit=1000'),
+      fetchAllStatuses(),
       select('reporters', 'select=reporter_id,name,x_handle,is_active,last_article_id&order=name.asc'),
       select('raw_articles', 'select=created_at&order=created_at.desc&limit=1'),
     ]);
