@@ -1,5 +1,5 @@
 const { requireToken } = require('../../_lib/auth');
-const { recordAudit } = require('../../_lib/audit');
+const { recordStatusLog } = require('../../_lib/audit');
 const { handleError, json, parseJsonBody } = require('../../_lib/http');
 const { inList, patch } = require('../../_lib/supabase');
 
@@ -19,25 +19,19 @@ module.exports = async function handler(req, res) {
     if (!reviewNote) {
       throw Object.assign(new Error('review_note is required'), { statusCode: 400 });
     }
+    // review_note는 새 설계에 저장 자리가 없어 보존하지 않는다(입력은 UX상 유지).
 
-    const now = new Date().toISOString();
-    const updated = await patch('content_items', inList('id', body.ids), {
-      status: 'rejected',
-      review_note: reviewNote,
-      review_reason: reviewNote,
-      published_at: null,
-      reviewed_at: now,
-      reviewed_by: body.actor || 'admin',
-      updated_at: now,
+    const updated = await patch('article_summaries', inList('article_summary_id', body.ids), {
+      status: 'DISCARDED',
     });
-    const count = Array.isArray(updated) ? updated.length : 0;
+    const rows = Array.isArray(updated) ? updated : [];
 
-    await recordAudit('admin_reject_bulk', {
-      actor: body.actor || 'admin',
-      count,
-    });
+    // 폐기 전이 시점을 각각 기록(설계 3.18)
+    for (const row of rows) {
+      await recordStatusLog(row.article_summary_id, 'DISCARDED');
+    }
 
-    json(res, 200, { ok: true, rejected: count });
+    json(res, 200, { ok: true, rejected: rows.length });
   } catch (error) {
     handleError(res, error);
   }

@@ -1,33 +1,27 @@
-function firstMediaUrl(media) {
-  if (!Array.isArray(media)) return null;
-  const first = media.find(item => item?.url || item?.preview_image_url);
-  return first?.url || first?.preview_image_url || null;
+// 새 스키마(article_summaries + raw_articles + team_tags + debates) → 피드 포스트.
+// 원문 N:1 요약 구조에서 "대표 원문"은 가장 공신력 높은(=tier 숫자 작은) 기자 기사(설계 5.2).
+function pickRepresentativeRaw(summary) {
+  const raws = Array.isArray(summary.raw_articles) ? summary.raw_articles : [];
+  if (raws.length === 0) return null;
+  return raws
+    .slice()
+    .sort((a, b) => (a.reporter_tier ?? 99) - (b.reporter_tier ?? 99))[0];
 }
 
-function allMediaUrls(media) {
-  if (!Array.isArray(media)) return [];
-  return media.map(item => item?.url || item?.preview_image_url).filter(Boolean);
+// team_tags → 팀 약자 코드(ARS/CHE/…). teams.short_name이 구버전 team code와 동일.
+function teamCodes(summary) {
+  const tags = Array.isArray(summary.team_tags) ? summary.team_tags : [];
+  return tags.map(tag => tag.teams?.short_name).filter(Boolean);
 }
 
-function briefingFor(item) {
-  const aiBriefing = item.ai_result?.briefing || {};
-  return {
-    title: item.title_ko || aiBriefing.title,
-    summary_short: item.summary_short_ko || item.summary_ko || aiBriefing.summary_short,
-    summary_detail: item.summary_detail_ko || aiBriefing.summary_detail || item.summary_ko,
-    tags: Array.isArray(item.team_tags) ? item.team_tags : aiBriefing.tags,
-    status: item.briefing_status || aiBriefing.status,
-  };
-}
-
-function statusLabel(briefingStatus, newsType) {
-  if (briefingStatus === 'OFFICIAL') return 'Official';
-  if (briefingStatus === 'CONFIRMED') return 'Confirmed';
-  if (briefingStatus === 'RUMOUR' || newsType === 'rumour') return 'Rumour';
-  if (briefingStatus === 'UPDATE') return 'Talks';
-  if (briefingStatus === 'DENIED') return 'Opinion';
-  if (newsType === 'official') return 'Confirmed';
-  return 'Opinion';
+// rumor_stage(RUMOR/IN_PROGRESS/OFFICIAL) → UI 신뢰도 배지 라벨.
+function statusLabelFromStage(rumorStage) {
+  switch (rumorStage) {
+    case 'OFFICIAL': return 'Official';
+    case 'IN_PROGRESS': return 'Talks';
+    case 'RUMOR': return 'Rumour';
+    default: return 'Rumour';
+  }
 }
 
 function initials(handle) {
@@ -146,65 +140,59 @@ function mockEngagement(item, { isMatchLike, isDebate, voteForLabel, voteAgainst
   };
 }
 
-function mapItemToPost(item) {
-  const metrics = item.raw_public_metrics || {};
-  const briefing = briefingFor(item);
-  const teamTags = Array.isArray(briefing.tags) && briefing.tags.length > 0 ? briefing.tags : (item.team_tags || []);
-  const team = Array.isArray(teamTags) ? teamTags[0] : null;
-  const handle = item.raw_author_handle || item.source_handle || 'x';
+function mapSummaryToPost(summary) {
+  const raw = pickRepresentativeRaw(summary);
+  const codes = teamCodes(summary);
+  const club = codes[0] || null;
+  const handle = raw?.reporters?.x_handle || 'x';
+  const debate = summary.debates && !Array.isArray(summary.debates) ? summary.debates : null;
+  const isDebate = Boolean(debate);
 
-  const isDebate = Boolean(item.debate_question);
-  const isCustom = Boolean(item.is_custom);
-  const isMatchLike = isCustom && ['today', 'result', 'schedule'].includes(item.card_type);
-
-  const mock = mockEngagement(item, {
-    isMatchLike,
+  // 트위터 지표·이미지는 새 설계에 없으므로 목업/단일 image_url로 대체.
+  const mock = mockEngagement({ id: summary.article_summary_id }, {
+    isMatchLike: false,
     isDebate,
-    voteForLabel: item.vote_for_label,
-    voteAgainstLabel: item.vote_against_label,
+    voteForLabel: debate?.option_a,
+    voteAgainstLabel: debate?.option_b,
   });
 
+  const images = summary.image_url ? [summary.image_url] : [];
+
   return {
-    id: `live-${item.id}`,
+    id: `live-${summary.article_summary_id}`,
     type: isDebate ? 'today_debate' : 'general',
-    title: briefing.title || item.raw_text?.slice(0, 80) || 'EPL 업데이트',
-    summary: briefing.summary_short || item.raw_text || '',
-    briefing: briefing.summary_detail || item.raw_text || '',
-    isCustom,
-    cardType: item.card_type || null,
-    cardData: item.card_data || null,
-    imageUrls: allMediaUrls(item.media),
-    tweet: isCustom ? {
-      author: 'PLICK',
-      initials: 'PL',
-      handle: '@plick_football',
-      timeAgo: item.raw_created_at ? new Date(item.raw_created_at).toLocaleString('ko-KR') : '',
-      text: '',
-    } : {
-      author: item.raw_author_name || handle,
+    title: summary.title || raw?.content?.slice(0, 80) || 'EPL 업데이트',
+    summary: summary.summary_short || raw?.content || '',
+    briefing: summary.summary_detail || raw?.content || '',
+    isCustom: false,
+    cardType: null,
+    cardData: null,
+    imageUrls: images,
+    tweet: {
+      author: raw?.reporters?.name || handle,
       initials: initials(handle),
       handle: `@${String(handle).replace(/^@/, '')}`,
-      tier: item.source_tier || 2,
-      specialist: Boolean(item.specialist_match),
-      timeAgo: item.raw_created_at ? new Date(item.raw_created_at).toLocaleString('ko-KR') : '',
-      text: item.raw_text || '',
+      tier: raw?.reporter_tier || 2,
+      specialist: false,
+      timeAgo: '', // 원문 작성 시각은 새 설계에서 미저장
+      text: raw?.content || '',
     },
-    imageUrl: firstMediaUrl(item.media),
-    club: team,
-    specialistMatch: Boolean(item.specialist_match),
-    status: statusLabel(briefing.status, item.news_type),
-    hashtags: (teamTags || []).map(code => `#${code}`),
-    reactions: metrics.like_count || mock.reactions,
-    comments: Math.max(metrics.reply_count || 0, mock.comments),
-    bookmarks: metrics.bookmark_count || mock.bookmarks,
-    shares: (metrics.retweet_count || 0) + (metrics.quote_count || 0) || mock.shares,
+    imageUrl: summary.image_url || null,
+    club,
+    specialistMatch: false,
+    status: statusLabelFromStage(summary.rumor_stage),
+    hashtags: codes.map(code => `#${code}`),
+    reactions: mock.reactions,
+    comments: mock.comments,
+    bookmarks: mock.bookmarks,
+    shares: mock.shares,
     comments_data: mock.comments_data,
-    sourceUrl: item.raw_url,
-    ai: item.ai_result,
+    sourceUrl: raw?.source_url || null,
+    ai: null,
     ...(isDebate ? {
-      debateQuestion: item.debate_question,
-      voteForLabel: item.vote_for_label,
-      voteAgainstLabel: item.vote_against_label,
+      debateQuestion: debate.topic,
+      voteForLabel: debate.option_a,
+      voteAgainstLabel: debate.option_b,
       voteFor: 50,
       voteAgainst: 50,
       participants: 0,
@@ -213,5 +201,5 @@ function mapItemToPost(item) {
 }
 
 module.exports = {
-  mapItemToPost,
+  mapSummaryToPost,
 };
