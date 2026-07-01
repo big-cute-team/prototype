@@ -5,6 +5,7 @@ const { recordAudit } = require('../../_lib/audit');
 const { handleError, json, parseJsonBody } = require('../../_lib/http');
 const { eq, select } = require('../../_lib/supabase');
 const { matchAliasRows } = require('../../_lib/constants');
+const { loadAliases } = require('../../_lib/aliases');
 
 const CONTENT_PROMPT = fs.readFileSync(path.join(__dirname, '../../../content.md'), 'utf8').trim();
 const BRIEFING_STATUSES = ['OFFICIAL', 'CONFIRMED', 'UPDATE', 'RUMOUR', 'DENIED'];
@@ -113,14 +114,13 @@ module.exports = async function handler(req, res) {
       throw Object.assign(new Error('note is required'), { statusCode: 400 });
     }
 
-    const rows = await select('content_items', `select=*&${eq('id', body.id)}&limit=1`);
-    const item = rows[0];
-    if (!item) throw Object.assign(new Error('content item not found'), { statusCode: 404 });
+    const rows = await select('article_summaries', `select=article_summary_id,raw_articles(content)&${eq('article_summary_id', body.id)}&limit=1`);
+    const summary = rows[0];
+    if (!summary) throw Object.assign(new Error('article summary not found'), { statusCode: 404 });
+    const raws = Array.isArray(summary.raw_articles) ? summary.raw_articles : [];
+    const item = { raw_text: raws[0]?.content || '' };
 
-    const aliases = await select(
-      'team_aliases',
-      'select=team_code,alias,entity_type,korean_name,notes&active=eq.true&order=team_code.asc,alias.asc'
-    );
+    const aliases = await loadAliases();
 
     const raw = await callOpenAI(item, String(body.note).trim(), aliases);
     const briefing = normalizeBriefingResult(raw);

@@ -24,19 +24,19 @@ async function xFetch(path) {
   return payload;
 }
 
-async function lookupUserId(source) {
-  if (source.x_user_id) return source.x_user_id;
-  const username = String(source.handle || '').replace(/^@/, '');
-  if (!username) throw new Error('Source is missing handle and x_user_id');
+// reporter(신 스키마)의 x_user_id 확보. 없으면 핸들로 조회 후 저장.
+async function lookupUserId(reporter) {
+  if (reporter.x_user_id) return reporter.x_user_id;
+  const username = String(reporter.x_handle || '').replace(/^@/, '');
+  if (!username) throw new Error('reporter is missing x_handle and x_user_id');
 
   const payload = await xFetch(`/2/users/by/username/${encodeURIComponent(username)}?user.fields=username,name,verified`);
   const userId = payload.data?.id;
   if (!userId) throw new Error(`X user lookup failed for ${username}`);
 
-  await patch('sources', `id=eq.${encodeURIComponent(source.id)}`, {
+  await patch('reporters', `reporter_id=eq.${encodeURIComponent(reporter.reporter_id)}`, {
     x_user_id: userId,
-    name: payload.data?.name || source.name || null,
-    handle: payload.data?.username || username,
+    x_handle: payload.data?.username || username,
   });
   return userId;
 }
@@ -57,12 +57,13 @@ function mediaForTweet(tweet, includes) {
     }));
 }
 
-async function fetchActiveSources() {
-  return select('sources', 'select=*&active=eq.true&order=tier.asc,handle.asc');
+// 수집 대상 기자 (활성)
+async function fetchActiveReporters() {
+  return select('reporters', 'select=*&is_active=eq.true&order=name.asc');
 }
 
-async function fetchUserPosts(source) {
-  const userId = await lookupUserId(source);
+async function fetchUserPosts(reporter) {
+  const userId = await lookupUserId(reporter);
   const params = new URLSearchParams({
     max_results: String(Math.max(5, Math.min(Number(process.env.X_MAX_RESULTS || 20), 100))),
     exclude: 'retweets,replies',
@@ -71,18 +72,19 @@ async function fetchUserPosts(source) {
     'media.fields': 'height,media_key,preview_image_url,type,url,width',
   });
 
-  if (source.last_seen_post_id) params.set('since_id', source.last_seen_post_id);
+  // 증분 수집: 마지막으로 받은 게시물 id 이후만
+  if (reporter.last_article_id) params.set('since_id', reporter.last_article_id);
 
   const payload = await xFetch(`/2/users/${encodeURIComponent(userId)}/tweets?${params.toString()}`);
+  const handle = String(reporter.x_handle || '').replace(/^@/, '');
   const posts = (payload.data || []).map(tweet => ({
     id: tweet.id,
     text: tweet.text,
     created_at: tweet.created_at,
     author_id: tweet.author_id,
-    author_handle: String(source.handle || '').replace(/^@/, ''),
-    author_name: source.name || null,
-    specialty_team: source.specialty_team || null,
-    source_tier: source.tier || 2,
+    author_handle: handle,
+    author_name: reporter.name || null,
+    specialty_team: null, // 티어/담당팀은 reporter_teams에 있음(현재 수집엔 미사용)
     public_metrics: tweet.public_metrics || {},
     referenced_tweets: tweet.referenced_tweets || [],
     media: mediaForTweet(tweet, payload.includes),
@@ -90,12 +92,12 @@ async function fetchUserPosts(source) {
   }));
 
   return {
-    newestId: posts[0]?.id || source.last_seen_post_id || null,
+    newestId: posts[0]?.id || reporter.last_article_id || null,
     posts,
   };
 }
 
 module.exports = {
-  fetchActiveSources,
+  fetchActiveReporters,
   fetchUserPosts,
 };

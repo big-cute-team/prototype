@@ -1,4 +1,5 @@
 const { eq, select } = require('./supabase');
+const { postIdOf } = require('./persist');
 
 const CARD_TEMPLATE_ID = 'plick_transfer_v1';
 const MAX_IMAGE_BYTES = 12 * 1024 * 1024;
@@ -47,14 +48,40 @@ async function readCardRenderError(response) {
   });
 }
 
+const PUBLISHED_SELECT = [
+  'article_summary_id', 'title', 'summary_short', 'summary_detail', 'status', 'rumor_stage', 'image_url',
+  'raw_articles(content,source_url,reporters(name,x_handle))',
+  'team_tags(teams(short_name))',
+].join(',');
+
+// 새 스키마 요약(PUBLISHED)을 구 content_item 형태로 어댑트 (카드 렌더 로직 호환)
 async function loadPublishedItem(id) {
-  const rows = await select('content_items', `select=*&${eq('id', id)}&limit=1`);
-  const item = rows[0];
-  if (!item) throw Object.assign(new Error('content item not found'), { statusCode: 404 });
-  if (item.status !== 'published') {
+  const rows = await select('article_summaries', `select=${PUBLISHED_SELECT}&${eq('article_summary_id', id)}&limit=1`);
+  const summary = rows[0];
+  if (!summary) throw Object.assign(new Error('article summary not found'), { statusCode: 404 });
+  if (summary.status !== 'PUBLISHED') {
     throw Object.assign(new Error('card news can only be created for published items'), { statusCode: 400 });
   }
-  return item;
+  const raw = (Array.isArray(summary.raw_articles) ? summary.raw_articles : [])[0] || {};
+  const codes = (summary.team_tags || []).map(tag => tag.teams?.short_name).filter(Boolean);
+  return {
+    id: summary.article_summary_id,
+    status: 'published',
+    title_ko: summary.title,
+    summary_short_ko: summary.summary_short,
+    summary_detail_ko: summary.summary_detail,
+    summary_ko: summary.summary_short,
+    team_tags: codes,
+    briefing_status: summary.rumor_stage,
+    news_type: null,
+    ai_result: null,
+    image_url: summary.image_url || null,
+    raw_text: raw.content || '',
+    raw_url: raw.source_url || null,
+    raw_post_id: postIdOf(raw.source_url),
+    raw_author_name: raw.reporters?.name || null,
+    raw_author_handle: raw.reporters?.x_handle || null,
+  };
 }
 
 function briefingFor(item) {
